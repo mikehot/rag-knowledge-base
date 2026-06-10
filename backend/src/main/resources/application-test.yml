@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:rag_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+app:
+  rag:
+    enable-vector-schema: false

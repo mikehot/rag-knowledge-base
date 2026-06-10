@@ -1,0 +1,63 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rag-knowledge-base-db
+    environment:
+      POSTGRES_DB: rag_knowledge_base
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - rag_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag_knowledge_base"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    container_name: rag-knowledge-base-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      DB_URL: jdbc:postgresql://db:5432/rag_knowledge_base
+      DB_USERNAME: rag
+      DB_PASSWORD: rag
+      APP_DEFAULT_USERNAME: demo
+      APP_DEFAULT_PASSWORD: demo123456
+      JWT_SECRET: dev-only-change-me-please-use-a-64-byte-secret-for-prod
+      UPLOAD_STORAGE_DIR: /app/uploads
+      UPLOAD_MAX_FILE_SIZE_BYTES: 20971520
+      RAG_CHUNK_SIZE: 700
+      RAG_CHUNK_OVERLAP: 100
+      RAG_TOP_K: 5
+      RAG_SIMILARITY_THRESHOLD: 0.35
+      AI_EMBEDDING_DIM: 768
+      AI_PROVIDER: openai-compatible
+      AI_BASE_URL: http://host.docker.internal:1234/v1
+      AI_API_KEY: ""
+      AI_MODEL_ID: google/gemma-4-26b-a4b
+      AI_MAX_TOKENS: 1200
+      AI_TIMEOUT_SECONDS: 120
+      AI_MAX_RETRIES: 2
+      AI_DAILY_LIMIT: 50
+      AI_EMBEDDING_PROVIDER: openai-compatible
+      AI_EMBEDDING_BASE_URL: http://host.docker.internal:1234/v1
+      AI_EMBEDDING_API_KEY: ""
+      AI_EMBEDDING_MODEL_ID: text-embedding-nomic-embed-text
+      AI_EMBEDDING_BATCH_SIZE: 16
+      AI_EMBEDDING_TIMEOUT_SECONDS: 120
+      AI_EMBEDDING_MAX_RETRIES: 2
+    ports:
+      - "8080:8080"
+    volumes:
+      - rag_uploads:/app/uploads
+
+volumes:
+  rag_pg_data:
+  rag_uploads:

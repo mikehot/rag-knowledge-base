@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.any;
 
+import com.example.ragknowledgebase.audit.AuditService;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.auth.AccessControlService;
@@ -47,6 +48,9 @@ class DocumentServiceTests {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private AuditService auditService;
+
     private DocumentService documentService;
 
     @BeforeEach
@@ -57,7 +61,8 @@ class DocumentServiceTests {
             accessControlService,
             chunkRepository,
             fileStorageService,
-            eventPublisher
+            eventPublisher,
+            auditService
         );
     }
 
@@ -98,6 +103,13 @@ class DocumentServiceTests {
         verify(chunkRepository, never()).deleteByDocumentId(DOCUMENT_ID);
         verify(documentRepository, never()).save(any());
         verify(fileStorageService, never()).delete(org.mockito.ArgumentMatchers.any());
+        verify(auditService).recordDenied(
+            USER,
+            "DOCUMENT_DELETE",
+            "DOCUMENT",
+            DOCUMENT_ID,
+            "MISSING_DOCUMENT_MANAGE"
+        );
     }
 
     @Test
@@ -118,6 +130,13 @@ class DocumentServiceTests {
 
         verify(fileStorageService, never()).store(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(documentRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(auditService).recordDenied(
+            USER,
+            "DOCUMENT_UPLOAD",
+            "KNOWLEDGE_BASE",
+            KNOWLEDGE_BASE_ID,
+            "MISSING_KNOWLEDGE_BASE_MANAGE"
+        );
     }
 
     @Test

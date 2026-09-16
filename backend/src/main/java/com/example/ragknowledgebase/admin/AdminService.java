@@ -1,5 +1,6 @@
 package com.example.ragknowledgebase.admin;
 
+import com.example.ragknowledgebase.audit.AuditService;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
@@ -18,20 +19,23 @@ public class AdminService {
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
     private final AccessControlService accessControlService;
+    private final AuditService auditService;
 
     public AdminService(
         JdbcTemplate jdbcTemplate,
         PasswordEncoder passwordEncoder,
-        AccessControlService accessControlService
+        AccessControlService accessControlService,
+        AuditService auditService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
         this.accessControlService = accessControlService;
+        this.auditService = auditService;
     }
 
     @Transactional(readOnly = true)
     public List<RoleResponse> listRoles(AuthenticatedUser operator) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "ROLE_LIST");
         return jdbcTemplate.query(
             """
                 SELECT id, code, name
@@ -50,7 +54,7 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<UserResponse> listUsers(AuthenticatedUser operator) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "USER_LIST");
         return jdbcTemplate.query(
             """
                 SELECT u.id, u.username, u.display_name, u.status, u.department_id,
@@ -69,7 +73,7 @@ public class AdminService {
 
     @Transactional
     public UserResponse createUser(AuthenticatedUser operator, CreateUserRequest request) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "USER_CREATE");
         UUID userId = UUID.randomUUID();
         validateDepartment(operator.tenantId(), request.departmentId());
         try {
@@ -117,7 +121,7 @@ public class AdminService {
         UUID userId,
         AssignUserRoleRequest request
     ) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "USER_ROLE_ASSIGN");
         requireUser(operator.tenantId(), userId);
         int assigned = jdbcTemplate.update(
             """
@@ -144,7 +148,7 @@ public class AdminService {
         UUID userId,
         String roleCode
     ) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "USER_ROLE_REVOKE");
         requireUser(operator.tenantId(), userId);
         String normalizedRoleCode = normalizeCode(roleCode);
         int deleted = jdbcTemplate.update(
@@ -168,7 +172,7 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<DepartmentResponse> listDepartments(AuthenticatedUser operator) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "DEPARTMENT_LIST");
         return jdbcTemplate.query(
             """
                 SELECT id, parent_id, code, name, status
@@ -186,7 +190,7 @@ public class AdminService {
         AuthenticatedUser operator,
         CreateDepartmentRequest request
     ) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "DEPARTMENT_CREATE");
         validateParentDepartment(operator.tenantId(), request.parentId());
         UUID departmentId = UUID.randomUUID();
         try {
@@ -209,7 +213,7 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<KnowledgeBaseResponse> listKnowledgeBases(AuthenticatedUser operator) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "KNOWLEDGE_BASE_LIST");
         return jdbcTemplate.query(
             """
                 SELECT id, code, name, description, status
@@ -233,7 +237,7 @@ public class AdminService {
         AuthenticatedUser operator,
         CreateKnowledgeBaseRequest request
     ) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "KNOWLEDGE_BASE_CREATE");
         UUID knowledgeBaseId = UUID.randomUUID();
         try {
             jdbcTemplate.update(
@@ -275,7 +279,7 @@ public class AdminService {
         UUID knowledgeBaseId,
         String status
     ) {
-        requireSystemAdmin(operator);
+        requireSystemAdmin(operator, "KNOWLEDGE_BASE_STATUS_UPDATE");
         validateKnowledgeBaseStatus(status);
         int updated = jdbcTemplate.update(
             """
@@ -300,7 +304,7 @@ public class AdminService {
         AuthenticatedUser operator,
         UUID knowledgeBaseId
     ) {
-        requireKnowledgeBaseManager(operator, knowledgeBaseId);
+        requireKnowledgeBaseManager(operator, knowledgeBaseId, "KNOWLEDGE_BASE_MEMBERSHIP_LIST");
         return jdbcTemplate.query(
             """
                 SELECT id, principal_type, principal_id, permission
@@ -321,7 +325,7 @@ public class AdminService {
         UUID knowledgeBaseId,
         GrantKnowledgeBaseMembershipRequest request
     ) {
-        requireKnowledgeBaseManager(operator, knowledgeBaseId);
+        requireKnowledgeBaseManager(operator, knowledgeBaseId, "KNOWLEDGE_BASE_MEMBERSHIP_GRANT");
         validatePrincipal(operator.tenantId(), request.principalType(), request.principalId());
         validatePermission(request.permission());
         UUID membershipId = UUID.randomUUID();
@@ -352,7 +356,7 @@ public class AdminService {
         UUID knowledgeBaseId,
         UUID membershipId
     ) {
-        requireKnowledgeBaseManager(operator, knowledgeBaseId);
+        requireKnowledgeBaseManager(operator, knowledgeBaseId, "KNOWLEDGE_BASE_MEMBERSHIP_REVOKE");
         int deleted = jdbcTemplate.update(
             """
                 DELETE FROM knowledge_base_membership
@@ -370,14 +374,28 @@ public class AdminService {
         return new DeleteMembershipResponse(true);
     }
 
-    private void requireSystemAdmin(AuthenticatedUser operator) {
+    private void requireSystemAdmin(AuthenticatedUser operator, String action) {
         if (!accessControlService.isSystemAdmin(operator)) {
+            auditService.recordDenied(
+                operator,
+                action,
+                "TENANT",
+                operator.tenantId(),
+                "MISSING_SYSTEM_ADMIN"
+            );
             throw new BusinessException(403, "需要 SYSTEM_ADMIN 权限");
         }
     }
 
-    private void requireKnowledgeBaseManager(AuthenticatedUser operator, UUID knowledgeBaseId) {
+    private void requireKnowledgeBaseManager(AuthenticatedUser operator, UUID knowledgeBaseId, String action) {
         if (!accessControlService.canManageKnowledgeBase(operator, knowledgeBaseId)) {
+            auditService.recordDenied(
+                operator,
+                action,
+                "KNOWLEDGE_BASE",
+                knowledgeBaseId,
+                "MISSING_KNOWLEDGE_BASE_MANAGE"
+            );
             throw new BusinessException(403, "需要知识库 MANAGE 权限");
         }
     }

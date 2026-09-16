@@ -15,7 +15,7 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2/V3、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming、最小管理 API 和文档生命周期基础已落地；审计和高级任务治理仍待补齐 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2/V3/V4、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming、最小管理 API、文档生命周期基础和拒绝审计已落地；高级任务治理仍待补齐 |
 | 3. 结构化回答、审计、观测、反馈 | `planned` | 已有基础回答结构、Token 和 ask log；缺 requestId、分段耗时、失败分类和反馈 |
 | 4. 20 题评测基线 | `planned` | 尚无版本化评测集和 Runner |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
@@ -42,8 +42,10 @@
 - 文档上传已计算 SHA-256 checksum；同一知识库内相同 checksum 的未删除文档会幂等返回已有文档。
 - 文档生命周期已支持停用/启用/reindex/软删除；reindex 会递增内容版本并清空旧 Chunk；停用/软删除会从列表、详情和检索中隐藏。
 - V3 增加同一 tenant + knowledge base + checksum 的未删除文档唯一索引。
+- V4 增加 `audit_event`，用于记录权限拒绝、资源类型、资源 ID、原因和时间。
 - 最小管理 API 已包含部门列表/创建、角色列表、用户列表/创建、用户角色授予/撤销、知识库列表/创建/启停、知识库 membership 查询/授权/撤权。
 - 部门、用户、用户角色和知识库生命周期管理要求 `SYSTEM_ADMIN`；知识库 membership 管理要求该知识库 `MANAGE` 权限。
+- 角色矩阵已明确：`SYSTEM_ADMIN` 是租户级管理；`KNOWLEDGE_ADMIN` 仅作为业务角色预留，需通过具体知识库 `MANAGE` 授权生效；`EMPLOYEE` 默认只读授权范围；`AUDITOR` 为后续审计查询预留。
 - 旧单用户数据库通过 Flyway baseline 升级；默认演示用户幂等补齐 SYSTEM_ADMIN 与默认知识库 MANAGE 权限。
 
 ### Flutter
@@ -89,7 +91,7 @@
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除和 reindex 基础流程；尚未实现替换上传、批量重建、失败重试队列和后台任务观测。
-- 权限拒绝尚未形成独立审计事件和评测记录。
+- 权限拒绝已有基础审计事件；尚未提供审计查询 API、保留策略、脱敏策略和评测记录。
 - 问答没有 requestId、分段耗时、结构化失败原因和用户反馈。
 - 没有 20 题 Golden Dataset、离线 Runner 或回归报告。
 - 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
@@ -100,9 +102,9 @@
 
 继续完成 Milestone 2：
 
-1. 明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 的权限矩阵，并决定 KNOWLEDGE_ADMIN 是否可创建/管理部分知识库。
-2. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
-3. 补替换上传、批量重建、失败重试队列和后台任务观测。
+1. 在 GitHub Actions 上验证 V4 audit migration 与 permission-denied 审计集成测试，并把 run id 与测试数量回写到本文件。
+2. 增加跨部门、跨角色、跨 tenant 的确定性安全测试。
+3. 补审计查询 API、替换上传、批量重建、失败重试队列和后台任务观测。
 
 ## 文档维护规则
 

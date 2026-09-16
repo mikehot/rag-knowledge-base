@@ -75,6 +75,7 @@ class PostgresEnterpriseIntegrationTests {
 
     @BeforeEach
     void cleanTestData() {
+        jdbcTemplate.update("DELETE FROM audit_event WHERE user_id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
         jdbcTemplate.update(
             "DELETE FROM knowledge_base_membership WHERE principal_id IN (?, ?, ?)",
             OWNER_ID,
@@ -122,7 +123,7 @@ class PostgresEnterpriseIntegrationTests {
             Integer.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(3);
+        assertThat(successfulMigrations).isEqualTo(4);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
@@ -150,6 +151,12 @@ class PostgresEnterpriseIntegrationTests {
             .containsExactly(DOCUMENT_ID);
         assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, TENANT_ID, READER_ID)).isPresent();
         assertThat(accessControlService.canManageDocument(reader, DOCUMENT_ID)).isFalse();
+        assertThatThrownBy(() -> documentService.delete(reader, DOCUMENT_ID))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(404);
+        assertThat(countDeniedAudit(READER_ID, "DOCUMENT_DELETE", "DOCUMENT", DOCUMENT_ID))
+            .isEqualTo(1);
         assertThat(documentRepository.findAccessible(TENANT_ID, OUTSIDER_ID)).isEmpty();
 
         grantKnowledgeBase("MANAGE", READER_ID);
@@ -217,6 +224,8 @@ class PostgresEnterpriseIntegrationTests {
             .isInstanceOf(BusinessException.class)
             .extracting(ex -> ((BusinessException) ex).code())
             .isEqualTo(403);
+        assertThat(countDeniedAudit(OWNER_ID, "USER_CREATE", "TENANT", TENANT_ID))
+            .isEqualTo(1);
 
         var membership = adminService.grantMembership(
             manager,
@@ -387,6 +396,27 @@ class PostgresEnterpriseIntegrationTests {
 
     private Integer countChunks(UUID documentId) {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM chunk WHERE document_id = ?", Integer.class, documentId);
+    }
+
+    private Integer countDeniedAudit(UUID userId, String action, String resourceType, UUID resourceId) {
+        return jdbcTemplate.queryForObject(
+            """
+                SELECT count(*)
+                FROM audit_event
+                WHERE tenant_id = ?
+                  AND user_id = ?
+                  AND action = ?
+                  AND resource_type = ?
+                  AND resource_id = ?
+                  AND outcome = 'DENY'
+                """,
+            Integer.class,
+            TENANT_ID,
+            userId,
+            action,
+            resourceType,
+            resourceId
+        );
     }
 
     private String zeroVector() {

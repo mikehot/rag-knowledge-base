@@ -147,6 +147,21 @@ Admin endpoint boundaries:
 - Knowledge-base membership administration requires `MANAGE` on that knowledge base.
 - Creating a user defaults to the `EMPLOYEE` role when `roleCodes` is omitted.
 
+Role matrix:
+
+| Role | Current V0.1 meaning |
+|---|---|
+| `SYSTEM_ADMIN` | Tenant-level administrator. Can manage users, roles, departments, knowledge-base lifecycle, and all knowledge-base/document permissions. |
+| `KNOWLEDGE_ADMIN` | Reserved business role for delegated knowledge ownership. It does not grant global access by itself; grant `MANAGE` through knowledge-base membership for concrete scopes. |
+| `EMPLOYEE` | Default user role. Can only read knowledge explicitly granted through user, department, role, or knowledge-base membership ACLs. |
+| `AUDITOR` | Reserved read-only governance role. V0.1 does not yet expose audit-query APIs; direct database inspection is required for now. |
+
+Audit boundaries:
+
+- Permission-denied admin and document-management operations write `DENY` events into `audit_event`.
+- Hidden-resource behavior is preserved externally: document management denial still returns `404` to avoid leaking whether the document exists.
+- Audit records include tenant, user, action, resource type, resource id, outcome, reason, and timestamp.
+
 Document lifecycle boundaries:
 
 - Upload calculates SHA-256 and returns the existing undeleted document when the same checksum already exists in the same knowledge base.

@@ -1,5 +1,6 @@
 package com.example.ragknowledgebase.document;
 
+import com.example.ragknowledgebase.audit.AuditService;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.auth.AccessControlService;
@@ -28,6 +29,7 @@ public class DocumentService {
     private final ChunkJdbcRepository chunkRepository;
     private final FileStorageService fileStorageService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditService auditService;
 
     public DocumentService(
         DocumentRepository documentRepository,
@@ -35,7 +37,8 @@ public class DocumentService {
         AccessControlService accessControlService,
         ChunkJdbcRepository chunkRepository,
         FileStorageService fileStorageService,
-        ApplicationEventPublisher eventPublisher
+        ApplicationEventPublisher eventPublisher,
+        AuditService auditService
     ) {
         this.documentRepository = documentRepository;
         this.properties = properties;
@@ -43,12 +46,20 @@ public class DocumentService {
         this.chunkRepository = chunkRepository;
         this.fileStorageService = fileStorageService;
         this.eventPublisher = eventPublisher;
+        this.auditService = auditService;
     }
 
     @Transactional
     public DocumentUploadResponse upload(AuthenticatedUser user, MultipartFile file) {
         UUID knowledgeBaseId = properties.enterprise().defaultKnowledgeBaseId();
         if (!accessControlService.canManageKnowledgeBase(user, knowledgeBaseId)) {
+            auditService.recordDenied(
+                user,
+                "DOCUMENT_UPLOAD",
+                "KNOWLEDGE_BASE",
+                knowledgeBaseId,
+                "MISSING_KNOWLEDGE_BASE_MANAGE"
+            );
             throw new BusinessException(403, "无权向该知识库上传文档");
         }
         String checksum = checksumOf(file);
@@ -99,6 +110,13 @@ public class DocumentService {
     @Transactional
     public DeleteDocumentResponse delete(AuthenticatedUser user, UUID documentId) {
         if (!accessControlService.canManageDocument(user, documentId)) {
+            auditService.recordDenied(
+                user,
+                "DOCUMENT_DELETE",
+                "DOCUMENT",
+                documentId,
+                "MISSING_DOCUMENT_MANAGE"
+            );
             throw new BusinessException(404, "文档不存在");
         }
         KnowledgeDocument document = documentRepository.findById(documentId)
@@ -112,7 +130,7 @@ public class DocumentService {
 
     @Transactional
     public DocumentLifecycleResponse disable(AuthenticatedUser user, UUID documentId) {
-        KnowledgeDocument document = manageableDocument(user, documentId);
+        KnowledgeDocument document = manageableDocument(user, documentId, "DOCUMENT_DISABLE");
         document.disable();
         documentRepository.save(document);
         return DocumentLifecycleResponse.from(document);
@@ -120,7 +138,7 @@ public class DocumentService {
 
     @Transactional
     public DocumentLifecycleResponse enable(AuthenticatedUser user, UUID documentId) {
-        KnowledgeDocument document = manageableDocument(user, documentId);
+        KnowledgeDocument document = manageableDocument(user, documentId, "DOCUMENT_ENABLE");
         document.enable();
         documentRepository.save(document);
         return DocumentLifecycleResponse.from(document);
@@ -128,7 +146,7 @@ public class DocumentService {
 
     @Transactional
     public DocumentLifecycleResponse reindex(AuthenticatedUser user, UUID documentId) {
-        KnowledgeDocument document = manageableDocument(user, documentId);
+        KnowledgeDocument document = manageableDocument(user, documentId, "DOCUMENT_REINDEX");
         if (document.getDeletedAt() != null) {
             throw new BusinessException(404, "文档不存在");
         }
@@ -143,8 +161,15 @@ public class DocumentService {
         return DocumentLifecycleResponse.from(document);
     }
 
-    private KnowledgeDocument manageableDocument(AuthenticatedUser user, UUID documentId) {
+    private KnowledgeDocument manageableDocument(AuthenticatedUser user, UUID documentId, String action) {
         if (!accessControlService.canManageDocument(user, documentId)) {
+            auditService.recordDenied(
+                user,
+                action,
+                "DOCUMENT",
+                documentId,
+                "MISSING_DOCUMENT_MANAGE"
+            );
             throw new BusinessException(404, "文档不存在");
         }
         return documentRepository.findById(documentId)

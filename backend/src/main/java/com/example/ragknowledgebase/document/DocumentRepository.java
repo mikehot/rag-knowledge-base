@@ -8,6 +8,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface DocumentRepository extends JpaRepository<KnowledgeDocument, UUID> {
+    Optional<KnowledgeDocument> findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
+        UUID tenantId,
+        UUID knowledgeBaseId,
+        String checksum
+    );
+
     @Query(value = """
         SELECT d.*
         FROM document d

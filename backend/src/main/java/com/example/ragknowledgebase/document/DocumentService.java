@@ -6,6 +6,13 @@ import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.storage.FileStorageService;
 import com.example.ragknowledgebase.storage.FileStorageService.StoredFile;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +51,19 @@ public class DocumentService {
         if (!accessControlService.canManageKnowledgeBase(user, knowledgeBaseId)) {
             throw new BusinessException(403, "无权向该知识库上传文档");
         }
+        String checksum = checksumOf(file);
+        var existing = documentRepository.findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
+            user.tenantId(),
+            knowledgeBaseId,
+            checksum
+        );
+        if (existing.isPresent()) {
+            return new DocumentUploadResponse(
+                existing.get().getId(),
+                existing.get().getStatus().apiValue(),
+                true
+            );
+        }
         UUID documentId = UUID.randomUUID();
         StoredFile stored = fileStorageService.store(documentId, file);
         KnowledgeDocument document = new KnowledgeDocument(
@@ -53,11 +73,12 @@ public class DocumentService {
             user.userId(),
             stored.originalName(),
             stored.extension(),
-            stored.path()
+            stored.path(),
+            checksum
         );
         documentRepository.save(document);
         eventPublisher.publishEvent(new DocumentCreatedEvent(documentId));
-        return new DocumentUploadResponse(documentId, DocumentStatus.PROCESSING.apiValue());
+        return new DocumentUploadResponse(documentId, DocumentStatus.PROCESSING.apiValue(), false);
     }
 
     @Transactional(readOnly = true)
@@ -83,8 +104,66 @@ public class DocumentService {
         KnowledgeDocument document = documentRepository.findById(documentId)
             .orElseThrow(() -> new BusinessException(404, "文档不存在"));
         chunkRepository.deleteByDocumentId(document.getId());
-        documentRepository.delete(document);
+        document.softDelete();
+        documentRepository.save(document);
         fileStorageService.delete(document.getFilePath());
         return new DeleteDocumentResponse(true);
     }
+
+    @Transactional
+    public DocumentLifecycleResponse disable(AuthenticatedUser user, UUID documentId) {
+        KnowledgeDocument document = manageableDocument(user, documentId);
+        document.disable();
+        documentRepository.save(document);
+        return DocumentLifecycleResponse.from(document);
+    }
+
+    @Transactional
+    public DocumentLifecycleResponse enable(AuthenticatedUser user, UUID documentId) {
+        KnowledgeDocument document = manageableDocument(user, documentId);
+        document.enable();
+        documentRepository.save(document);
+        return DocumentLifecycleResponse.from(document);
+    }
+
+    @Transactional
+    public DocumentLifecycleResponse reindex(AuthenticatedUser user, UUID documentId) {
+        KnowledgeDocument document = manageableDocument(user, documentId);
+        if (document.getDeletedAt() != null) {
+            throw new BusinessException(404, "文档不存在");
+        }
+        if (document.getDisabledAt() != null) {
+            throw new BusinessException(409, "文档已停用，启用后再重建索引");
+        }
+        chunkRepository.deleteByDocumentId(document.getId());
+        document.bumpContentVersion();
+        document.markProcessing();
+        documentRepository.save(document);
+        eventPublisher.publishEvent(new DocumentCreatedEvent(documentId));
+        return DocumentLifecycleResponse.from(document);
+    }
+
+    private KnowledgeDocument manageableDocument(AuthenticatedUser user, UUID documentId) {
+        if (!accessControlService.canManageDocument(user, documentId)) {
+            throw new BusinessException(404, "文档不存在");
+        }
+        return documentRepository.findById(documentId)
+            .filter(document -> document.getDeletedAt() == null)
+            .orElseThrow(() -> new BusinessException(404, "文档不存在"));
+    }
+
+    private String checksumOf(MultipartFile file) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = new DigestInputStream(file.getInputStream(), digest)) {
+                input.transferTo(OutputStream.nullOutputStream());
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (IOException ex) {
+            throw new BusinessException(400, "文件读取失败，请重试");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new BusinessException(500, "文件校验失败，请重试");
+        }
+    }
+
 }

@@ -46,6 +46,21 @@ public class DocumentController {
         return ApiResponse.ok(documentService.delete(currentUser(authentication), id));
     }
 
+    @PostMapping("/{id}/disable")
+    public ApiResponse<DocumentLifecycleResponse> disable(Authentication authentication, @PathVariable UUID id) {
+        return ApiResponse.ok(documentService.disable(currentUser(authentication), id));
+    }
+
+    @PostMapping("/{id}/enable")
+    public ApiResponse<DocumentLifecycleResponse> enable(Authentication authentication, @PathVariable UUID id) {
+        return ApiResponse.ok(documentService.enable(currentUser(authentication), id));
+    }
+
+    @PostMapping("/{id}/reindex")
+    public ApiResponse<DocumentLifecycleResponse> reindex(Authentication authentication, @PathVariable UUID id) {
+        return ApiResponse.ok(documentService.reindex(currentUser(authentication), id));
+    }
+
     private AuthenticatedUser currentUser(Authentication authentication) {
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser user)) {
             throw new BusinessException(401, "登录已失效，请重新登录");

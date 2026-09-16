@@ -6,6 +6,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
 
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.config.AppProperties;
@@ -61,7 +62,7 @@ class DocumentServiceTests {
     }
 
     @Test
-    void deletesChunksBeforeOwnedDocument() {
+    void softDeletesChunksAndRawFileBeforeHidingDocument() {
         KnowledgeDocument document = new KnowledgeDocument(
             DOCUMENT_ID,
             TENANT_ID,
@@ -79,8 +80,9 @@ class DocumentServiceTests {
         assertThat(response.deleted()).isTrue();
         InOrder order = inOrder(chunkRepository, documentRepository, fileStorageService);
         order.verify(chunkRepository).deleteByDocumentId(DOCUMENT_ID);
-        order.verify(documentRepository).delete(document);
+        order.verify(documentRepository).save(document);
         order.verify(fileStorageService).delete("/tmp/faq.md");
+        assertThat(document.getDeletedAt()).isNotNull();
     }
 
     @Test
@@ -94,7 +96,7 @@ class DocumentServiceTests {
             .isEqualTo(404);
 
         verify(chunkRepository, never()).deleteByDocumentId(DOCUMENT_ID);
-        verify(documentRepository, never()).delete(org.mockito.ArgumentMatchers.any());
+        verify(documentRepository, never()).save(any());
         verify(fileStorageService, never()).delete(org.mockito.ArgumentMatchers.any());
     }
 
@@ -116,6 +118,66 @@ class DocumentServiceTests {
 
         verify(fileStorageService, never()).store(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(documentRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void returnsExistingDocumentWhenChecksumAlreadyExists() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "faq.md",
+            "text/markdown",
+            "sample".getBytes()
+        );
+        KnowledgeDocument existing = new KnowledgeDocument(
+            DOCUMENT_ID,
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            USER_ID,
+            "faq.md",
+            "md",
+            "/tmp/faq.md",
+            "af2bdbe1aa9b6ec1e2adE1d694f41fc71a831d0268e9891562113d8a62add1bf".toLowerCase()
+        );
+        existing.markReady(2);
+        when(accessControlService.canManageKnowledgeBase(USER, KNOWLEDGE_BASE_ID)).thenReturn(true);
+        when(documentRepository.findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            "af2bdbe1aa9b6ec1e2adE1d694f41fc71a831d0268e9891562113d8a62add1bf".toLowerCase()
+        )).thenReturn(Optional.of(existing));
+
+        DocumentUploadResponse response = documentService.upload(USER, file);
+
+        assertThat(response.documentId()).isEqualTo(DOCUMENT_ID);
+        assertThat(response.status()).isEqualTo("ready");
+        assertThat(response.duplicated()).isTrue();
+        verify(fileStorageService, never()).store(any(), any());
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void reindexDeletesChunksBumpsVersionAndPublishesEvent() {
+        KnowledgeDocument document = new KnowledgeDocument(
+            DOCUMENT_ID,
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            USER_ID,
+            "faq.md",
+            "md",
+            "/tmp/faq.md"
+        );
+        document.markReady(2);
+        when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(true);
+        when(documentRepository.findById(DOCUMENT_ID)).thenReturn(Optional.of(document));
+
+        DocumentLifecycleResponse response = documentService.reindex(USER, DOCUMENT_ID);
+
+        assertThat(response.status()).isEqualTo("processing");
+        assertThat(response.contentVersion()).isEqualTo(2);
+        assertThat(response.permissionVersion()).isEqualTo(1);
+        verify(chunkRepository).deleteByDocumentId(DOCUMENT_ID);
+        verify(documentRepository).save(document);
+        verify(eventPublisher).publishEvent(new DocumentCreatedEvent(DOCUMENT_ID));
     }
 
     private AppProperties properties() {

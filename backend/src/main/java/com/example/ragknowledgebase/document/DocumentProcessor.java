@@ -36,6 +36,9 @@ public class DocumentProcessor {
         if (document == null) {
             return;
         }
+        if (document.getDeletedAt() != null || document.getDisabledAt() != null) {
+            return;
+        }
         try {
             List<ParsedSection> sections = parser.parse(Path.of(document.getFilePath()), document.getFileType());
             List<ChunkDraft> drafts = chunker.chunk(sections);

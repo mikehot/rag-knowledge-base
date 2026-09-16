@@ -13,6 +13,9 @@ import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.DocumentRepository;
+import com.example.ragknowledgebase.document.DocumentService;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -54,6 +58,9 @@ class PostgresEnterpriseIntegrationTests {
     private DocumentRepository documentRepository;
 
     @Autowired
+    private DocumentService documentService;
+
+    @Autowired
     private AccessControlService accessControlService;
 
     @Autowired
@@ -77,6 +84,10 @@ class PostgresEnterpriseIntegrationTests {
         jdbcTemplate.update("DELETE FROM document_acl WHERE document_id = ?", DOCUMENT_ID);
         jdbcTemplate.update("DELETE FROM chunk WHERE document_id = ?", DOCUMENT_ID);
         jdbcTemplate.update("DELETE FROM document WHERE id = ?", DOCUMENT_ID);
+        try {
+            Files.deleteIfExists(Path.of("uploads", "lifecycle.md"));
+        } catch (Exception ignored) {
+        }
         jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE knowledge_base_id IN (SELECT id FROM knowledge_base WHERE code LIKE 'managed-%')");
         jdbcTemplate.update("DELETE FROM knowledge_base WHERE code LIKE 'managed-%'");
         jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE principal_id IN (SELECT id FROM app_user WHERE username LIKE 'managed-%')");
@@ -284,6 +295,50 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(accessControlService.canManageKnowledgeBase(admin, knowledgeBase.id())).isTrue();
     }
 
+    @Test
+    @Transactional
+    void documentLifecycleHidesReindexesAndSoftDeletesDocuments() throws Exception {
+        insertUser(OWNER_ID, "document-admin-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "document-admin-it");
+        Path rawFile = Path.of("uploads", "lifecycle.md").toAbsolutePath().normalize();
+        Files.createDirectories(rawFile.getParent());
+        Files.writeString(rawFile, "Lifecycle content");
+        insertDocument(rawFile.toString());
+        insertChunk();
+
+        var disabled = documentService.disable(admin, DOCUMENT_ID);
+
+        assertThat(disabled.disabled()).isTrue();
+        assertThat(disabled.permissionVersion()).isEqualTo(2);
+        assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID)).isEmpty();
+        assertThatThrownBy(() -> documentService.reindex(admin, DOCUMENT_ID))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(409);
+
+        var enabled = documentService.enable(admin, DOCUMENT_ID);
+
+        assertThat(enabled.disabled()).isFalse();
+        assertThat(enabled.permissionVersion()).isEqualTo(3);
+        assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID))
+            .extracting("id")
+            .containsExactly(DOCUMENT_ID);
+
+        var reindex = documentService.reindex(admin, DOCUMENT_ID);
+
+        assertThat(reindex.status()).isEqualTo("processing");
+        assertThat(reindex.contentVersion()).isEqualTo(2);
+        assertThat(countChunks(DOCUMENT_ID)).isZero();
+
+        insertChunk();
+
+        assertThat(documentService.delete(admin, DOCUMENT_ID).deleted()).isTrue();
+        assertThat(countChunks(DOCUMENT_ID)).isZero();
+        assertThat(Files.exists(rawFile)).isFalse();
+        assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID)).isEmpty();
+    }
+
     private void insertUser(UUID id, String username) {
         jdbcTemplate.update(
             """
@@ -297,18 +352,45 @@ class PostgresEnterpriseIntegrationTests {
     }
 
     private void insertDocument() {
+        insertDocument("/tmp/acl.md");
+    }
+
+    private void insertDocument(String filePath) {
         jdbcTemplate.update(
             """
                 INSERT INTO document (
-                    id, tenant_id, knowledge_base_id, user_id, filename, file_type, file_path, status
+                    id, tenant_id, knowledge_base_id, user_id, filename, file_type, file_path,
+                    checksum, status
                 )
-                VALUES (?, ?, ?, ?, 'acl.md', 'md', '/tmp/acl.md', 'READY')
+                VALUES (?, ?, ?, ?, 'acl.md', 'md', ?, ?, 'READY')
                 """,
             DOCUMENT_ID,
             TENANT_ID,
             KNOWLEDGE_BASE_ID,
-            OWNER_ID
+            OWNER_ID,
+            filePath,
+            "integration-checksum-" + DOCUMENT_ID
         );
+    }
+
+    private void insertChunk() {
+        jdbcTemplate.update(
+            """
+                INSERT INTO chunk (id, document_id, seq, locator, content, embedding)
+                VALUES (?, ?, 1, 'test', 'Lifecycle content', ?::vector)
+                """,
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            zeroVector()
+        );
+    }
+
+    private Integer countChunks(UUID documentId) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM chunk WHERE document_id = ?", Integer.class, documentId);
+    }
+
+    private String zeroVector() {
+        return "[" + "0,".repeat(767) + "0]";
     }
 
     private void grantKnowledgeBase(String permission, UUID userId) {

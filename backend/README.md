@@ -118,6 +118,9 @@ Main endpoints:
 - `GET /api/documents`
 - `GET /api/documents/{id}`
 - `DELETE /api/documents/{id}`
+- `POST /api/documents/{id}/disable`
+- `POST /api/documents/{id}/enable`
+- `POST /api/documents/{id}/reindex`
 - `POST /api/ask`
 - `GET /api/admin/roles`
 - `GET /api/admin/users`
@@ -143,3 +146,10 @@ Admin endpoint boundaries:
 - Knowledge-base creation, activation, and disabling require `SYSTEM_ADMIN`.
 - Knowledge-base membership administration requires `MANAGE` on that knowledge base.
 - Creating a user defaults to the `EMPLOYEE` role when `roleCodes` is omitted.
+
+Document lifecycle boundaries:
+
+- Upload calculates SHA-256 and returns the existing undeleted document when the same checksum already exists in the same knowledge base.
+- Delete is a soft delete for the document row, but clears chunks and deletes the raw uploaded file.
+- Disable hides a document from list, detail, and retrieval without deleting its row or raw file.
+- Reindex clears existing chunks, increments `contentVersion`, marks the document as `processing`, and publishes a processing event.

@@ -10,6 +10,10 @@ public record DocumentResponse(
     String status,
     int chunkCount,
     String errorMsg,
+    String checksum,
+    int contentVersion,
+    int permissionVersion,
+    boolean disabled,
     OffsetDateTime createdAt
 ) {
     public static DocumentResponse from(KnowledgeDocument document) {
@@ -20,6 +24,10 @@ public record DocumentResponse(
             document.getStatus().apiValue(),
             document.getChunkCount(),
             document.getErrorMsg(),
+            document.getChecksum(),
+            document.getContentVersion(),
+            document.getPermissionVersion(),
+            document.getDisabledAt() != null,
             document.getCreatedAt()
         );
     }

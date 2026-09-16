@@ -90,6 +90,20 @@ public class KnowledgeDocument {
         this.filePath = filePath;
     }
 
+    public KnowledgeDocument(
+        UUID id,
+        UUID tenantId,
+        UUID knowledgeBaseId,
+        UUID userId,
+        String filename,
+        String fileType,
+        String filePath,
+        String checksum
+    ) {
+        this(id, tenantId, knowledgeBaseId, userId, filename, fileType, filePath);
+        this.checksum = checksum;
+    }
+
     @PrePersist
     void prePersist() {
         OffsetDateTime now = OffsetDateTime.now();
@@ -130,6 +144,18 @@ public class KnowledgeDocument {
         return filePath;
     }
 
+    public String getChecksum() {
+        return checksum;
+    }
+
+    public int getContentVersion() {
+        return contentVersion;
+    }
+
+    public int getPermissionVersion() {
+        return permissionVersion;
+    }
+
     public DocumentStatus getStatus() {
         return status;
     }
@@ -146,6 +172,14 @@ public class KnowledgeDocument {
         return createdAt;
     }
 
+    public OffsetDateTime getDisabledAt() {
+        return disabledAt;
+    }
+
+    public OffsetDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
     public void markReady(int chunkCount) {
         this.status = DocumentStatus.READY;
         this.chunkCount = chunkCount;
@@ -156,5 +190,30 @@ public class KnowledgeDocument {
         this.status = DocumentStatus.FAILED;
         this.errorMsg = message;
         this.chunkCount = 0;
+    }
+
+    public void markProcessing() {
+        this.status = DocumentStatus.PROCESSING;
+        this.errorMsg = null;
+    }
+
+    public void disable() {
+        this.disabledAt = OffsetDateTime.now();
+        this.permissionVersion++;
+    }
+
+    public void enable() {
+        this.disabledAt = null;
+        this.permissionVersion++;
+    }
+
+    public void softDelete() {
+        this.deletedAt = OffsetDateTime.now();
+        this.permissionVersion++;
+        this.chunkCount = 0;
+    }
+
+    public void bumpContentVersion() {
+        this.contentVersion++;
     }
 }

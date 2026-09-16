@@ -15,7 +15,7 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2、tenant/user/department/role/knowledge base/ACL schema 与查询期 security trimming 已落地；管理 API、审计和完整生命周期仍待补齐 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming 与最小管理 API 已落地；审计和完整生命周期仍待补齐 |
 | 3. 结构化回答、审计、观测、反馈 | `planned` | 已有基础回答结构、Token 和 ask log；缺 requestId、分段耗时、失败分类和反馈 |
 | 4. 20 题评测基线 | `planned` | 尚无版本化评测集和 Runner |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
@@ -39,6 +39,8 @@
 - V2 已包含 tenant、department、role、user-role、knowledge base、membership 和 document ACL。
 - 文档列表/详情和 Chunk 向量查询在 SQL 阶段执行 tenant + user/department/role + knowledge-base/document ACL 过滤。
 - 上传和删除要求 `MANAGE`；无权限删除统一返回 404，避免暴露资源存在性。
+- 最小管理 API 已包含角色列表、用户列表、创建用户、知识库列表、知识库 membership 查询/授权/撤权。
+- 创建用户要求 `SYSTEM_ADMIN`；知识库 membership 管理要求该知识库 `MANAGE` 权限。
 - 旧单用户数据库通过 Flyway baseline 升级；默认演示用户幂等补齐 SYSTEM_ADMIN 与默认知识库 MANAGE 权限。
 
 ### Flutter
@@ -81,7 +83,7 @@
 
 - 本地和 GitHub Actions 均固定 JDK 25；CI Workflow 已配置，但尚未由远端运行证明。
 - 后端已有 13 个稳定单元/上下文测试和 2 个 PostgreSQL/Testcontainers 集成测试；本机 Docker endpoint 会跳过集成测试，但 GitHub Actions 已实际执行通过。
-- 企业身份与 ACL schema 和查询边界已建立，但尚无用户、部门、角色、知识库和授权管理 API/UI。
+- 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无部门管理 API/UI、角色授予独立 API、知识库创建 API 和前端管理页。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已预留 source/checksum、内容版本、权限版本和停用/删除字段，但尚未实现 checksum、版本更新、软删除和可靠重建流程。
 - 权限拒绝尚未形成独立审计事件和评测记录。
@@ -95,10 +97,10 @@
 
 继续完成 Milestone 2：
 
-1. 增加用户、部门、角色、知识库和 membership 的最小管理 API，明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 权限矩阵。
-2. 实现 checksum、幂等上传/更新、内容版本、权限版本、disable/delete/reindex 和失败恢复。
-3. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
-4. 持续保留 GitHub Actions backend-tests 与 compose-config 作为远端回归证据。
+1. 在 GitHub Actions 上验证新增管理 API 集成测试，并把测试数量和 run id 回写到本文件。
+2. 补部门管理、角色授予独立 API、知识库创建/停用 API，并明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 权限矩阵。
+3. 实现 checksum、幂等上传/更新、内容版本、权限版本、disable/delete/reindex 和失败恢复。
+4. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
 
 ## 文档维护规则
 

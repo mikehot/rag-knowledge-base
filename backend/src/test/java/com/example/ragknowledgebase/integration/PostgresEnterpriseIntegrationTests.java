@@ -1,9 +1,14 @@
 package com.example.ragknowledgebase.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.example.ragknowledgebase.admin.AdminService;
+import com.example.ragknowledgebase.admin.CreateUserRequest;
+import com.example.ragknowledgebase.admin.GrantKnowledgeBaseMembershipRequest;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
+import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.DocumentRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +31,7 @@ class PostgresEnterpriseIntegrationTests {
     private static final UUID OWNER_ID = UUID.fromString("10000000-0000-0000-0000-000000000101");
     private static final UUID READER_ID = UUID.fromString("10000000-0000-0000-0000-000000000102");
     private static final UUID OUTSIDER_ID = UUID.fromString("10000000-0000-0000-0000-000000000103");
+    private static final UUID CREATED_USER_ID_MARKER = UUID.fromString("10000000-0000-0000-0000-000000000104");
     private static final UUID DOCUMENT_ID = UUID.fromString("20000000-0000-0000-0000-000000000101");
 
     @Container
@@ -46,6 +52,9 @@ class PostgresEnterpriseIntegrationTests {
     @Autowired
     private AccessControlService accessControlService;
 
+    @Autowired
+    private AdminService adminService;
+
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -64,8 +73,12 @@ class PostgresEnterpriseIntegrationTests {
         jdbcTemplate.update("DELETE FROM document_acl WHERE document_id = ?", DOCUMENT_ID);
         jdbcTemplate.update("DELETE FROM chunk WHERE document_id = ?", DOCUMENT_ID);
         jdbcTemplate.update("DELETE FROM document WHERE id = ?", DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE principal_id IN (SELECT id FROM app_user WHERE username LIKE 'managed-%')");
+        jdbcTemplate.update("DELETE FROM user_role WHERE user_id IN (SELECT id FROM app_user WHERE username LIKE 'managed-%')");
+        jdbcTemplate.update("DELETE FROM app_user WHERE username LIKE 'managed-%'");
         jdbcTemplate.update("DELETE FROM user_role WHERE user_id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
         jdbcTemplate.update("DELETE FROM app_user WHERE id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
+        jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", CREATED_USER_ID_MARKER);
     }
 
     @Test
@@ -128,6 +141,78 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(accessControlService.canManageKnowledgeBase(outsider, KNOWLEDGE_BASE_ID)).isFalse();
     }
 
+    @Test
+    void adminApiServiceCreatesUsersAndManagesKnowledgeBaseMemberships() {
+        insertUser(OWNER_ID, "owner-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "owner-it");
+
+        var created = adminService.createUser(
+            admin,
+            new CreateUserRequest(
+                "managed-employee",
+                "password123",
+                "Managed Employee",
+                null,
+                null
+            )
+        );
+
+        assertThat(created.username()).isEqualTo("managed-employee");
+        assertThat(created.roleCodes()).containsExactly("EMPLOYEE");
+        assertThat(adminService.listUsers(admin))
+            .extracting("username")
+            .contains("managed-employee", "owner-it");
+        assertThat(adminService.listRoles(admin))
+            .extracting("code")
+            .contains("SYSTEM_ADMIN", "EMPLOYEE", "AUDITOR", "KNOWLEDGE_ADMIN");
+
+        var membership = adminService.grantMembership(
+            admin,
+            KNOWLEDGE_BASE_ID,
+            new GrantKnowledgeBaseMembershipRequest("user", created.id(), "read")
+        );
+
+        assertThat(membership.principalId()).isEqualTo(created.id());
+        assertThat(membership.permission()).isEqualTo("READ");
+        assertThat(adminService.listMemberships(admin, KNOWLEDGE_BASE_ID))
+            .extracting("id")
+            .contains(membership.id());
+
+        assertThat(adminService.revokeMembership(admin, KNOWLEDGE_BASE_ID, membership.id()).deleted()).isTrue();
+        assertThat(adminService.listMemberships(admin, KNOWLEDGE_BASE_ID))
+            .extracting("id")
+            .doesNotContain(membership.id());
+    }
+
+    @Test
+    void nonSystemAdminCannotCreateUsersButKnowledgeBaseManagerCanGrantReadAccess() {
+        insertUser(OWNER_ID, "manager-it");
+        insertUser(READER_ID, "reader-it");
+        grantKnowledgeBase("MANAGE", OWNER_ID);
+        AuthenticatedUser manager = new AuthenticatedUser(OWNER_ID, TENANT_ID, "manager-it");
+
+        assertThatThrownBy(() -> adminService.createUser(
+            manager,
+            new CreateUserRequest("managed-denied", "password123", null, null, null)
+        ))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(403);
+
+        var membership = adminService.grantMembership(
+            manager,
+            KNOWLEDGE_BASE_ID,
+            new GrantKnowledgeBaseMembershipRequest("USER", READER_ID, "READ")
+        );
+
+        assertThat(membership.permission()).isEqualTo("READ");
+        assertThat(accessControlService.canManageKnowledgeBase(manager, KNOWLEDGE_BASE_ID)).isTrue();
+        assertThat(adminService.listMemberships(manager, KNOWLEDGE_BASE_ID))
+            .extracting("id")
+            .contains(membership.id());
+    }
+
     private void insertUser(UUID id, String username) {
         jdbcTemplate.update(
             """
@@ -168,6 +253,22 @@ class PostgresEnterpriseIntegrationTests {
             KNOWLEDGE_BASE_ID,
             userId,
             permission
+        );
+    }
+
+    private void assignRole(UUID userId, String roleCode) {
+        jdbcTemplate.update(
+            """
+                INSERT INTO user_role (user_id, role_id)
+                SELECT ?, id
+                FROM app_role
+                WHERE tenant_id = ?
+                  AND code = ?
+                ON CONFLICT DO NOTHING
+                """,
+            userId,
+            TENANT_ID,
+            roleCode
         );
     }
 }

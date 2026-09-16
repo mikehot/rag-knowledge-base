@@ -119,5 +119,18 @@ Main endpoints:
 - `GET /api/documents/{id}`
 - `DELETE /api/documents/{id}`
 - `POST /api/ask`
+- `GET /api/admin/roles`
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `GET /api/admin/knowledge-bases`
+- `GET /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
+- `POST /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
+- `DELETE /api/admin/knowledge-bases/{knowledgeBaseId}/memberships/{membershipId}`
 
 `POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM.
+
+Admin endpoint boundaries:
+
+- User and role administration requires `SYSTEM_ADMIN`.
+- Knowledge-base membership administration requires `MANAGE` on that knowledge base.
+- Creating a user defaults to the `EMPLOYEE` role when `roleCodes` is omitted.

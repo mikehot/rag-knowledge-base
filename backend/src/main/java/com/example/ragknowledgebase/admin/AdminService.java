@@ -111,6 +111,102 @@ public class AdminService {
         return getUser(operator.tenantId(), userId);
     }
 
+    @Transactional
+    public UserResponse assignUserRole(
+        AuthenticatedUser operator,
+        UUID userId,
+        AssignUserRoleRequest request
+    ) {
+        requireSystemAdmin(operator);
+        requireUser(operator.tenantId(), userId);
+        int assigned = jdbcTemplate.update(
+            """
+                INSERT INTO user_role (user_id, role_id)
+                SELECT ?, id
+                FROM app_role
+                WHERE tenant_id = ?
+                  AND code = ?
+                ON CONFLICT DO NOTHING
+                """,
+            userId,
+            operator.tenantId(),
+            request.roleCode()
+        );
+        if (assigned == 0 && !roleExists(operator.tenantId(), request.roleCode())) {
+            throw new BusinessException(400, "角色不存在: " + request.roleCode());
+        }
+        return getUser(operator.tenantId(), userId);
+    }
+
+    @Transactional
+    public DeleteUserRoleResponse revokeUserRole(
+        AuthenticatedUser operator,
+        UUID userId,
+        String roleCode
+    ) {
+        requireSystemAdmin(operator);
+        requireUser(operator.tenantId(), userId);
+        String normalizedRoleCode = normalizeCode(roleCode);
+        int deleted = jdbcTemplate.update(
+            """
+                DELETE FROM user_role ur
+                USING app_role r
+                WHERE ur.role_id = r.id
+                  AND ur.user_id = ?
+                  AND r.tenant_id = ?
+                  AND r.code = ?
+                """,
+            userId,
+            operator.tenantId(),
+            normalizedRoleCode
+        );
+        if (deleted == 0) {
+            throw new BusinessException(404, "用户角色不存在");
+        }
+        return new DeleteUserRoleResponse(true);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DepartmentResponse> listDepartments(AuthenticatedUser operator) {
+        requireSystemAdmin(operator);
+        return jdbcTemplate.query(
+            """
+                SELECT id, parent_id, code, name, status
+                FROM department
+                WHERE tenant_id = ?
+                ORDER BY code
+                """,
+            (rs, rowNum) -> departmentResponse(rs),
+            operator.tenantId()
+        );
+    }
+
+    @Transactional
+    public DepartmentResponse createDepartment(
+        AuthenticatedUser operator,
+        CreateDepartmentRequest request
+    ) {
+        requireSystemAdmin(operator);
+        validateParentDepartment(operator.tenantId(), request.parentId());
+        UUID departmentId = UUID.randomUUID();
+        try {
+            jdbcTemplate.update(
+                """
+                    INSERT INTO department (id, tenant_id, parent_id, code, name, status)
+                    VALUES (?, ?, ?, ?, ?, 'ACTIVE')
+                    """,
+                departmentId,
+                operator.tenantId(),
+                request.parentId(),
+                request.code(),
+                request.name()
+            );
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException(409, "部门编码已存在");
+        }
+        return getDepartment(operator.tenantId(), departmentId);
+    }
+
     @Transactional(readOnly = true)
     public List<KnowledgeBaseResponse> listKnowledgeBases(AuthenticatedUser operator) {
         requireSystemAdmin(operator);
@@ -130,6 +226,73 @@ public class AdminService {
             ),
             operator.tenantId()
         );
+    }
+
+    @Transactional
+    public KnowledgeBaseResponse createKnowledgeBase(
+        AuthenticatedUser operator,
+        CreateKnowledgeBaseRequest request
+    ) {
+        requireSystemAdmin(operator);
+        UUID knowledgeBaseId = UUID.randomUUID();
+        try {
+            jdbcTemplate.update(
+                """
+                    INSERT INTO knowledge_base (
+                        id, tenant_id, code, name, description, status, created_by
+                    )
+                    VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?)
+                    """,
+                knowledgeBaseId,
+                operator.tenantId(),
+                request.code(),
+                request.name(),
+                request.description(),
+                operator.userId()
+            );
+            jdbcTemplate.update(
+                """
+                    INSERT INTO knowledge_base_membership (
+                        id, tenant_id, knowledge_base_id, principal_type, principal_id, permission
+                    )
+                    VALUES (?, ?, ?, 'USER', ?, 'MANAGE')
+                    ON CONFLICT DO NOTHING
+                    """,
+                UUID.randomUUID(),
+                operator.tenantId(),
+                knowledgeBaseId,
+                operator.userId()
+            );
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException(409, "知识库编码已存在");
+        }
+        return getKnowledgeBase(operator.tenantId(), knowledgeBaseId);
+    }
+
+    @Transactional
+    public KnowledgeBaseResponse updateKnowledgeBaseStatus(
+        AuthenticatedUser operator,
+        UUID knowledgeBaseId,
+        String status
+    ) {
+        requireSystemAdmin(operator);
+        validateKnowledgeBaseStatus(status);
+        int updated = jdbcTemplate.update(
+            """
+                UPDATE knowledge_base
+                SET status = ?,
+                    updated_at = now()
+                WHERE id = ?
+                  AND tenant_id = ?
+                """,
+            status,
+            knowledgeBaseId,
+            operator.tenantId()
+        );
+        if (updated == 0) {
+            throw new BusinessException(404, "知识库不存在");
+        }
+        return getKnowledgeBase(operator.tenantId(), knowledgeBaseId);
     }
 
     @Transactional(readOnly = true)
@@ -261,10 +424,52 @@ public class AdminService {
         }
     }
 
+    private void validateParentDepartment(UUID tenantId, UUID parentId) {
+        if (parentId == null) {
+            return;
+        }
+        validateDepartment(tenantId, parentId);
+    }
+
     private void validatePermission(String permission) {
         if (!"READ".equals(permission) && !"MANAGE".equals(permission)) {
             throw new BusinessException(400, "permission 仅支持 READ、MANAGE");
         }
+    }
+
+    private void validateKnowledgeBaseStatus(String status) {
+        if (!"ACTIVE".equals(status) && !"DISABLED".equals(status)) {
+            throw new BusinessException(400, "知识库状态仅支持 ACTIVE、DISABLED");
+        }
+    }
+
+    private void requireUser(UUID tenantId, UUID userId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM app_user WHERE tenant_id = ? AND id = ?",
+            Integer.class,
+            tenantId,
+            userId
+        );
+        if (count == null || count == 0) {
+            throw new BusinessException(404, "用户不存在");
+        }
+    }
+
+    private boolean roleExists(UUID tenantId, String roleCode) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM app_role WHERE tenant_id = ? AND code = ?",
+            Integer.class,
+            tenantId,
+            roleCode
+        );
+        return count != null && count > 0;
+    }
+
+    private String normalizeCode(String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(400, "编码不能为空");
+        }
+        return value.trim().toUpperCase();
     }
 
     private UserResponse getUser(UUID tenantId, UUID userId) {
@@ -285,6 +490,34 @@ public class AdminService {
         );
     }
 
+    private DepartmentResponse getDepartment(UUID tenantId, UUID departmentId) {
+        return jdbcTemplate.queryForObject(
+            """
+                SELECT id, parent_id, code, name, status
+                FROM department
+                WHERE tenant_id = ?
+                  AND id = ?
+                """,
+            (rs, rowNum) -> departmentResponse(rs),
+            tenantId,
+            departmentId
+        );
+    }
+
+    private KnowledgeBaseResponse getKnowledgeBase(UUID tenantId, UUID knowledgeBaseId) {
+        return jdbcTemplate.queryForObject(
+            """
+                SELECT id, code, name, description, status
+                FROM knowledge_base
+                WHERE tenant_id = ?
+                  AND id = ?
+                """,
+            (rs, rowNum) -> knowledgeBaseResponse(rs),
+            tenantId,
+            knowledgeBaseId
+        );
+    }
+
     private KnowledgeBaseMembershipResponse getMembership(UUID tenantId, UUID membershipId) {
         return jdbcTemplate.queryForObject(
             """
@@ -296,6 +529,26 @@ public class AdminService {
             (rs, rowNum) -> membershipResponse(rs),
             tenantId,
             membershipId
+        );
+    }
+
+    private DepartmentResponse departmentResponse(ResultSet rs) throws SQLException {
+        return new DepartmentResponse(
+            rs.getObject("id", UUID.class),
+            rs.getObject("parent_id", UUID.class),
+            rs.getString("code"),
+            rs.getString("name"),
+            rs.getString("status")
+        );
+    }
+
+    private KnowledgeBaseResponse knowledgeBaseResponse(ResultSet rs) throws SQLException {
+        return new KnowledgeBaseResponse(
+            rs.getObject("id", UUID.class),
+            rs.getString("code"),
+            rs.getString("name"),
+            rs.getString("description"),
+            rs.getString("status")
         );
     }
 

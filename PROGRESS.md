@@ -39,8 +39,8 @@
 - V2 已包含 tenant、department、role、user-role、knowledge base、membership 和 document ACL。
 - 文档列表/详情和 Chunk 向量查询在 SQL 阶段执行 tenant + user/department/role + knowledge-base/document ACL 过滤。
 - 上传和删除要求 `MANAGE`；无权限删除统一返回 404，避免暴露资源存在性。
-- 最小管理 API 已包含角色列表、用户列表、创建用户、知识库列表、知识库 membership 查询/授权/撤权。
-- 创建用户要求 `SYSTEM_ADMIN`；知识库 membership 管理要求该知识库 `MANAGE` 权限。
+- 最小管理 API 已包含部门列表/创建、角色列表、用户列表/创建、用户角色授予/撤销、知识库列表/创建/启停、知识库 membership 查询/授权/撤权。
+- 部门、用户、用户角色和知识库生命周期管理要求 `SYSTEM_ADMIN`；知识库 membership 管理要求该知识库 `MANAGE` 权限。
 - 旧单用户数据库通过 Flyway baseline 升级；默认演示用户幂等补齐 SYSTEM_ADMIN 与默认知识库 MANAGE 权限。
 
 ### Flutter
@@ -64,7 +64,7 @@
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | 本地 JDK 25.0.3；显式 Mockito Java Agent；13 tests passed；本机 Testcontainers Docker endpoint 异常导致 4 个 PostgreSQL integration tests skipped |
+| `./mvnw test` | PASS | 本地 JDK 25.0.3；显式 Mockito Java Agent；13 tests passed；本机 Testcontainers Docker endpoint 异常导致 5 个 PostgreSQL integration tests skipped |
 | GitHub Actions CI | PASS | Run `35065590269`；backend-tests 在 Ubuntu + Temurin 25.0.4 上实际执行 17 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
@@ -83,7 +83,7 @@
 
 - 本地和 GitHub Actions 均固定 JDK 25；CI Workflow 已配置，但尚未由远端运行证明。
 - 后端已有 13 个稳定单元/上下文测试和 4 个 PostgreSQL/Testcontainers 集成测试；本机 Docker endpoint 会跳过集成测试，但 GitHub Actions 已实际执行通过。
-- 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无部门管理 API/UI、角色授予独立 API、知识库创建 API 和前端管理页。
+- 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已预留 source/checksum、内容版本、权限版本和停用/删除字段，但尚未实现 checksum、版本更新、软删除和可靠重建流程。
 - 权限拒绝尚未形成独立审计事件和评测记录。
@@ -97,9 +97,10 @@
 
 继续完成 Milestone 2：
 
-1. 补部门管理、角色授予独立 API、知识库创建/停用 API，并明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 权限矩阵。
-2. 实现 checksum、幂等上传/更新、内容版本、权限版本、disable/delete/reindex 和失败恢复。
-3. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
+1. 在 GitHub Actions 上验证新增部门、用户角色和知识库生命周期集成测试，并把 run id 和测试数量回写到本文件。
+2. 明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 的权限矩阵，并决定 KNOWLEDGE_ADMIN 是否可创建/管理部分知识库。
+3. 实现 checksum、幂等上传/更新、内容版本、权限版本、disable/delete/reindex 和失败恢复。
+4. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
 
 ## 文档维护规则
 

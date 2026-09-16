@@ -4,12 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.ragknowledgebase.admin.AdminService;
+import com.example.ragknowledgebase.admin.AssignUserRoleRequest;
+import com.example.ragknowledgebase.admin.CreateDepartmentRequest;
+import com.example.ragknowledgebase.admin.CreateKnowledgeBaseRequest;
 import com.example.ragknowledgebase.admin.CreateUserRequest;
 import com.example.ragknowledgebase.admin.GrantKnowledgeBaseMembershipRequest;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.DocumentRepository;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,12 +77,15 @@ class PostgresEnterpriseIntegrationTests {
         jdbcTemplate.update("DELETE FROM document_acl WHERE document_id = ?", DOCUMENT_ID);
         jdbcTemplate.update("DELETE FROM chunk WHERE document_id = ?", DOCUMENT_ID);
         jdbcTemplate.update("DELETE FROM document WHERE id = ?", DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE knowledge_base_id IN (SELECT id FROM knowledge_base WHERE code LIKE 'managed-%')");
+        jdbcTemplate.update("DELETE FROM knowledge_base WHERE code LIKE 'managed-%'");
         jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE principal_id IN (SELECT id FROM app_user WHERE username LIKE 'managed-%')");
         jdbcTemplate.update("DELETE FROM user_role WHERE user_id IN (SELECT id FROM app_user WHERE username LIKE 'managed-%')");
         jdbcTemplate.update("DELETE FROM app_user WHERE username LIKE 'managed-%'");
         jdbcTemplate.update("DELETE FROM user_role WHERE user_id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
         jdbcTemplate.update("DELETE FROM app_user WHERE id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
         jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", CREATED_USER_ID_MARKER);
+        jdbcTemplate.update("DELETE FROM department WHERE code LIKE 'MANAGED-%'");
     }
 
     @Test
@@ -211,6 +218,70 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(adminService.listMemberships(manager, KNOWLEDGE_BASE_ID))
             .extracting("id")
             .contains(membership.id());
+    }
+
+    @Test
+    void systemAdminManagesDepartmentsRolesAndKnowledgeBaseLifecycle() {
+        insertUser(OWNER_ID, "admin-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "admin-it");
+
+        var department = adminService.createDepartment(
+            admin,
+            new CreateDepartmentRequest("managed-sales", "Managed Sales", null)
+        );
+        assertThat(department.code()).isEqualTo("MANAGED-SALES");
+        assertThat(adminService.listDepartments(admin))
+            .extracting("id")
+            .contains(department.id());
+
+        var employee = adminService.createUser(
+            admin,
+            new CreateUserRequest(
+                "managed-role-user",
+                "password123",
+                "Managed Role User",
+                department.id(),
+                List.of("EMPLOYEE")
+            )
+        );
+
+        var knowledgeAdmin = adminService.assignUserRole(
+            admin,
+            employee.id(),
+            new AssignUserRoleRequest("knowledge_admin")
+        );
+        assertThat(knowledgeAdmin.roleCodes()).contains("EMPLOYEE", "KNOWLEDGE_ADMIN");
+
+        assertThat(adminService.revokeUserRole(admin, employee.id(), "KNOWLEDGE_ADMIN").deleted()).isTrue();
+        assertThat(adminService.listUsers(admin).stream()
+            .filter(user -> user.id().equals(employee.id()))
+            .findFirst()
+            .orElseThrow()
+            .roleCodes()
+        ).doesNotContain("KNOWLEDGE_ADMIN");
+
+        var knowledgeBase = adminService.createKnowledgeBase(
+            admin,
+            new CreateKnowledgeBaseRequest(
+                "managed-kb",
+                "Managed KB",
+                "Managed lifecycle test knowledge base"
+            )
+        );
+        assertThat(knowledgeBase.code()).isEqualTo("managed-kb");
+        assertThat(knowledgeBase.status()).isEqualTo("ACTIVE");
+        assertThat(accessControlService.canManageKnowledgeBase(admin, knowledgeBase.id())).isTrue();
+
+        var disabled = adminService.updateKnowledgeBaseStatus(admin, knowledgeBase.id(), "DISABLED");
+
+        assertThat(disabled.status()).isEqualTo("DISABLED");
+        assertThat(accessControlService.canManageKnowledgeBase(admin, knowledgeBase.id())).isFalse();
+
+        var activated = adminService.updateKnowledgeBaseStatus(admin, knowledgeBase.id(), "ACTIVE");
+
+        assertThat(activated.status()).isEqualTo("ACTIVE");
+        assertThat(accessControlService.canManageKnowledgeBase(admin, knowledgeBase.id())).isTrue();
     }
 
     private void insertUser(UUID id, String username) {

@@ -122,7 +122,14 @@ Main endpoints:
 - `GET /api/admin/roles`
 - `GET /api/admin/users`
 - `POST /api/admin/users`
+- `POST /api/admin/users/{userId}/roles`
+- `DELETE /api/admin/users/{userId}/roles/{roleCode}`
+- `GET /api/admin/departments`
+- `POST /api/admin/departments`
 - `GET /api/admin/knowledge-bases`
+- `POST /api/admin/knowledge-bases`
+- `POST /api/admin/knowledge-bases/{knowledgeBaseId}/disable`
+- `POST /api/admin/knowledge-bases/{knowledgeBaseId}/activate`
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
 - `DELETE /api/admin/knowledge-bases/{knowledgeBaseId}/memberships/{membershipId}`
@@ -132,5 +139,7 @@ Main endpoints:
 Admin endpoint boundaries:
 
 - User and role administration requires `SYSTEM_ADMIN`.
+- Department administration requires `SYSTEM_ADMIN`.
+- Knowledge-base creation, activation, and disabling require `SYSTEM_ADMIN`.
 - Knowledge-base membership administration requires `MANAGE` on that knowledge base.
 - Creating a user defaults to the `EMPLOYEE` role when `roleCodes` is omitted.

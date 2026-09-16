@@ -42,9 +42,72 @@ public class AdminController {
         return ApiResponse.ok(adminService.createUser(currentUser(authentication), request));
     }
 
+    @PostMapping("/users/{userId}/roles")
+    public ApiResponse<UserResponse> assignUserRole(
+        Authentication authentication,
+        @PathVariable UUID userId,
+        @Valid @RequestBody AssignUserRoleRequest request
+    ) {
+        return ApiResponse.ok(adminService.assignUserRole(currentUser(authentication), userId, request));
+    }
+
+    @DeleteMapping("/users/{userId}/roles/{roleCode}")
+    public ApiResponse<DeleteUserRoleResponse> revokeUserRole(
+        Authentication authentication,
+        @PathVariable UUID userId,
+        @PathVariable String roleCode
+    ) {
+        return ApiResponse.ok(adminService.revokeUserRole(currentUser(authentication), userId, roleCode));
+    }
+
+    @GetMapping("/departments")
+    public ApiResponse<List<DepartmentResponse>> departments(Authentication authentication) {
+        return ApiResponse.ok(adminService.listDepartments(currentUser(authentication)));
+    }
+
+    @PostMapping("/departments")
+    public ApiResponse<DepartmentResponse> createDepartment(
+        Authentication authentication,
+        @Valid @RequestBody CreateDepartmentRequest request
+    ) {
+        return ApiResponse.ok(adminService.createDepartment(currentUser(authentication), request));
+    }
+
     @GetMapping("/knowledge-bases")
     public ApiResponse<List<KnowledgeBaseResponse>> knowledgeBases(Authentication authentication) {
         return ApiResponse.ok(adminService.listKnowledgeBases(currentUser(authentication)));
+    }
+
+    @PostMapping("/knowledge-bases")
+    public ApiResponse<KnowledgeBaseResponse> createKnowledgeBase(
+        Authentication authentication,
+        @Valid @RequestBody CreateKnowledgeBaseRequest request
+    ) {
+        return ApiResponse.ok(adminService.createKnowledgeBase(currentUser(authentication), request));
+    }
+
+    @PostMapping("/knowledge-bases/{knowledgeBaseId}/disable")
+    public ApiResponse<KnowledgeBaseResponse> disableKnowledgeBase(
+        Authentication authentication,
+        @PathVariable UUID knowledgeBaseId
+    ) {
+        return ApiResponse.ok(adminService.updateKnowledgeBaseStatus(
+            currentUser(authentication),
+            knowledgeBaseId,
+            "DISABLED"
+        ));
+    }
+
+    @PostMapping("/knowledge-bases/{knowledgeBaseId}/activate")
+    public ApiResponse<KnowledgeBaseResponse> activateKnowledgeBase(
+        Authentication authentication,
+        @PathVariable UUID knowledgeBaseId
+    ) {
+        return ApiResponse.ok(adminService.updateKnowledgeBaseStatus(
+            currentUser(authentication),
+            knowledgeBaseId,
+            "ACTIVE"
+        ));
     }
 
     @GetMapping("/knowledge-bases/{knowledgeBaseId}/memberships")

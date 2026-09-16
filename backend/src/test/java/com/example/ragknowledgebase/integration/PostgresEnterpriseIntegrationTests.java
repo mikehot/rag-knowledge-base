@@ -122,7 +122,7 @@ class PostgresEnterpriseIntegrationTests {
             Integer.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(2);
+        assertThat(successfulMigrations).isEqualTo(3);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);

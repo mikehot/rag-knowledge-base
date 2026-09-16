@@ -74,6 +74,14 @@ The Java `HttpClient` for chat and embedding explicitly uses `HTTP_1_1`, matchin
 - The fixed default tenant and knowledge-base IDs are compatibility identities for the local V0.1 environment; they are not request-controlled values.
 - JWT contains both user and tenant IDs. Listing, detail lookup, vector retrieval, upload, and deletion enforce permissions server-side; UI filtering is not treated as a security boundary.
 
+## Tests
+
+```bash
+./mvnw test
+```
+
+The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers with `pgvector/pgvector:pg16`. Those tests run automatically when Docker is available to Testcontainers and are skipped when Docker is unavailable, so CI output should be checked for skipped integration tests before treating PostgreSQL coverage as proven.
+
 ## Cloud Provider Examples
 
 OpenAI-compatible cloud:

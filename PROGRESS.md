@@ -62,7 +62,7 @@
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | JDK 25.0.3；显式 Mockito Java Agent；13 tests，0 failures/errors |
+| `./mvnw test` | PASS | JDK 25.0.3；显式 Mockito Java Agent；13 tests passed；2 PostgreSQL/Testcontainers tests skipped because this local Testcontainers Docker endpoint returned an invalid 400 response |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
 | 文档入库 | PASS | `sample_faq.md` 进入 `ready`，生成 2 个 Chunk |
@@ -78,7 +78,7 @@
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；CI Workflow 已配置，但尚未由远端运行证明。
-- 后端已有 13 个测试，但 ACL PostgreSQL 验证目前仍是人工运行证据，尚未固化为 Testcontainers/CI 集成测试。
+- 后端已有 13 个稳定单元/上下文测试；PostgreSQL/Testcontainers 集成测试已加入，但当前本机 Testcontainers Docker endpoint 异常导致跳过，尚需 GitHub Actions 或健康 Docker 环境执行证明。
 - 企业身份与 ACL schema 和查询边界已建立，但尚无用户、部门、角色、知识库和授权管理 API/UI。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已预留 source/checksum、内容版本、权限版本和停用/删除字段，但尚未实现 checksum、版本更新、软删除和可靠重建流程。
@@ -93,7 +93,7 @@
 
 继续完成 Milestone 2：
 
-1. 把空库迁移、旧库升级和 ACL 隔离场景固化为 PostgreSQL/Testcontainers 集成测试并接入 CI。
+1. 在远端 GitHub Actions 或健康 Docker 环境实际运行 PostgreSQL/Testcontainers 集成测试，保存 Flyway + pgvector + ACL 自动验证证据。
 2. 增加用户、部门、角色、知识库和 membership 的最小管理 API，明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 权限矩阵。
 3. 实现 checksum、幂等上传/更新、内容版本、权限版本、disable/delete/reindex 和失败恢复。
 4. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。

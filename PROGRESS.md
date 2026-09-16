@@ -15,7 +15,7 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming 与最小管理 API 已落地；审计和完整生命周期仍待补齐 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2/V3、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming、最小管理 API 和文档生命周期基础已落地；审计和高级任务治理仍待补齐 |
 | 3. 结构化回答、审计、观测、反馈 | `planned` | 已有基础回答结构、Token 和 ask log；缺 requestId、分段耗时、失败分类和反馈 |
 | 4. 20 题评测基线 | `planned` | 尚无版本化评测集和 Runner |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
@@ -68,7 +68,7 @@
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
 | `./mvnw test` | PASS | 本地 JDK 25.0.3；显式 Mockito Java Agent；15 non-PostgreSQL tests passed；本机 Testcontainers Docker endpoint 异常导致 6 个 PostgreSQL integration tests skipped |
-| GitHub Actions CI | PASS | Run `35066197555`；backend-tests 在 Ubuntu + Temurin 25.0.4 上实际执行 18 tests，0 failures/errors/skipped；compose-config 通过 |
+| GitHub Actions CI | PASS | Run `35068039119`；backend-tests 在 Ubuntu + Temurin 25.0.4 上实际执行 21 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
 | 文档入库 | PASS | `sample_faq.md` 进入 `ready`，生成 2 个 Chunk |
@@ -76,16 +76,16 @@
 | 资料外问题 | PASS | `found=false`、`sources=[]`；保留实际模型 Token 用量 |
 | 文档删除 | PASS | API 返回成功，document/chunk 行清零，原始上传文件删除，再次检索拒答 |
 | 旧库迁移 | PASS | 非空旧 schema 自动 baseline 为 V1，再执行 V2；Hibernate validate 与应用启动通过 |
-| 空库迁移 | PASS | 唯一临时库顺序执行 V1/V2；pgvector 0.8.6、`vector(768)`、默认用户/角色/知识库授权通过；临时库已删除 |
+| 空库迁移 | PASS | GitHub Actions run `35068039119` 顺序执行 V1/V2/V3；PostgreSQL 16.15、`vector(768)`、默认用户/角色/知识库授权通过 |
 | ACL 隔离 | PASS | 无授权用户列表为空；授予知识库 READ 后可见；READ 用户删除返回 404；临时记录已删除 |
-| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35066197555` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1/V2 成功，`PostgresEnterpriseIntegrationTests` 5 tests / 0 skipped |
+| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35068039119` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1/V2/V3 成功，`PostgresEnterpriseIntegrationTests` 6 tests / 0 skipped |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
 ## 已知缺口
 
-- 本地和 GitHub Actions 均固定 JDK 25；CI Workflow 已配置，但尚未由远端运行证明。
-- 后端已有 15 个稳定单元/上下文测试和 6 个 PostgreSQL/Testcontainers 集成测试；本机 Docker endpoint 会跳过集成测试，新增生命周期测试尚待 GitHub Actions 实际执行证明。
+- 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
+- 后端已有 15 个稳定单元/上下文测试和 6 个 PostgreSQL/Testcontainers 集成测试；本机 Docker endpoint 会跳过集成测试，需以 GitHub Actions 作为 PostgreSQL 集成测试证据。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除和 reindex 基础流程；尚未实现替换上传、批量重建、失败重试队列和后台任务观测。
@@ -100,10 +100,9 @@
 
 继续完成 Milestone 2：
 
-1. 在 GitHub Actions 上验证新增 V3 migration 和文档生命周期集成测试，并把 run id 与测试数量回写到本文件。
-2. 明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 的权限矩阵，并决定 KNOWLEDGE_ADMIN 是否可创建/管理部分知识库。
-3. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
-4. 补替换上传、批量重建、失败重试队列和后台任务观测。
+1. 明确 SYSTEM_ADMIN / KNOWLEDGE_ADMIN / EMPLOYEE / AUDITOR 的权限矩阵，并决定 KNOWLEDGE_ADMIN 是否可创建/管理部分知识库。
+2. 增加 permission-denied 审计与跨部门、跨角色、跨 tenant 的确定性安全测试。
+3. 补替换上传、批量重建、失败重试队列和后台任务观测。
 
 ## 文档维护规则
 

@@ -8,6 +8,7 @@ public record AppProperties(
     Auth auth,
     Upload upload,
     Rag rag,
+    Enterprise enterprise,
     Ai ai,
     Embedding embedding
 ) {
@@ -31,8 +32,14 @@ public record AppProperties(
         int chunkOverlap,
         int topK,
         double similarityThreshold,
-        int embeddingDim,
-        boolean enableVectorSchema
+        int embeddingDim
+    ) {
+    }
+
+    public record Enterprise(
+        java.util.UUID defaultTenantId,
+        java.util.UUID defaultKnowledgeBaseId,
+        boolean initializeDefaultAccess
     ) {
     }
 

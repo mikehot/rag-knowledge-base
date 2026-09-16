@@ -17,6 +17,12 @@ public class KnowledgeDocument {
     @Id
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
+    @Column(name = "knowledge_base_id", nullable = false)
+    private UUID knowledgeBaseId;
+
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
@@ -28,6 +34,24 @@ public class KnowledgeDocument {
 
     @Column(name = "file_path")
     private String filePath;
+
+    @Column(name = "source_id")
+    private String sourceId;
+
+    @Column
+    private String checksum;
+
+    @Column(name = "content_version", nullable = false)
+    private int contentVersion = 1;
+
+    @Column(name = "permission_version", nullable = false)
+    private int permissionVersion = 1;
+
+    @Column(name = "disabled_at")
+    private OffsetDateTime disabledAt;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -48,8 +72,18 @@ public class KnowledgeDocument {
     protected KnowledgeDocument() {
     }
 
-    public KnowledgeDocument(UUID id, UUID userId, String filename, String fileType, String filePath) {
+    public KnowledgeDocument(
+        UUID id,
+        UUID tenantId,
+        UUID knowledgeBaseId,
+        UUID userId,
+        String filename,
+        String fileType,
+        String filePath
+    ) {
         this.id = id;
+        this.tenantId = tenantId;
+        this.knowledgeBaseId = knowledgeBaseId;
         this.userId = userId;
         this.filename = filename;
         this.fileType = fileType;
@@ -74,6 +108,14 @@ public class KnowledgeDocument {
 
     public UUID getUserId() {
         return userId;
+    }
+
+    public UUID getTenantId() {
+        return tenantId;
+    }
+
+    public UUID getKnowledgeBaseId() {
+        return knowledgeBaseId;
     }
 
     public String getFilename() {

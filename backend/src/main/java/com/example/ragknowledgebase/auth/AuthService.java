@@ -14,28 +14,35 @@ public class AuthService {
     private final AppUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final DefaultAccessProvisioner accessProvisioner;
 
     public AuthService(
         AppProperties properties,
         AppUserRepository userRepository,
         PasswordEncoder passwordEncoder,
-        JwtService jwtService
+        JwtService jwtService,
+        DefaultAccessProvisioner accessProvisioner
     ) {
         this.properties = properties;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.accessProvisioner = accessProvisioner;
     }
 
     @PostConstruct
     @Transactional
     public void ensureDefaultUser() {
-        userRepository.findByUsername(properties.auth().defaultUsername())
+        AppUser user = userRepository.findByUsername(properties.auth().defaultUsername())
             .orElseGet(() -> userRepository.save(new AppUser(
                 UUID.randomUUID(),
+                properties.enterprise().defaultTenantId(),
                 properties.auth().defaultUsername(),
                 passwordEncoder.encode(properties.auth().defaultPassword())
             )));
+        if (properties.enterprise().initializeDefaultAccess()) {
+            accessProvisioner.ensureAccess(user);
+        }
     }
 
     @Transactional(readOnly = true)

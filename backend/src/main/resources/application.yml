@@ -8,11 +8,18 @@ spring:
     password: ${DB_PASSWORD:rag}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
         format_sql: false
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
+    validate-migration-naming: true
+    clean-disabled: true
+    placeholders:
+      embedding_dim: ${AI_EMBEDDING_DIM:768}
   servlet:
     multipart:
       max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
@@ -44,7 +51,10 @@ app:
     top-k: ${RAG_TOP_K:5}
     similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.35}
     embedding-dim: ${AI_EMBEDDING_DIM:768}
-    enable-vector-schema: ${RAG_ENABLE_VECTOR_SCHEMA:true}
+  enterprise:
+    default-tenant-id: 00000000-0000-0000-0000-000000000001
+    default-knowledge-base-id: 00000000-0000-0000-0000-000000000101
+    initialize-default-access: true
   ai:
     provider: ${AI_PROVIDER:openai-compatible}
     base-url: ${AI_BASE_URL:http://localhost:1234/v1}

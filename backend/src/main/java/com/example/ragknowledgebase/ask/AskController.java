@@ -24,7 +24,7 @@ public class AskController {
         Authentication authentication,
         @Valid @RequestBody AskRequest request
     ) {
-        return ApiResponse.ok(askService.ask(currentUser(authentication).userId(), request));
+        return ApiResponse.ok(askService.ask(currentUser(authentication), request));
     }
 
     private AuthenticatedUser currentUser(Authentication authentication) {

@@ -36,6 +36,22 @@ public class FileStorageService {
         }
     }
 
+    public void delete(String storedPath) {
+        if (!StringUtils.hasText(storedPath)) {
+            return;
+        }
+        Path storageRoot = Path.of(properties.upload().storageDir()).toAbsolutePath().normalize();
+        Path target = Path.of(storedPath).toAbsolutePath().normalize();
+        if (!target.startsWith(storageRoot)) {
+            throw new BusinessException(500, "文件路径异常，无法删除");
+        }
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException ex) {
+            throw new BusinessException(500, "文件删除失败，请重试");
+        }
+    }
+
     private void validate(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "请选择要上传的文件");

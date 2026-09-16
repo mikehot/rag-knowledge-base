@@ -28,22 +28,22 @@ public class DocumentController {
         Authentication authentication,
         @RequestPart("file") MultipartFile file
     ) {
-        return ApiResponse.ok(documentService.upload(currentUser(authentication).userId(), file));
+        return ApiResponse.ok(documentService.upload(currentUser(authentication), file));
     }
 
     @GetMapping
     public ApiResponse<DocumentListResponse> list(Authentication authentication) {
-        return ApiResponse.ok(documentService.list(currentUser(authentication).userId()));
+        return ApiResponse.ok(documentService.list(currentUser(authentication)));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<DocumentResponse> get(Authentication authentication, @PathVariable UUID id) {
-        return ApiResponse.ok(documentService.get(currentUser(authentication).userId(), id));
+        return ApiResponse.ok(documentService.get(currentUser(authentication), id));
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<DeleteDocumentResponse> delete(Authentication authentication, @PathVariable UUID id) {
-        return ApiResponse.ok(documentService.delete(currentUser(authentication).userId(), id));
+        return ApiResponse.ok(documentService.delete(currentUser(authentication), id));
     }
 
     private AuthenticatedUser currentUser(Authentication authentication) {

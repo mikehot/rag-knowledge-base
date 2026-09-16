@@ -6,7 +6,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  flyway:
+    enabled: false
 
 app:
-  rag:
-    enable-vector-schema: false
+  enterprise:
+    initialize-default-access: false

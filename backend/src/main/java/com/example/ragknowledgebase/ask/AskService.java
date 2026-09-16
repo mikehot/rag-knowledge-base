@@ -3,6 +3,7 @@ package com.example.ragknowledgebase.ask;
 import com.example.ragknowledgebase.ai.AiProvider;
 import com.example.ragknowledgebase.ai.AiProviderResponse;
 import com.example.ragknowledgebase.ai.EmbeddingProvider;
+import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.document.ChunkJdbcRepository;
@@ -42,30 +43,38 @@ public class AskService {
     }
 
     @Transactional
-    public AskResponse ask(UUID userId, AskRequest request) {
+    public AskResponse ask(AuthenticatedUser user, AskRequest request) {
         String question = request.question().trim();
-        enforceDailyLimit(userId);
+        enforceDailyLimit(user.userId());
         try {
             List<float[]> questionEmbeddings = embeddingProvider.embed(List.of(question));
             List<ChunkSearchResult> hits = chunkRepository.search(
-                userId,
+                user.tenantId(),
+                user.userId(),
                 questionEmbeddings.get(0),
                 properties.rag().topK()
             );
             if (hits.isEmpty() || hits.get(0).similarity() < properties.rag().similarityThreshold()) {
-                return record(userId, question, new AskResponse(HANDOFF, false, List.of(), 0));
+                return record(user.userId(), question, new AskResponse(HANDOFF, false, List.of(), 0));
             }
             String prompt = buildPrompt(question, hits);
             AiProviderResponse response = aiProvider.generate(prompt);
+            if (isHandoff(response.text())) {
+                return record(
+                    user.userId(),
+                    question,
+                    new AskResponse(HANDOFF, false, List.of(), response.tokenUsage())
+                );
+            }
             AskResponse answer = new AskResponse(
                 response.text(),
                 true,
                 hits.stream().map(this::sourceOf).toList(),
                 response.tokenUsage()
             );
-            return record(userId, question, answer);
+            return record(user.userId(), question, answer);
         } catch (Exception ex) {
-            return record(userId, question, new AskResponse(TEMPORARY_UNAVAILABLE, false, List.of(), 0));
+            return record(user.userId(), question, new AskResponse(TEMPORARY_UNAVAILABLE, false, List.of(), 0));
         }
     }
 
@@ -109,6 +118,10 @@ public class AskService {
             .append(question)
             .append("\n\n请用中文简洁回答，并在末尾不要重复来源（来源由系统单独展示）。");
         return builder.toString();
+    }
+
+    private boolean isHandoff(String answer) {
+        return answer != null && answer.contains(HANDOFF);
     }
 
     private AskSourceResponse sourceOf(ChunkSearchResult hit) {

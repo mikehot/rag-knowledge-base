@@ -36,14 +36,61 @@ public class ChunkJdbcRepository {
         jdbcTemplate.update("DELETE FROM chunk WHERE document_id = ?", documentId);
     }
 
-    public List<ChunkSearchResult> search(UUID userId, float[] embedding, int topK) {
+    public List<ChunkSearchResult> search(UUID tenantId, UUID userId, float[] embedding, int topK) {
         String vector = vectorLiteral(embedding);
         String sql = """
             SELECT c.id, c.document_id, d.filename, c.locator, c.content,
                    (1 - (c.embedding <=> ?::vector)) AS similarity
             FROM chunk c
             JOIN document d ON d.id = c.document_id
-            WHERE d.user_id = ? AND d.status = 'READY'
+            WHERE d.tenant_id = ?
+              AND d.status = 'READY'
+              AND d.deleted_at IS NULL
+              AND d.disabled_at IS NULL
+              AND (
+                d.user_id = ?
+                OR EXISTS (
+                  SELECT 1 FROM user_role ur
+                  JOIN app_role r ON r.id = ur.role_id
+                  WHERE ur.user_id = ?
+                    AND r.tenant_id = ?
+                    AND r.code = 'SYSTEM_ADMIN'
+                )
+                OR EXISTS (
+                  SELECT 1 FROM knowledge_base_membership m
+                  WHERE m.knowledge_base_id = d.knowledge_base_id
+                    AND m.tenant_id = ?
+                    AND m.permission IN ('READ', 'MANAGE')
+                    AND (
+                      (m.principal_type = 'USER' AND m.principal_id = ?)
+                      OR (m.principal_type = 'DEPARTMENT' AND m.principal_id = (
+                        SELECT u.department_id FROM app_user u
+                        WHERE u.id = ? AND u.tenant_id = ?
+                      ))
+                      OR (m.principal_type = 'ROLE' AND EXISTS (
+                        SELECT 1 FROM user_role ur
+                        WHERE ur.user_id = ? AND ur.role_id = m.principal_id
+                      ))
+                    )
+                )
+                OR EXISTS (
+                  SELECT 1 FROM document_acl a
+                  WHERE a.document_id = d.id
+                    AND a.tenant_id = ?
+                    AND a.permission IN ('READ', 'MANAGE')
+                    AND (
+                      (a.principal_type = 'USER' AND a.principal_id = ?)
+                      OR (a.principal_type = 'DEPARTMENT' AND a.principal_id = (
+                        SELECT u.department_id FROM app_user u
+                        WHERE u.id = ? AND u.tenant_id = ?
+                      ))
+                      OR (a.principal_type = 'ROLE' AND EXISTS (
+                        SELECT 1 FROM user_role ur
+                        WHERE ur.user_id = ? AND ur.role_id = a.principal_id
+                      ))
+                    )
+                )
+              )
             ORDER BY c.embedding <=> ?::vector
             LIMIT ?
             """;
@@ -58,6 +105,19 @@ public class ChunkJdbcRepository {
                 rs.getDouble("similarity")
             ),
             vector,
+            tenantId,
+            userId,
+            userId,
+            tenantId,
+            tenantId,
+            userId,
+            userId,
+            tenantId,
+            userId,
+            tenantId,
+            userId,
+            userId,
+            tenantId,
             userId,
             vector,
             topK

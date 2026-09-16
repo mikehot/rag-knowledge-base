@@ -1,259 +1,283 @@
-# RAG 知识库问答 — 需求文档（MVP）
+# 企业知识库 V0.1 — 需求与验收基线
 
-> 交付对象：执行方（Codex）。本文档自包含。
-> 版本：v1.0 · 日期：2026-06-10
-> 姊妹项目：`ai-weekly-report`（AI 经营周报）——本项目大量复用其后端骨架与工程经验，见第 9 节。
-
----
+> 版本：v1.1
+>
+> 日期：2026-09-16
+> 状态：目标需求；当前已实现范围与验证证据以 `PROGRESS.md` 为准。
 
 ## 1. 项目目标
 
-把企业资料（产品手册 / FAQ / 制度文档）变成一个**能问答的知识库机器人**：
+把企业文档转化为一个有权限边界、引用证据和运营记录的知识库系统：
 
-> 管理员上传文档 → 系统切片 + 向量化入库 → 用户用自然语言提问 → 系统检索相关片段喂给大模型 → 返回**基于资料的中文答案 + 出处引用**；资料里没有的，明确说"未找到，建议转人工"，**不编造**。
+> 管理员上传企业文档 → 系统解析、切片、向量化并维护索引 → 员工登录 → 系统按身份和权限检索 → AI 返回基于资料的答案和引用 → 后台记录耗时、Token、失败、审计和反馈。
 
-核心价值：减少重复客服咨询、新人快速查资料、答案有据可查。
+V0.1 的核心不是“支持尽可能多的 AI 技术”，而是完成一个可运行、可解释、可评测、可部署、能说明业务价值的企业闭环。
 
-### MVP 边界（必须做）
-- 文档上传：PDF / Markdown / TXT / DOCX（至少 PDF + TXT/MD 必须，DOCX 尽量）
-- 解析 → 切片（chunk）→ embedding → 存入向量库（pgvector）
-- 文档列表 / 删除 / 入库状态展示
-- 问答：检索 Top-K 相关片段 → 拼提示词 → 调大模型 → 答案 + 出处
-- 找不到相关内容时不编造，提示转人工
-- 基础鉴权（JWT；MVP 单用户即可）
-- AI（生成 + embedding）provider 可切换：本地（LM Studio / Ollama）/ 云（Claude / OpenAI 兼容）
-- 失败兜底、超时、token 记录、限流
+## 2. 用户与业务场景
 
-### 明确不做（Out of Scope，v2 候选）
-- 多知识库 / 多租户隔离
-- 流式打字机输出（MVP 一次性返回即可，但接口预留）
-- 对话多轮上下文记忆（MVP 单轮问答；可记录历史但不做指代消解）
-- 网页嵌入 widget、公众号/企业微信接入
-- 文档版本管理、权限分级
-- 重排序（reranker）模型——MVP 用向量相似度 Top-K 即可，预留扩展
+### 2.1 角色
 
----
+- 系统管理员：维护用户、部门、角色和系统配置。
+- 知识库管理员：创建知识库、上传/更新/停用文档、查看处理状态。
+- 普通员工：查询有权访问的知识并提交反馈。
+- 审计/运维人员：查看脱敏后的操作记录、失败原因和运行指标。
 
-## 2. 技术栈
+一个用户可属于部门并拥有一个或多个角色。V0.1 可以只运行一个租户，但数据模型和查询边界必须显式保留 `tenantId`。
 
-| 层 | 技术 | 说明 |
+### 2.2 核心流程
+
+1. 管理员创建知识库并配置访问主体。
+2. 知识库管理员上传 PDF、DOCX、TXT 或 Markdown 文档。
+3. 系统保存源文件信息，解析、切片、Embedding 并建立索引。
+4. 员工登录并提问。
+5. 系统先执行 ACL 过滤，再从允许访问的 Chunk 中检索。
+6. 找到可靠资料时生成答案并返回系统生成的引用；资料不足时明确拒答，不调用或不采信模型的自由发挥。
+7. 系统记录审计、耗时、Token、结果状态和用户反馈。
+
+## 3. V0.1 范围
+
+### 3.1 知识接入与生命周期
+
+- 支持 PDF、DOCX、TXT、Markdown。
+- 校验扩展名、MIME、文件大小和空文件。
+- 记录源标识、文件名、checksum、内容版本、权限版本、最后更新时间、上传者和知识库。
+- 文档状态至少包含：`processing`、`ready`、`failed`、`disabled`、`deleted`。
+- 上传、更新、重建索引必须可重试并尽量幂等。
+- 文档停用、删除或权限变化后，旧 Chunk 不得继续参与检索。
+- 处理失败要保存可诊断但不泄露敏感内容的错误分类。
+
+网页、OA、CRM、ERP 和数据库 Connector 属于后续扩展；V0.1 先稳定文件接入。
+
+### 3.2 知识处理
+
+- 解析正文并保留页码、标题或 Chunk 定位信息。
+- Chunk 大小和 overlap 可配置，优先尊重段落/标题边界。
+- Embedding provider、模型、维度和批量大小可配置。
+- Embedding 模型或维度变化必须触发明确的重建流程，不能混用不兼容向量。
+- 原始文档、元数据、Chunk 和索引状态之间可以追踪版本关系。
+
+### 3.3 身份与权限
+
+最小实体：
+
+- `tenant`
+- `user`
+- `department`
+- `role`
+- `knowledge_base`
+- `knowledge_base_membership`
+- `document`
+- `document_acl`
+
+最低要求：
+
+- 所有业务接口除登录外均要求认证。
+- 文档列表、详情、删除、检索和引用返回都执行授权检查。
+- ACL 至少支持用户、部门、角色三种授权主体。
+- 权限过滤必须进入数据库检索条件；禁止先跨权限召回再在回答层隐藏。
+- 缺失、无效或过期的身份/权限上下文默认拒绝访问。
+- 权限变更必须有审计记录并能使检索结果及时失效。
+- 自动化评测中跨部门/跨角色文档泄漏数必须为 `0`。
+
+### 3.4 检索与生成
+
+V0.1 基线：
+
+- pgvector cosine similarity Top-K。
+- Metadata/ACL filter。
+- 可配置 Top-K 和相似度阈值。
+- 低于阈值时返回明确拒答，不调用 LLM。
+- LLM 只能基于提供的 Chunk 回答。
+- 引用由后端依据检索结果生成，模型不得决定 `documentId`、文件名或 locator。
+
+后续升级顺序：
+
+1. 调整 Chunk、Metadata、Top-K 和阈值。
+2. 评测证明关键词/编号召回不足后，引入 PostgreSQL 全文/关键词检索。
+3. 使用 Hybrid Search 与 RRF 等融合方式。
+4. 排序仍是瓶颈时再评估 Reranker。
+
+### 3.5 回答接口
+
+现有 `/api/ask` 保持为稳定 RAG 基线。目标业务数据至少包含：
+
+```json
+{
+  "answer": "根据资料……",
+  "found": true,
+  "sources": [
+    {
+      "documentId": "uuid",
+      "filename": "制度.pdf",
+      "locator": "p8",
+      "snippet": "被引用片段"
+    }
+  ],
+  "requestId": "uuid",
+  "latencyMs": 1234,
+  "tokenUsage": 456,
+  "failureReason": null
+}
+```
+
+约束：
+
+- `found=false` 时 `sources=[]`。
+- 验证失败、权限拒绝、检索无结果、模型超时和 Provider 失败有稳定、可区分的错误语义。
+- 公开错误信息不能包含 Prompt、密钥、内部地址、堆栈或文档正文。
+- `requestId` 可用于关联 API、检索、模型、审计和反馈记录。
+
+### 3.6 审计、运营与反馈
+
+每次问答至少记录：
+
+- requestId、用户、部门/角色、知识库；
+- 时间、结果状态、检索数量、耗时分段；
+- Provider/模型标识、Token 用量；
+- 失败分类和是否触发拒答；
+- 用户反馈。
+
+默认不记录完整 Prompt、文档正文、Tool 参数/结果或模型原始响应。需要调试时使用显式开关和脱敏规则。
+
+最低运营指标：
+
+- 请求量、成功率、失败率；
+- P50/P95 总耗时及检索/模型耗时；
+- 平均 Token 与估算单次成本；
+- 拒答率、反馈率、正向反馈率；
+- ACL 拒绝与异常访问次数。
+
+### 3.7 评测
+
+建立版本化的 20 题最小评测集。每题包含：
+
+- 问题、是否应回答、标准答案要点；
+- 预期知识库和来源文档；
+- 用户、部门和角色；
+- 禁止返回的文档；
+- 预期拒答或权限结果。
+
+至少输出：
+
+- Retrieval Hit Rate / Recall@K；
+- Citation Coverage / Correctness；
+- Groundedness 与答案要点覆盖；
+- 资料外问题拒答正确率；
+- ACL 泄漏数；
+- P50/P95 延迟、Token、估算成本和失败率。
+
+确定性规则和 LLM-as-judge 分开报告，不用单一“幻觉率”概括系统质量。
+
+### 3.8 Flutter 客户端
+
+- 登录并保存会话状态。
+- 「问答」页展示问题、加载、答案、来源、拒答和失败重试。
+- 「知识库」页展示允许访问的知识库和文档，支持上传、状态轮询、停用/删除等授权操作。
+- 来源弹窗展示定位和片段，但仍须经过后端权限校验。
+- 支持提交“有帮助/无帮助”反馈。
+- 不在客户端实现可信 ACL，不缓存无权继续访问的敏感正文。
+
+### 3.9 部署与运维
+
+- Docker Compose 提供本地可复现环境。
+- 配置和 Secret 使用环境变量或部署平台的 Secret 机制。
+- 提供数据库迁移、健康/就绪检查、备份、恢复和回滚说明。
+- 提供 CI 中的后端、Flutter 和文档基础检查。
+- 至少完成一次可演示部署；生产环境必须使用 HTTPS。
+- Kubernetes 不是 V0.1 验收条件。
+
+## 4. Agent / MCP 扩展条件
+
+Agent/MCP 不属于企业知识库 V0.1 的完成条件。只有 ACL、审计和 20 题评测基线通过后才开始。
+
+第一批只读 Tool：
+
+- `search_knowledge`
+- `list_documents`
+- `get_document_status`
+
+Tool 必须满足：
+
+- 服务端白名单注册和参数 Schema 校验；
+- 用户、租户、角色等可信上下文不由模型提供；
+- 执行前再次检查 ACL；
+- 限制调用次数、循环次数、超时、Token 和结果大小；
+- 记录审计、正常/失败路径和明确终止原因。
+
+MCP 只暴露已验证的只读 Tool。任何写操作都必须先具备人工审批、幂等、审计、回滚和最小权限设计。
+
+## 5. 技术栈
+
+| 层 | V0.1 选择 | 说明 |
 |---|---|---|
-| 移动端 | Flutter (stable) | MVVM；dio + retrofit；Riverpod |
-| 后端 | Spring Boot 3.x (Java 17+) | REST API |
-| 数据库 | PostgreSQL + **pgvector** 扩展 | 文档、切片、向量存储与检索 |
-| 文档解析 | Apache PDFBox（PDF）/ Apache POI（DOCX）/ 直接读（TXT/MD） | |
-| 向量检索 | pgvector 余弦相似度（`<=>`） | Top-K 检索 |
-| 大模型（生成） | AiProvider 抽象：Claude / OpenAI 兼容（本地 LM Studio/Ollama 或云 DeepSeek） | 复用周报项目实现 |
-| Embedding | EmbeddingProvider 抽象：OpenAI 兼容 `/v1/embeddings`（本地 `text-embedding-nomic-embed-text` 或云） | 见 4.4 |
-| 部署 | Docker + Nginx + HTTPS | pgvector 用 `pgvector/pgvector:pg16` 镜像 |
+| 客户端 | Flutter、Riverpod、dio/retrofit | 保留现有移动端交付能力 |
+| 后端 | Spring Boot 3.5.x、Java 17+ | 实际支持 JDK 在基线阶段固定；Java 21 LTS 为候选 |
+| 数据 | PostgreSQL + pgvector | 业务、权限、审计、全文和向量数据优先共库 |
+| 文档解析 | PDFBox、Apache POI、文本解析 | OCR 按真实扫描件需求再引入 Python Pipeline |
+| AI 接入 | 现有 `AiProvider` / `EmbeddingProvider` | 支持 OpenAI-compatible 本地或云 Provider |
+| AI 框架 | 可评估 Spring AI 1.1.x | 必须置于现有接口后，不为框架重写系统 |
+| 评测 | Python 脚本 + 版本化 JSONL/JSON 数据集 | 调用 Java API，输出 Markdown/JSON 报告 |
+| 部署 | Docker Compose、CI/CD、HTTPS | Kubernetes 延后 |
+| 可观测性 | 结构化日志、Metrics、Tracing | 敏感正文默认关闭记录 |
 
-> **本地优先**：默认推荐本地——生成走 LM Studio（如 `google/gemma-4-26b-a4b`），embedding 走 LM Studio 的 `text-embedding-nomic-embed-text`（向量维度 **768**，建表时按此设定，且做成配置项）。客户要云就改配置。
+## 6. 非功能要求
 
----
+- 安全：最小权限、默认拒绝、Secret 不入库、不输出敏感错误。
+- 可靠性：超时、有限重试、幂等、失败状态、可恢复处理。
+- 性能：记录 P50/P95；具体 SLO 在真实基线后确定，不提前虚构。
+- 成本：记录 Token、Provider、模型与估算单次成本。
+- 可维护性：数据库迁移、稳定 DTO、测试、Runbook 和已知限制齐全。
+- 可移植性：Provider、模型、Embedding 维度和检索参数可配置。
 
-## 3. 系统架构
+## 7. 验收场景
 
-```
-                    ┌── 上传：解析→切片→embedding→存向量 ──┐
-Flutter App ──HTTPS──┤                                      ├── PostgreSQL + pgvector
-                    └── 提问：embedding→向量检索→拼提示词→LLM ┘            │
-                                         │                                 │
-                                         └──────── AI Provider（生成 + embedding，本地/云）
-```
+### 正常路径
 
-### 两条核心链路
+- 上传样例文档后进入 `ready` 且 Chunk 数大于 0。
+- 有权限用户提问命中，返回 `found=true` 和有效引用。
+- 用户可查看来源并提交反馈。
 
-**A. 文档入库（异步）**
-1. App 上传文件 → 后端存原始文件、建 `document(status=processing)`，**立即返回 documentId**。
-2. 后台异步：解析正文 → 按规则切片 → 对每片调 embedding → 批量写入 `chunk`（含向量）。
-3. 全部完成 → `document(status=ready, chunk_count=N)`；失败 → `status=failed` + `error_msg`。
-4. App 轮询 `GET /documents/{id}` 或列表刷新看状态。
+### 失败与拒答路径
 
-**B. 提问（同步）**
-1. App `POST /ask {question}`。
-2. 后端：对 question 调 embedding → 在 `chunk` 里按向量相似度取 Top-K（如 K=5，可配）。
-3. 若 Top-K 最高相似度低于阈值（可配）→ 直接返回"未找到相关信息，建议转人工"，不调 LLM。
-4. 否则：把"问题 + Top-K 片段（含来源）"拼成提示词 → 调 LLM → 得到答案。
-5. 返回答案 + 引用到的来源（文档名 + 位置/片段）。
+- 资料外问题返回 `found=false` 且不生成伪答案。
+- Provider 超时/失败返回稳定错误并记录失败分类。
+- 解析或 Embedding 失败后文档进入 `failed`，可诊断并可重试。
+- 删除/停用文档后不再被检索。
 
-> 提问链路可能耗时数秒（embedding + 检索 + LLM）。MVP 用同步请求 + App 端 loading 即可；超时上限要大于本地模型响应时间（参考周报项目教训，本地模型可能 15s+）。
+### 权限路径
 
----
+- 用户只能列出和检索被授权的知识库/文档。
+- 跨部门问题不能返回、引用或泄露禁止文档。
+- 权限撤销后旧索引结果不会继续暴露。
+- ACL 评测泄漏数为 `0`。
 
-## 4. 后端详细设计
+### 评测与交付
 
-### 4.1 接口契约
+- 20 题数据集可以重复运行并保留配置和结果。
+- README 能指导新环境完成启动和评测。
+- 架构图、Demo、Runbook、Case Study 和英文说明与实际证据一致。
 
-统一响应：`{ "code": 0, "message": "ok", "data": {...} }`，非 0 为业务错误，message 为可展示中文。除登录外均需 `Authorization: Bearer <token>`。
+## 8. 明确不做
 
-```
-POST /api/auth/login                 → { token, expiresIn }
-POST /api/documents/upload           multipart: file（必填）→ { documentId, status:"processing" }
-GET  /api/documents                  → { items:[{ documentId, filename, fileType, status, chunkCount, errorMsg, createdAt }] }
-GET  /api/documents/{id}             → 同上单条
-DELETE /api/documents/{id}           → { deleted:true }（同时删除其所有 chunk）
-POST /api/ask                        { question }
-                                     → {
-                                         answer: "……",            // 找不到时为转人工提示
-                                         found: true|false,         // 是否检索到足够相关内容
-                                         sources: [                 // found=false 时为空数组
-                                           { documentId, filename, locator:"p8"|"chunk#12", snippet:"被引用的原文片段" }
-                                         ],
-                                         tokenUsage: 1234
-                                       }
-```
+- Fine-tuning。
+- GraphRAG / Neo4j。
+- 复杂 Multi-Agent。
+- Kubernetes / 多地域高可用。
+- 本地 GPU 采购与模型训练。
+- 为了 AI 框架重写 Java 后端。
+- 未经审批的 Agent 写操作。
+- 在没有真实数据前承诺准确率、并发量或 ROI。
 
-校验：上传文件大小上限（如 20MB）、扩展名白名单（pdf/txt/md/docx）、question 非空。
+## 9. FDE 能力证明要求
 
-### 4.2 数据模型（PostgreSQL + pgvector）
+项目最终还应交付：
 
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
+- 客户发现与技术范围说明；
+- 架构和安全边界决策；
+- 里程碑、风险和验收标准；
+- 部署/运维/故障处理 Runbook；
+- Eval 报告和错误分析；
+- 业务价值、采用率、延迟和成本说明；
+- 中文 Case Study 与 5–10 分钟英文 Demo 讲稿。
 
-CREATE TABLE app_user (
-  id UUID PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE document (
-  id UUID PRIMARY KEY,
-  user_id UUID REFERENCES app_user(id),
-  filename TEXT NOT NULL,
-  file_type TEXT,                 -- pdf/txt/md/docx
-  file_path TEXT,
-  status TEXT NOT NULL DEFAULT 'processing',  -- processing/ready/failed
-  chunk_count INTEGER DEFAULT 0,
-  error_msg TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE chunk (
-  id UUID PRIMARY KEY,
-  document_id UUID REFERENCES document(id) ON DELETE CASCADE,
-  seq INTEGER,                    -- 片段顺序
-  locator TEXT,                   -- 定位信息，如 "p8" 或 "chunk#12"
-  content TEXT NOT NULL,          -- 片段正文
-  embedding vector(768),          -- 维度做成配置项，默认 768（nomic-embed-text）
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 向量近邻索引（cosine）
-CREATE INDEX idx_chunk_embedding ON chunk USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX idx_chunk_document ON chunk(document_id);
-```
-
-> 向量维度必须与所选 embedding 模型匹配，做成配置项 `AI_EMBEDDING_DIM`。换模型要重建库——README 写明。
-
-### 4.3 切片（chunking）策略
-
-- 按字符/标记长度切，建议 chunk 大小 ~500-800 字、重叠 ~80-100 字（可配 `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP`）。
-- 优先按段落/标题边界切，避免把一句话切断。
-- 每个 chunk 记录 `locator`（PDF 用页码 `pN`，纯文本用 `chunk#N`）。
-- 中英文都要正确切（注意中文无空格）。
-
-### 4.4 AI / Embedding 集成（复用 + 扩展周报项目）
-
-- **生成 provider**：直接复用周报项目的 `AiProvider` 抽象（Claude / OpenAI 兼容），含 HTTP/1.1 修复、超时、重试、token 记录、失败兜底。
-- **新增 EmbeddingProvider 抽象**：OpenAI 兼容 `POST {base-url}/embeddings`，body `{ model, input:[...] }`，解析 `data[].embedding`。同样支持本地（LM Studio/Ollama）与云。批量 embedding 要分批（如每批 ≤32 条）并发或顺序，带重试。
-- **关键复用**：Java `HttpClient` 必须 `.version(HTTP_1_1)`（见周报项目 `OpenAiCompatibleReportService` 与 AI-Vault 笔记，本地服务器 HTTP/2 会挂死）。
-
-**提问提示词模板（示意）**：
-```
-你是知识库问答助手。只能根据下面提供的资料片段回答用户问题，不得编造。
-若资料不足以回答，请直接回复："未找到相关信息，建议转人工。"
-
-【资料片段】
-[1] (来源：产品手册.pdf p8) ……片段正文……
-[2] (来源：售后FAQ.md) ……片段正文……
-
-【用户问题】
-{question}
-
-请用中文简洁回答，并在末尾不要重复来源（来源由系统单独展示）。
-```
-
-**健壮性（必须）**：
-- embedding / LLM 调用超时（默认本地 120s，可配）、失败重试、缺 key 友好报错、token 记录、每用户每日提问限流。
-- 检索相似度阈值 `RAG_SIMILARITY_THRESHOLD` 可配；低于阈值不调 LLM，直接转人工提示（省钱 + 防幻觉）。
-- 所有机密走环境变量，不硬编码。
-
----
-
-## 5. Flutter App 设计规格
-
-> 一个 App，底部两个 Tab：「问答」「知识库」+ 登录。MVVM，三态（加载/失败/重试）。设计风格：扁平、白底卡片、克制留白；语义色：用户气泡/来源标签用蓝色强调，成功绿色、处理中橙色、错误红色。原型见随附说明，按以下文字规格实现。
-
-```
-lib/
-  core/            // 网络、错误处理、主题、基础 widget（可从 ai-weekly-report 搬）
-  data/
-    api/           // 5 个接口
-    models/        // Document, ChunkSource, AskAnswer
-  features/
-    ask/           // 问答页 + ViewModel
-    documents/     // 知识库页 + ViewModel（上传 + 列表 + 删除 + 轮询状态）
-```
-
-### 页面 ① 问答页（核心）
-- AppBar：标题「智能问答」。
-- 主体：聊天气泡流。用户消息靠右（蓝底），AI 答案靠左（浅灰卡）。
-- AI 答案卡结构：答案正文 + 分隔线 + 「来源」区（每个来源是可点的小标签：文档名 + 定位，如 `产品手册.pdf · p8`）。点来源可弹出该片段原文（snippet）。
-- 找不到时：答案卡显示「未找到相关信息，建议转人工。」，无来源标签。
-- 底部输入框 + 发送按钮；发送后显示"思考中"loading（本地模型可能十几秒，不能让用户以为卡死）。
-- 状态：空态（引导"上传文档后即可提问"）、思考中、答案、失败可重试。
-
-### 页面 ② 知识库页
-- AppBar：标题「知识库」，右上「上传文档」。
-- 文档列表：每条显示 文件类型图标 + 文件名 + 「N 段 · 状态」+ 状态标识（就绪绿/入库中橙带进度/失败红）+ 删除。
-- 上传：选文件 → 调上传接口 → 列表出现该文档（processing）→ 轮询/刷新直到 ready 或 failed。
-- 状态：加载、空态（"还没有文档，点右上角上传"）、失败可重试。
-
----
-
-## 6. 验收标准
-
-后端：
-- [ ] pgvector 建库成功，5 个接口按契约实现。
-- [ ] 上传 PDF + TXT/MD 能完整入库：解析 → 切片 → embedding → 写 chunk，状态流转正确。
-- [ ] 提问能检索 Top-K 并基于片段生成答案，返回 sources。
-- [ ] 资料外的问题（如"今天天气"）返回 found=false + 转人工提示，**不编造**。
-- [ ] 删除文档级联删除其 chunk。
-- [ ] embedding + 生成均支持本地（LM Studio）/云切换；HttpClient 强制 HTTP/1.1。
-- [ ] 机密走环境变量；docker-compose 透传所有 AI/RAG 配置项。
-
-Flutter：
-- [ ] 两个 Tab 页按规格实现，MVVM + 三态。
-- [ ] 问答页正确渲染答案 + 可点来源 + 转人工态；知识库页上传/列表/删除/状态轮询正常。
-- [ ] Android 构建：沿用 ai-weekly-report 的工具链约束（AGP 8.7.x / Gradle 8.11.x / Kotlin 2.1.x）与 debug 明文 HTTP 配置，确保**真机能装能跑**。
-
-联调：
-- [ ] LM Studio（生成 + embedding 本地模型）真机端到端：上传一份样例文档 → 提问命中 → 答案带出处；问资料外问题 → 转人工。
-
----
-
-## 7. 交付物
-1. `backend/` Spring Boot + Dockerfile + README（pgvector 镜像、配置项、embedding 维度说明、本地/云配置样例）。
-2. `app/` Flutter + README（运行、后端地址、真机连法 adb reverse）。
-3. 一份样例文档（如一个产品 FAQ 的 .md）+ 几条示例问题。
-4. 接口文档（springdoc-openapi）。
-
----
-
-## 8. 给执行方的注意事项
-- 先纵切跑通（上传→假入库→列表；提问→假答案），再填真实 RAG 逻辑。
-- 向量维度、Top-K、chunk 大小、相似度阈值、provider/base-url/model 全做成配置项。
-- AI/embedding 输出永远要兜底，任何模型异常不得导致接口或 App 崩。
-- 不用客户敏感数据做训练用途。
-- 遇到文档未覆盖的决策点，选主流默认实现并在 README 记录，不要停下等待。
-- 完成后写 `PROGRESS.md`。
-
----
-
-## 9. 可复用 ai-weekly-report 的部分（务必复用，别重写）
-- `core/`：Flutter 网络层、错误处理、主题、三态 widget。
-- 后端：JWT 鉴权、文件上传/存储、统一响应包裹 `ApiResponse`、全局异常处理、`AiProvider` 抽象与 OpenAI 兼容实现（**含 HTTP/1.1 修复**）、异步处理用 `@TransactionalEventListener(AFTER_COMMIT)` 的模式。
-- Android：工具链版本 pin（AGP 8.7.3 / Gradle 8.11.1 / Kotlin 2.1.0）、debug `usesCleartextTraffic`。
-- 这些在 `/Users/jackychou/StudioProjects/ai-weekly-report/` 下，可直接参考其实现。
+这些材料用于证明从需求发现、系统设计、编码、上线到采用反馈的端到端交付能力，而不只是掌握 RAG API。

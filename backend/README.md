@@ -2,6 +2,16 @@
 
 Spring Boot 3.x + PostgreSQL + pgvector backend for the RAG knowledge base MVP.
 
+## Java Toolchain
+
+- Verified runtime: JDK 25.0.3.
+- Repository version hint: root `.java-version` is `25`.
+- Maven compiler release: Java 17, as configured by `java.version` in `pom.xml`.
+- Tests launch Mockito as an explicit Java agent through Surefire, avoiding dynamic agent attachment on newer JDKs.
+- GitHub Actions reads `.java-version` and uses Eclipse Temurin for backend tests.
+
+Run `java -version` and `./mvnw -version` before debugging toolchain-specific failures. On this development machine Java is available in the login shell through the Android Studio JBR.
+
 ## Local Run
 
 ```bash
@@ -53,6 +63,16 @@ The Java `HttpClient` for chat and embedding explicitly uses `HTTP_1_1`, matchin
 ## Embedding Dimension
 
 `chunk.embedding` is created as `vector(${AI_EMBEDDING_DIM})`. If you change embedding model or dimension after data exists, recreate the database or rebuild the `chunk` table and re-upload documents. pgvector will reject vectors with a different dimension.
+
+## Database Migrations and ACL
+
+- Flyway owns schema changes in `src/main/resources/db/migration`.
+- V1 creates the original RAG schema and `vector(${AI_EMBEDDING_DIM})` column.
+- V2 adds tenant, department, role, knowledge-base membership, document lifecycle metadata, and document ACL tables.
+- `spring.jpa.hibernate.ddl-auto=validate`; application startup fails when entity mappings and the migrated schema disagree.
+- `baseline-on-migrate=true` upgrades the pre-Flyway MVP database by recording it as V1 before applying V2. Back up a real deployment before its first migration.
+- The fixed default tenant and knowledge-base IDs are compatibility identities for the local V0.1 environment; they are not request-controlled values.
+- JWT contains both user and tenant IDs. Listing, detail lookup, vector retrieval, upload, and deletion enforce permissions server-side; UI filtering is not treated as a security boundary.
 
 ## Cloud Provider Examples
 

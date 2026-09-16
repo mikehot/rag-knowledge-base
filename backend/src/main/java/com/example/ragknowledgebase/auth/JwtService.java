@@ -28,6 +28,7 @@ public class JwtService {
         return Jwts.builder()
             .subject(user.getUsername())
             .claim("uid", user.getId().toString())
+            .claim("tid", user.getTenantId().toString())
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiresAt))
             .signWith(key)
@@ -42,7 +43,8 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload();
             UUID userId = UUID.fromString(claims.get("uid", String.class));
-            return Optional.of(new AuthenticatedUser(userId, claims.getSubject()));
+            UUID tenantId = UUID.fromString(claims.get("tid", String.class));
+            return Optional.of(new AuthenticatedUser(userId, tenantId, claims.getSubject()));
         } catch (Exception ex) {
             return Optional.empty();
         }

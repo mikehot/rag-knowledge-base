@@ -41,6 +41,13 @@ class PostgresEnterpriseIntegrationTests {
     private static final UUID OUTSIDER_ID = UUID.fromString("10000000-0000-0000-0000-000000000103");
     private static final UUID CREATED_USER_ID_MARKER = UUID.fromString("10000000-0000-0000-0000-000000000104");
     private static final UUID DOCUMENT_ID = UUID.fromString("20000000-0000-0000-0000-000000000101");
+    private static final UUID SALES_DEPARTMENT_ID = UUID.fromString("30000000-0000-0000-0000-000000000101");
+    private static final UUID FINANCE_DEPARTMENT_ID = UUID.fromString("30000000-0000-0000-0000-000000000102");
+    private static final UUID EMPLOYEE_ROLE_ID = UUID.fromString("00000000-0000-0000-0000-000000000013");
+    private static final UUID SECOND_TENANT_ID = UUID.fromString("40000000-0000-0000-0000-000000000101");
+    private static final UUID SECOND_USER_ID = UUID.fromString("40000000-0000-0000-0000-000000000102");
+    private static final UUID SECOND_KNOWLEDGE_BASE_ID = UUID.fromString("40000000-0000-0000-0000-000000000103");
+    private static final UUID SECOND_DOCUMENT_ID = UUID.fromString("40000000-0000-0000-0000-000000000104");
 
     @Container
     @SuppressWarnings("resource")
@@ -75,16 +82,18 @@ class PostgresEnterpriseIntegrationTests {
 
     @BeforeEach
     void cleanTestData() {
-        jdbcTemplate.update("DELETE FROM audit_event WHERE user_id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
+        jdbcTemplate.update("DELETE FROM audit_event WHERE user_id IN (?, ?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID, SECOND_USER_ID);
         jdbcTemplate.update(
-            "DELETE FROM knowledge_base_membership WHERE principal_id IN (?, ?, ?)",
+            "DELETE FROM knowledge_base_membership WHERE principal_id IN (?, ?, ?, ?, ?)",
             OWNER_ID,
             READER_ID,
-            OUTSIDER_ID
+            OUTSIDER_ID,
+            SALES_DEPARTMENT_ID,
+            FINANCE_DEPARTMENT_ID
         );
-        jdbcTemplate.update("DELETE FROM document_acl WHERE document_id = ?", DOCUMENT_ID);
-        jdbcTemplate.update("DELETE FROM chunk WHERE document_id = ?", DOCUMENT_ID);
-        jdbcTemplate.update("DELETE FROM document WHERE id = ?", DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM document_acl WHERE document_id IN (?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM chunk WHERE document_id IN (?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM document WHERE id IN (?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID);
         try {
             Files.deleteIfExists(Path.of("uploads", "lifecycle.md"));
         } catch (Exception ignored) {
@@ -98,6 +107,12 @@ class PostgresEnterpriseIntegrationTests {
         jdbcTemplate.update("DELETE FROM app_user WHERE id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
         jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", CREATED_USER_ID_MARKER);
         jdbcTemplate.update("DELETE FROM department WHERE code LIKE 'MANAGED-%'");
+        jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE knowledge_base_id = ?", SECOND_KNOWLEDGE_BASE_ID);
+        jdbcTemplate.update("DELETE FROM knowledge_base WHERE id = ?", SECOND_KNOWLEDGE_BASE_ID);
+        jdbcTemplate.update("DELETE FROM user_role WHERE user_id = ?", SECOND_USER_ID);
+        jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", SECOND_USER_ID);
+        jdbcTemplate.update("DELETE FROM app_role WHERE tenant_id = ?", SECOND_TENANT_ID);
+        jdbcTemplate.update("DELETE FROM tenant WHERE id = ?", SECOND_TENANT_ID);
     }
 
     @Test
@@ -164,6 +179,50 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(accessControlService.canManageDocument(reader, DOCUMENT_ID)).isTrue();
         assertThat(accessControlService.canManageKnowledgeBase(reader, KNOWLEDGE_BASE_ID)).isTrue();
         assertThat(accessControlService.canManageKnowledgeBase(outsider, KNOWLEDGE_BASE_ID)).isFalse();
+    }
+
+    @Test
+    void departmentAndRolePrincipalsScopeDocumentAccessInPostgres() {
+        insertDepartment(SALES_DEPARTMENT_ID, "MANAGED-SALES-ACL");
+        insertDepartment(FINANCE_DEPARTMENT_ID, "MANAGED-FINANCE-ACL");
+        insertUser(OWNER_ID, "owner-it");
+        insertUser(READER_ID, "sales-reader-it", TENANT_ID, SALES_DEPARTMENT_ID);
+        insertUser(OUTSIDER_ID, "finance-outsider-it", TENANT_ID, FINANCE_DEPARTMENT_ID);
+        insertDocument();
+
+        grantKnowledgeBase("DEPARTMENT", SALES_DEPARTMENT_ID, "READ", TENANT_ID, KNOWLEDGE_BASE_ID);
+
+        assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID))
+            .extracting("id")
+            .containsExactly(DOCUMENT_ID);
+        assertThat(documentRepository.findAccessible(TENANT_ID, OUTSIDER_ID)).isEmpty();
+
+        assignRole(OUTSIDER_ID, "EMPLOYEE");
+        grantDocumentAcl("ROLE", EMPLOYEE_ROLE_ID, "MANAGE", TENANT_ID, DOCUMENT_ID);
+        AuthenticatedUser roleManager = new AuthenticatedUser(OUTSIDER_ID, TENANT_ID, "finance-outsider-it");
+
+        assertThat(documentRepository.findAccessible(TENANT_ID, OUTSIDER_ID))
+            .extracting("id")
+            .containsExactly(DOCUMENT_ID);
+        assertThat(accessControlService.canManageDocument(roleManager, DOCUMENT_ID)).isTrue();
+    }
+
+    @Test
+    void tenantBoundaryPreventsCrossTenantDocumentVisibilityInPostgres() {
+        insertUser(OWNER_ID, "default-tenant-user");
+        insertDocument();
+        insertSecondTenantGraph();
+
+        assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID))
+            .extracting("id")
+            .containsExactly(DOCUMENT_ID);
+        assertThat(documentRepository.findAccessible(TENANT_ID, SECOND_USER_ID)).isEmpty();
+        assertThat(documentRepository.findAccessible(SECOND_TENANT_ID, SECOND_USER_ID))
+            .extracting("id")
+            .containsExactly(SECOND_DOCUMENT_ID);
+        assertThat(documentRepository.findAccessible(SECOND_TENANT_ID, OWNER_ID)).isEmpty();
+        assertThat(documentRepository.findAccessibleById(SECOND_DOCUMENT_ID, TENANT_ID, OWNER_ID)).isEmpty();
+        assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, SECOND_TENANT_ID, SECOND_USER_ID)).isEmpty();
     }
 
     @Test
@@ -349,15 +408,62 @@ class PostgresEnterpriseIntegrationTests {
     }
 
     private void insertUser(UUID id, String username) {
+        insertUser(id, username, TENANT_ID, null);
+    }
+
+    private void insertUser(UUID id, String username, UUID tenantId, UUID departmentId) {
         jdbcTemplate.update(
             """
-                INSERT INTO app_user (id, tenant_id, username, password_hash, status)
-                VALUES (?, ?, ?, 'not-used-in-test', 'ACTIVE')
+                INSERT INTO app_user (id, tenant_id, department_id, username, password_hash, status)
+                VALUES (?, ?, ?, ?, 'not-used-in-test', 'ACTIVE')
                 """,
             id,
-            TENANT_ID,
+            tenantId,
+            departmentId,
             username
         );
+    }
+
+    private void insertDepartment(UUID id, String code) {
+        jdbcTemplate.update(
+            "INSERT INTO department (id, tenant_id, code, name) VALUES (?, ?, ?, ?)",
+            id,
+            TENANT_ID,
+            code,
+            code
+        );
+    }
+
+    private void insertSecondTenantGraph() {
+        jdbcTemplate.update(
+            "INSERT INTO tenant (id, code, name) VALUES (?, 'integration-second', 'Integration Second Tenant')",
+            SECOND_TENANT_ID
+        );
+        insertUser(SECOND_USER_ID, "second-tenant-user", SECOND_TENANT_ID, null);
+        jdbcTemplate.update(
+            """
+                INSERT INTO knowledge_base (id, tenant_id, code, name, created_by)
+                VALUES (?, ?, 'second-default', 'Second Default', ?)
+                """,
+            SECOND_KNOWLEDGE_BASE_ID,
+            SECOND_TENANT_ID,
+            SECOND_USER_ID
+        );
+        jdbcTemplate.update(
+            """
+                INSERT INTO document (
+                    id, tenant_id, knowledge_base_id, user_id, filename, file_type, file_path,
+                    checksum, status
+                )
+                VALUES (?, ?, ?, ?, 'second.md', 'md', '/tmp/second.md', ?, 'READY')
+                """,
+            SECOND_DOCUMENT_ID,
+            SECOND_TENANT_ID,
+            SECOND_KNOWLEDGE_BASE_ID,
+            SECOND_USER_ID,
+            "integration-checksum-" + SECOND_DOCUMENT_ID
+        );
+        grantKnowledgeBase("USER", SECOND_USER_ID, "READ", SECOND_TENANT_ID, SECOND_KNOWLEDGE_BASE_ID);
     }
 
     private void insertDocument() {
@@ -424,17 +530,51 @@ class PostgresEnterpriseIntegrationTests {
     }
 
     private void grantKnowledgeBase(String permission, UUID userId) {
+        grantKnowledgeBase("USER", userId, permission, TENANT_ID, KNOWLEDGE_BASE_ID);
+    }
+
+    private void grantKnowledgeBase(
+        String principalType,
+        UUID principalId,
+        String permission,
+        UUID tenantId,
+        UUID knowledgeBaseId
+    ) {
         jdbcTemplate.update(
             """
                 INSERT INTO knowledge_base_membership (
                     id, tenant_id, knowledge_base_id, principal_type, principal_id, permission
                 )
-                VALUES (?, ?, ?, 'USER', ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
             UUID.randomUUID(),
-            TENANT_ID,
-            KNOWLEDGE_BASE_ID,
-            userId,
+            tenantId,
+            knowledgeBaseId,
+            principalType,
+            principalId,
+            permission
+        );
+    }
+
+    private void grantDocumentAcl(
+        String principalType,
+        UUID principalId,
+        String permission,
+        UUID tenantId,
+        UUID documentId
+    ) {
+        jdbcTemplate.update(
+            """
+                INSERT INTO document_acl (
+                    id, tenant_id, document_id, principal_type, principal_id, permission
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+            UUID.randomUUID(),
+            tenantId,
+            documentId,
+            principalType,
+            principalId,
             permission
         );
     }

@@ -8,7 +8,7 @@
 
 仓库已具备 JWT、PDF/DOCX/TXT/Markdown 入库、pgvector 向量检索、相似度拒答、引用、Token 记录、Flutter 问答与文档管理等 MVP 代码。Milestone 2 已进入后半程：Flyway migration、tenant/department/role/knowledge-base/document ACL schema、SQL 查询阶段权限过滤、最小管理 API、文档生命周期、拒绝审计和只读审计查询 API 已经落地。
 
-前端管理页、替换上传与批量重建、失败重试和任务观测、完整回答观测、20 题评测、Agent Tool 和 MCP 尚未完成。真实 RAG 基线、旧库升级、空库迁移，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
+前端管理页、批量重建、失败重试和任务观测、完整回答观测、20 题评测、Agent Tool 和 MCP 尚未完成。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
 
 当前验证状态与已知限制见 [PROGRESS.md](PROGRESS.md)。
 

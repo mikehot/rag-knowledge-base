@@ -62,7 +62,7 @@ Milestone 2 checkpoint on 2026-09-16:
 - JWT authentication carries the tenant boundary, and document/chunk SQL performs security trimming before content reaches generation.
 - Upload and delete require `MANAGE`; list, detail, and retrieval accept inherited `READ`/`MANAGE` grants from user, department, or role principals.
 - Both an existing non-empty database upgrade and a fresh V1+V2 database were verified. A temporary reader saw no document before a grant, saw it after `READ`, and still could not delete it.
-- This milestone remains `in-progress`: the minimum management APIs, permission-denied audit, document lifecycle, automated PostgreSQL ACL tests, and cross-tenant cases are complete; replacement upload, batch reindex, retry queues, task observability, and management UI remain open.
+- This milestone remains `in-progress`: the minimum management APIs, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, and cross-tenant cases are complete; batch reindex, retry queues, task observability, and management UI remain open.
 
 ## 4. Delivery Principles
 

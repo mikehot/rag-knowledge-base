@@ -15,7 +15,7 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2/V3/V4、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming、最小管理 API、文档生命周期基础、拒绝审计和只读审计查询已落地；高级任务治理仍待补齐 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1/V2/V3/V4、tenant/user/department/role/knowledge base/ACL schema、查询期 security trimming、最小管理 API、可回滚替换上传、拒绝审计和只读审计查询已落地；批量任务治理仍待补齐 |
 | 3. 结构化回答、审计、观测、反馈 | `planned` | 已有基础回答结构、Token 和 ask log；缺 requestId、分段耗时、失败分类和反馈 |
 | 4. 20 题评测基线 | `planned` | 尚无版本化评测集和 Runner |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
@@ -41,6 +41,7 @@
 - 上传和删除要求 `MANAGE`；无权限删除统一返回 404，避免暴露资源存在性。
 - 文档上传已计算 SHA-256 checksum；同一知识库内相同 checksum 的未删除文档会幂等返回已有文档。
 - 文档生命周期已支持停用/启用/reindex/软删除；reindex 会递增内容版本并清空旧 Chunk；停用/软删除会从列表、详情和检索中隐藏。
+- 替换上传使用版本化文件路径并递增 `contentVersion`；新内容解析与 Embedding 成功后才原子切换 Chunk 和清理旧文件，处理失败会恢复旧元数据、旧版本和旧可检索状态。
 - V3 增加同一 tenant + knowledge base + checksum 的未删除文档唯一索引。
 - V4 增加 `audit_event`，用于记录权限拒绝、资源类型、资源 ID、原因和时间。
 - 最小管理 API 已包含部门列表/创建、角色列表、用户列表/创建、用户角色授予/撤销、知识库列表/创建/启停、知识库 membership 查询/授权/撤权。
@@ -70,8 +71,8 @@
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | 本地 JDK 25.0.3；显式 Mockito Java Agent；18 non-PostgreSQL tests passed；本机 Testcontainers Docker endpoint 异常导致 9 个 PostgreSQL integration tests skipped |
-| GitHub Actions CI | PASS | Run `35168462238`；backend-tests 在 Ubuntu + Temurin 25.0.4.1 上实际执行 27 tests，0 failures/errors/skipped；compose-config 通过 |
+| `./mvnw test` | PASS | 本地 JDK 25.0.3；显式 Mockito Java Agent；24 non-PostgreSQL tests passed；本机 Testcontainers Docker endpoint 异常导致 10 个 PostgreSQL integration tests skipped |
+| GitHub Actions CI | PASS | Run `35169350194`；backend-tests 在 Ubuntu + Temurin 25.0.4.1 上实际执行 34 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
 | 文档入库 | PASS | `sample_faq.md` 进入 `ready`，生成 2 个 Chunk |
@@ -79,19 +80,20 @@
 | 资料外问题 | PASS | `found=false`、`sources=[]`；保留实际模型 Token 用量 |
 | 文档删除 | PASS | API 返回成功，document/chunk 行清零，原始上传文件删除，再次检索拒答 |
 | 旧库迁移 | PASS | 非空旧 schema 自动 baseline 为 V1，再执行 V2；Hibernate validate 与应用启动通过 |
-| 空库迁移 | PASS | GitHub Actions run `35168462238` 顺序执行 V1/V2/V3/V4；PostgreSQL 16.15、`vector(768)`、默认用户/角色/知识库授权和 `audit_event` 建表通过 |
+| 空库迁移 | PASS | GitHub Actions run `35169350194` 顺序执行 V1/V2/V3/V4；PostgreSQL 16.15、`vector(768)`、默认用户/角色/知识库授权和 `audit_event` 建表通过 |
 | ACL 隔离 | PASS | 无授权用户列表为空；USER、DEPARTMENT、ROLE 授权范围均有确定性测试；READ 用户删除返回 404；双 tenant 文档列表/详情互不可见 |
-| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35168462238` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1/V2/V3/V4 成功，`PostgresEnterpriseIntegrationTests` 9 tests / 0 skipped，并覆盖权限拒绝审计、审计查询角色边界、筛选/分页、部门/角色授权和跨 tenant 隔离 |
+| 文档替换 | PASS | GitHub Actions run `35169350194` 验证版本化新文件、`contentVersion` 递增、旧文件保留和旧 Chunk 在新索引就绪前不被删除；单元测试覆盖同 checksum 幂等、越权拒绝、成功切换和解析失败回滚 |
+| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35169350194` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1/V2/V3/V4 成功，`PostgresEnterpriseIntegrationTests` 10 tests / 0 skipped，并覆盖替换暂存、权限拒绝审计、审计查询、部门/角色授权和跨 tenant 隔离 |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端已有 18 个稳定单元/上下文测试和 9 个 PostgreSQL/Testcontainers 集成测试；本机 Docker endpoint 会跳过集成测试，需以 GitHub Actions 作为 PostgreSQL 集成测试证据。
+- 后端已有 24 个稳定单元/上下文测试和 10 个 PostgreSQL/Testcontainers 集成测试；本机 Docker endpoint 会跳过集成测试，需以 GitHub Actions 作为 PostgreSQL 集成测试证据。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
-- 文档已实现 checksum、内容版本、权限版本、停用、软删除和 reindex 基础流程；尚未实现替换上传、批量重建、失败重试队列和后台任务观测。
+- 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex 和可回滚替换上传；尚未实现批量重建、失败重试队列和后台任务观测。
 - 权限拒绝已有基础审计事件和 tenant 范围内只读查询 API；尚未提供保留策略、脱敏策略和评测记录。
 - 问答没有 requestId、分段耗时、结构化失败原因和用户反馈。
 - 没有 20 题 Golden Dataset、离线 Runner 或回归报告。
@@ -103,8 +105,8 @@
 
 继续完成 Milestone 2：
 
-1. 补替换上传，明确 checksum、contentVersion、旧文件清理和失败回滚边界。
-2. 补批量重建、失败重试队列和后台任务观测。
+1. 建立持久化索引任务，支持批量重建、失败重试和幂等执行。
+2. 增加后台任务状态、失败原因、耗时和重试次数查询。
 
 ## 文档维护规则
 

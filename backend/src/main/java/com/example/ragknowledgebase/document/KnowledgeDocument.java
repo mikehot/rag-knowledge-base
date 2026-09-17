@@ -197,6 +197,39 @@ public class KnowledgeDocument {
         this.errorMsg = null;
     }
 
+    public DocumentContentSnapshot contentSnapshot() {
+        return new DocumentContentSnapshot(
+            filename,
+            fileType,
+            filePath,
+            checksum,
+            contentVersion,
+            status,
+            chunkCount,
+            errorMsg
+        );
+    }
+
+    public void replaceContent(String filename, String fileType, String filePath, String checksum) {
+        this.filename = filename;
+        this.fileType = fileType;
+        this.filePath = filePath;
+        this.checksum = checksum;
+        this.contentVersion++;
+        markProcessing();
+    }
+
+    public void restoreContent(DocumentContentSnapshot snapshot) {
+        this.filename = snapshot.filename();
+        this.fileType = snapshot.fileType();
+        this.filePath = snapshot.filePath();
+        this.checksum = snapshot.checksum();
+        this.contentVersion = snapshot.contentVersion();
+        this.status = snapshot.status();
+        this.chunkCount = snapshot.chunkCount();
+        this.errorMsg = snapshot.errorMsg();
+    }
+
     public void disable() {
         this.disabledAt = OffsetDateTime.now();
         this.permissionVersion++;

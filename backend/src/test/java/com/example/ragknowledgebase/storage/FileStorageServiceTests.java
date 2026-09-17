@@ -8,9 +8,11 @@ import com.example.ragknowledgebase.config.AppProperties;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.mock.web.MockMultipartFile;
 
 class FileStorageServiceTests {
     @TempDir
@@ -51,5 +53,21 @@ class FileStorageServiceTests {
         } finally {
             Files.deleteIfExists(outside);
         }
+    }
+
+    @Test
+    void storesReplacementUnderVersionedPath() throws Exception {
+        UUID documentId = UUID.fromString("20000000-0000-0000-0000-000000000401");
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "replacement.md",
+            "text/markdown",
+            "replacement content".getBytes()
+        );
+
+        var stored = fileStorageService.storeVersion(documentId, 2, file);
+
+        assertThat(Path.of(stored.path())).hasFileName(documentId + "-v2.md");
+        assertThat(Path.of(stored.path())).hasContent("replacement content");
     }
 }

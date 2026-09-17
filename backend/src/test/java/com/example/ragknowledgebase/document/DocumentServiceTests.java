@@ -15,6 +15,8 @@ import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.storage.FileStorageService;
 import java.util.Optional;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -197,6 +199,117 @@ class DocumentServiceTests {
         verify(chunkRepository).deleteByDocumentId(DOCUMENT_ID);
         verify(documentRepository).save(document);
         verify(eventPublisher).publishEvent(new DocumentCreatedEvent(DOCUMENT_ID));
+    }
+
+    @Test
+    void replacesContentWithoutDeletingOldChunksBeforeNewIndexIsReady() throws Exception {
+        String oldChecksum = checksum("old content");
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "faq-v2.md",
+            "text/markdown",
+            "new content".getBytes()
+        );
+        KnowledgeDocument document = new KnowledgeDocument(
+            DOCUMENT_ID,
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            USER_ID,
+            "faq.md",
+            "md",
+            "/tmp/faq.md",
+            oldChecksum
+        );
+        document.markReady(2);
+        DocumentContentSnapshot previous = document.contentSnapshot();
+        when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(true);
+        when(documentRepository.findById(DOCUMENT_ID)).thenReturn(Optional.of(document));
+        when(documentRepository.findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            checksum("new content")
+        )).thenReturn(Optional.empty());
+        when(fileStorageService.storeVersion(DOCUMENT_ID, 2, file))
+            .thenReturn(new FileStorageService.StoredFile("faq-v2.md", "md", "/tmp/faq-v2.md"));
+
+        DocumentReplaceResponse response = documentService.replace(USER, DOCUMENT_ID, file);
+
+        assertThat(response.status()).isEqualTo("processing");
+        assertThat(response.contentVersion()).isEqualTo(2);
+        assertThat(response.unchanged()).isFalse();
+        assertThat(document.getFilename()).isEqualTo("faq-v2.md");
+        assertThat(document.getFilePath()).isEqualTo("/tmp/faq-v2.md");
+        assertThat(document.getChecksum()).isEqualTo(checksum("new content"));
+        verify(chunkRepository, never()).deleteByDocumentId(DOCUMENT_ID);
+        verify(documentRepository).save(document);
+        verify(eventPublisher).publishEvent(new DocumentCreatedEvent(DOCUMENT_ID, previous));
+    }
+
+    @Test
+    void sameChecksumReplacementIsAnUnchangedIdempotentResult() throws Exception {
+        String checksum = checksum("same content");
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "faq.md",
+            "text/markdown",
+            "same content".getBytes()
+        );
+        KnowledgeDocument document = new KnowledgeDocument(
+            DOCUMENT_ID,
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            USER_ID,
+            "faq.md",
+            "md",
+            "/tmp/faq.md",
+            checksum
+        );
+        document.markReady(2);
+        when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(true);
+        when(documentRepository.findById(DOCUMENT_ID)).thenReturn(Optional.of(document));
+        when(documentRepository.findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            checksum
+        )).thenReturn(Optional.of(document));
+
+        DocumentReplaceResponse response = documentService.replace(USER, DOCUMENT_ID, file);
+
+        assertThat(response.unchanged()).isTrue();
+        assertThat(response.contentVersion()).isEqualTo(1);
+        assertThat(response.status()).isEqualTo("ready");
+        verify(fileStorageService, never()).storeVersion(any(), org.mockito.ArgumentMatchers.anyInt(), any());
+        verify(documentRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void rejectsReplacementWithoutDocumentManagePermission() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "faq.md",
+            "text/markdown",
+            "new content".getBytes()
+        );
+        when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> documentService.replace(USER, DOCUMENT_ID, file))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(404);
+
+        verify(auditService).recordDenied(
+            USER,
+            "DOCUMENT_REPLACE",
+            "DOCUMENT",
+            DOCUMENT_ID,
+            "MISSING_DOCUMENT_MANAGE"
+        );
+        verify(fileStorageService, never()).storeVersion(any(), org.mockito.ArgumentMatchers.anyInt(), any());
+    }
+
+    private String checksum(String content) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content.getBytes()));
     }
 
     private AppProperties properties() {

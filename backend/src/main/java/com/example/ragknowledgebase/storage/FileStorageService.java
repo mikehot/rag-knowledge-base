@@ -20,6 +20,14 @@ public class FileStorageService {
     }
 
     public StoredFile store(UUID documentId, MultipartFile file) {
+        return store(documentId.toString(), documentId, file);
+    }
+
+    public StoredFile storeVersion(UUID documentId, int contentVersion, MultipartFile file) {
+        return store(documentId + "-v" + contentVersion, documentId, file);
+    }
+
+    private StoredFile store(String storageName, UUID documentId, MultipartFile file) {
         validate(file);
         String originalName = StringUtils.cleanPath(
             file.getOriginalFilename() == null ? documentId + ".txt" : file.getOriginalFilename()
@@ -28,7 +36,7 @@ public class FileStorageService {
         try {
             Path dir = Path.of(properties.upload().storageDir()).toAbsolutePath().normalize();
             Files.createDirectories(dir);
-            Path target = dir.resolve(documentId + "." + extension);
+            Path target = dir.resolve(storageName + "." + extension);
             file.transferTo(target);
             return new StoredFile(originalName, extension, target.toString());
         } catch (IOException ex) {

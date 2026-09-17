@@ -121,6 +121,7 @@ Main endpoints:
 - `POST /api/documents/{id}/disable`
 - `POST /api/documents/{id}/enable`
 - `POST /api/documents/{id}/reindex`
+- `POST /api/documents/{id}/replace`
 - `POST /api/ask`
 - `GET /api/admin/roles`
 - `GET /api/admin/users`
@@ -172,3 +173,7 @@ Document lifecycle boundaries:
 - Delete is a soft delete for the document row, but clears chunks and deletes the raw uploaded file.
 - Disable hides a document from list, detail, and retrieval without deleting its row or raw file.
 - Reindex clears existing chunks, increments `contentVersion`, marks the document as `processing`, and publishes a processing event.
+- Replace accepts a multipart `file`, requires document `MANAGE`, and rejects disabled or already-processing documents.
+- Replacing with the current checksum is idempotent (`unchanged=true`); matching another active document in the same knowledge base returns `409`.
+- A replacement is stored under a versioned path and increments `contentVersion`. Existing chunks and the old raw file remain intact until parsing and embedding succeed.
+- Successful processing swaps chunks transactionally and cleans the old raw file after commit. Parser or embedding failure restores the previous metadata/version/status, keeps the old chunks searchable, and cleans the failed replacement file.

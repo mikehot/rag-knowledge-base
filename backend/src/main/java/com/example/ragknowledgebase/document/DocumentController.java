@@ -61,6 +61,15 @@ public class DocumentController {
         return ApiResponse.ok(documentService.reindex(currentUser(authentication), id));
     }
 
+    @PostMapping("/{id}/replace")
+    public ApiResponse<DocumentReplaceResponse> replace(
+        Authentication authentication,
+        @PathVariable UUID id,
+        @RequestPart("file") MultipartFile file
+    ) {
+        return ApiResponse.ok(documentService.replace(currentUser(authentication), id, file));
+    }
+
     private AuthenticatedUser currentUser(Authentication authentication) {
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser user)) {
             throw new BusinessException(401, "登录已失效，请重新登录");

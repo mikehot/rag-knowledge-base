@@ -27,6 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.mock.web.MockMultipartFile;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -477,6 +478,46 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(countChunks(DOCUMENT_ID)).isZero();
         assertThat(Files.exists(rawFile)).isFalse();
         assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID)).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void replacementStagesNewVersionWithoutDroppingCurrentChunks() throws Exception {
+        insertUser(OWNER_ID, "replacement-admin-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "replacement-admin-it");
+        Path oldFile = Path.of("uploads", "replace-old.md").toAbsolutePath().normalize();
+        Path newFile = Path.of("uploads", DOCUMENT_ID + "-v2.md").toAbsolutePath().normalize();
+        Files.createDirectories(oldFile.getParent());
+        Files.writeString(oldFile, "Old searchable content");
+        insertDocument(oldFile.toString());
+        insertChunk();
+        MockMultipartFile replacement = new MockMultipartFile(
+            "file",
+            "replacement.md",
+            "text/markdown",
+            "New replacement content".getBytes()
+        );
+
+        try {
+            var response = documentService.replace(admin, DOCUMENT_ID, replacement);
+
+            assertThat(response.status()).isEqualTo("processing");
+            assertThat(response.contentVersion()).isEqualTo(2);
+            assertThat(response.unchanged()).isFalse();
+            assertThat(countChunks(DOCUMENT_ID)).isEqualTo(1);
+            assertThat(Files.exists(oldFile)).isTrue();
+            assertThat(Files.exists(newFile)).isTrue();
+            documentRepository.flush();
+            assertThat(jdbcTemplate.queryForObject(
+                "SELECT file_path FROM document WHERE id = ?",
+                String.class,
+                DOCUMENT_ID
+            )).isEqualTo(newFile.toString());
+        } finally {
+            Files.deleteIfExists(newFile);
+            Files.deleteIfExists(oldFile);
+        }
     }
 
     private void insertUser(UUID id, String username) {

@@ -19,6 +19,8 @@ import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -161,6 +163,38 @@ public class DocumentService {
         return DocumentLifecycleResponse.from(document);
     }
 
+    @Transactional
+    public DocumentReplaceResponse replace(AuthenticatedUser user, UUID documentId, MultipartFile file) {
+        KnowledgeDocument document = manageableDocument(user, documentId, "DOCUMENT_REPLACE");
+        if (document.getDisabledAt() != null) {
+            throw new BusinessException(409, "文档已停用，启用后再替换");
+        }
+        if (document.getStatus() == DocumentStatus.PROCESSING) {
+            throw new BusinessException(409, "文档正在处理中，请稍后再替换");
+        }
+
+        String checksum = checksumOf(file);
+        var checksumMatch = documentRepository.findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
+            user.tenantId(),
+            document.getKnowledgeBaseId(),
+            checksum
+        );
+        if (checksumMatch.isPresent()) {
+            if (checksumMatch.get().getId().equals(documentId)) {
+                return DocumentReplaceResponse.from(document, true);
+            }
+            throw new BusinessException(409, "相同内容已存在于当前知识库");
+        }
+
+        DocumentContentSnapshot rollbackContent = document.contentSnapshot();
+        StoredFile stored = fileStorageService.storeVersion(documentId, document.getContentVersion() + 1, file);
+        deleteStoredFileOnRollback(stored.path());
+        document.replaceContent(stored.originalName(), stored.extension(), stored.path(), checksum);
+        documentRepository.save(document);
+        eventPublisher.publishEvent(new DocumentCreatedEvent(documentId, rollbackContent));
+        return DocumentReplaceResponse.from(document, false);
+    }
+
     private KnowledgeDocument manageableDocument(AuthenticatedUser user, UUID documentId, String action) {
         if (!accessControlService.canManageDocument(user, documentId)) {
             auditService.recordDenied(
@@ -189,6 +223,24 @@ public class DocumentService {
         } catch (NoSuchAlgorithmException ex) {
             throw new BusinessException(500, "文件校验失败，请重试");
         }
+    }
+
+    private void deleteStoredFileOnRollback(String storedPath) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    try {
+                        fileStorageService.delete(storedPath);
+                    } catch (RuntimeException ignored) {
+                        // The original transaction failure remains the primary error.
+                    }
+                }
+            }
+        });
     }
 
 }

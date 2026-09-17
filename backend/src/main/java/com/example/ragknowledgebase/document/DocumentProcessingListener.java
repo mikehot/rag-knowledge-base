@@ -16,6 +16,6 @@ public class DocumentProcessingListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDocumentCreated(DocumentCreatedEvent event) {
-        processor.process(event.documentId());
+        processor.process(event.documentId(), event.rollbackContent());
     }
 }

@@ -136,6 +136,7 @@ Main endpoints:
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
 - `DELETE /api/admin/knowledge-bases/{knowledgeBaseId}/memberships/{membershipId}`
+- `GET /api/admin/audit-events`
 
 `POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM.
 
@@ -145,6 +146,7 @@ Admin endpoint boundaries:
 - Department administration requires `SYSTEM_ADMIN`.
 - Knowledge-base creation, activation, and disabling require `SYSTEM_ADMIN`.
 - Knowledge-base membership administration requires `MANAGE` on that knowledge base.
+- Audit-event queries require `SYSTEM_ADMIN` or `AUDITOR` and are always restricted to the caller's tenant.
 - Creating a user defaults to the `EMPLOYEE` role when `roleCodes` is omitted.
 
 Role matrix:
@@ -154,13 +156,15 @@ Role matrix:
 | `SYSTEM_ADMIN` | Tenant-level administrator. Can manage users, roles, departments, knowledge-base lifecycle, and all knowledge-base/document permissions. |
 | `KNOWLEDGE_ADMIN` | Reserved business role for delegated knowledge ownership. It does not grant global access by itself; grant `MANAGE` through knowledge-base membership for concrete scopes. |
 | `EMPLOYEE` | Default user role. Can only read knowledge explicitly granted through user, department, role, or knowledge-base membership ACLs. |
-| `AUDITOR` | Reserved read-only governance role. V0.1 does not yet expose audit-query APIs; direct database inspection is required for now. |
+| `AUDITOR` | Read-only governance role. Can query audit events for its own tenant but receives no user, document, or knowledge-base write permissions. |
 
 Audit boundaries:
 
 - Permission-denied admin and document-management operations write `DENY` events into `audit_event`.
 - Hidden-resource behavior is preserved externally: document management denial still returns `404` to avoid leaking whether the document exists.
 - Audit records include tenant, user, action, resource type, resource id, outcome, reason, and timestamp.
+- `GET /api/admin/audit-events` supports optional `userId`, `action`, `resourceType`, `resourceId`, `outcome`, `from`, `to`, and `limit` filters. `from`/`to` use ISO-8601 timestamps; `limit` defaults to 100 and is capped at 200.
+- Audit results are ordered newest first and include `hasMore`; unauthorized query attempts return `403` and are themselves recorded as `AUDIT_EVENT_LIST` denials.
 
 Document lifecycle boundaries:
 

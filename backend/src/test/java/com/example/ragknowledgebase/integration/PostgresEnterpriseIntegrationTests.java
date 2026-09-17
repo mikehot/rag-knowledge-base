@@ -11,6 +11,7 @@ import com.example.ragknowledgebase.admin.CreateUserRequest;
 import com.example.ragknowledgebase.admin.GrantKnowledgeBaseMembershipRequest;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
+import com.example.ragknowledgebase.audit.AuditQueryService;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.DocumentRepository;
 import com.example.ragknowledgebase.document.DocumentService;
@@ -72,6 +73,9 @@ class PostgresEnterpriseIntegrationTests {
 
     @Autowired
     private AdminService adminService;
+
+    @Autowired
+    private AuditQueryService auditQueryService;
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
@@ -223,6 +227,74 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(documentRepository.findAccessible(SECOND_TENANT_ID, OWNER_ID)).isEmpty();
         assertThat(documentRepository.findAccessibleById(SECOND_DOCUMENT_ID, TENANT_ID, OWNER_ID)).isEmpty();
         assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, SECOND_TENANT_ID, SECOND_USER_ID)).isEmpty();
+    }
+
+    @Test
+    void auditReadersFilterTenantEventsWhileEmployeesAreDenied() {
+        insertUser(OWNER_ID, "audit-admin-it");
+        insertUser(READER_ID, "auditor-it");
+        insertUser(OUTSIDER_ID, "employee-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        assignRole(READER_ID, "AUDITOR");
+        assignRole(OUTSIDER_ID, "EMPLOYEE");
+        insertSecondTenantGraph();
+        var older = java.time.Instant.parse("2026-09-17T00:00:00Z");
+        var newer = java.time.Instant.parse("2026-09-17T00:01:00Z");
+        insertAuditEvent(TENANT_ID, OWNER_ID, "DOCUMENT_DELETE", "DOCUMENT", DOCUMENT_ID, "DENY", older);
+        insertAuditEvent(TENANT_ID, READER_ID, "USER_CREATE", "TENANT", TENANT_ID, "DENY", newer);
+        insertAuditEvent(
+            SECOND_TENANT_ID,
+            SECOND_USER_ID,
+            "DOCUMENT_DELETE",
+            "DOCUMENT",
+            SECOND_DOCUMENT_ID,
+            "DENY",
+            newer
+        );
+
+        AuthenticatedUser auditor = new AuthenticatedUser(READER_ID, TENANT_ID, "auditor-it");
+        var filtered = auditQueryService.list(
+            auditor,
+            OWNER_ID,
+            "document_delete",
+            "document",
+            DOCUMENT_ID,
+            "deny",
+            older.minusSeconds(1),
+            older.plusSeconds(1),
+            20
+        );
+
+        assertThat(filtered.items()).hasSize(1);
+        assertThat(filtered.items().get(0).id()).isNotNull();
+        assertThat(filtered.items().get(0).userId()).isEqualTo(OWNER_ID);
+        assertThat(filtered.items().get(0).resourceId()).isEqualTo(DOCUMENT_ID);
+        assertThat(filtered.hasMore()).isFalse();
+
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "audit-admin-it");
+        var firstPage = auditQueryService.list(admin, null, null, null, null, "DENY", null, null, 1);
+
+        assertThat(firstPage.items()).hasSize(1);
+        assertThat(firstPage.items().get(0).userId()).isEqualTo(READER_ID);
+        assertThat(firstPage.hasMore()).isTrue();
+        assertThat(firstPage.items()).noneMatch(event -> SECOND_USER_ID.equals(event.userId()));
+
+        AuthenticatedUser employee = new AuthenticatedUser(OUTSIDER_ID, TENANT_ID, "employee-it");
+        assertThatThrownBy(() -> auditQueryService.list(
+            employee,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            20
+        ))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(403);
+        assertThat(countDeniedAudit(OUTSIDER_ID, "AUDIT_EVENT_LIST", "TENANT", TENANT_ID)).isEqualTo(1);
     }
 
     @Test
@@ -522,6 +594,36 @@ class PostgresEnterpriseIntegrationTests {
             action,
             resourceType,
             resourceId
+        );
+    }
+
+    private void insertAuditEvent(
+        UUID tenantId,
+        UUID userId,
+        String action,
+        String resourceType,
+        UUID resourceId,
+        String outcome,
+        java.time.Instant createdAt
+    ) {
+        jdbcTemplate.update(
+            """
+                INSERT INTO audit_event (
+                    id, tenant_id, user_id, username, action, resource_type,
+                    resource_id, outcome, reason, created_at
+                )
+                SELECT ?, ?, id, username, ?, ?, ?, ?, 'INTEGRATION_TEST', ?
+                FROM app_user
+                WHERE id = ?
+                """,
+            UUID.randomUUID(),
+            tenantId,
+            action,
+            resourceType,
+            resourceId,
+            outcome,
+            java.sql.Timestamp.from(createdAt),
+            userId
         );
     }
 

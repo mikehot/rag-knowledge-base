@@ -80,6 +80,23 @@ public class AccessControlService {
         return count != null && count > 0;
     }
 
+    public boolean canReadAuditEvents(AuthenticatedUser user) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+                SELECT count(*)
+                FROM user_role ur
+                JOIN app_role r ON r.id = ur.role_id
+                WHERE ur.user_id = ?
+                  AND r.tenant_id = ?
+                  AND r.code IN ('SYSTEM_ADMIN', 'AUDITOR')
+                """,
+            Integer.class,
+            user.userId(),
+            user.tenantId()
+        );
+        return count != null && count > 0;
+    }
+
     public boolean canManageDocument(AuthenticatedUser user, UUID documentId) {
         Integer count = jdbcTemplate.queryForObject(
             """

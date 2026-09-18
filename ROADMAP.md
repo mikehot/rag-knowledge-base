@@ -148,7 +148,7 @@ Work:
 - Stabilize typed output for success, fallback, and failure responses.
 - Add request/correlation IDs and stage-level timings for embedding, retrieval, and generation. Implemented and locally verified on 2026-09-18.
 - Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason. Implemented in Flyway V6/V7 and verified locally and in GitHub Actions run `35299110979`.
-- Add user feedback (`helpful`, `not_helpful`, optional sanitized reason). Implemented with tenant/user ownership checks and locally verified on PostgreSQL 16.15 on 2026-09-18; CI verification is pending.
+- Add user feedback (`helpful`, `not_helpful`, optional sanitized reason). Implemented with tenant/user ownership checks, locally verified on PostgreSQL 16.15, and verified in GitHub Actions run `35300087644` with 51 tests / 0 skipped on 2026-09-18.
 - Add health/readiness checks and operational metrics without logging sensitive content by default.
 
 Acceptance gate:

@@ -16,7 +16,7 @@
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1-V5、ACL、最小管理 API、可回滚替换和持久化索引任务已落地；PostgreSQL CI、真实 Provider 重试和重启恢复已验证，管理 UI 等次要范围仍未完成 |
-| 3. 结构化回答、审计、观测、反馈 | `in-progress` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针和首批业务指标已落地；完整指标仍待完成 |
+| 3. 结构化回答、审计、观测、反馈 | `in-progress` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标和首版告警 guardrail 已落地；真实基线调优仍待完成 |
 | 4. 20 题评测基线 | `planned` | 尚无版本化评测集和 Runner |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
 | 6. Agent Tool / MCP | `planned` | 尚未实现；等待 ACL、审计和评测门槛 |
@@ -41,7 +41,7 @@
 - `ask_log` 记录 tenant、requestId、结果状态、失败分类、总/分段耗时、模型 ID、Top-K 和相似度阈值，不记录异常原文、Prompt 或文档正文。
 - `PUT /api/ask/{requestId}/feedback` 支持 `HELPFUL` / `NOT_HELPFUL` 和可选原因；只允许原提问用户在同一 tenant 内创建或修改，单答案保持一条反馈，原因限制 500 字并清理控制字符。
 - `/actuator/health`、`/livez`、`/readyz` 提供不含组件详情的公开状态探针；`/actuator/metrics` 和 `/actuator/prometheus` 需要认证且仅允许 `SYSTEM_ADMIN` / `AUDITOR`。
-- Micrometer 记录问答结果/失败分类、总/分段耗时、Token 及索引任务结果/耗时；标签只使用固定的 result/failure/stage，不包含 tenant、用户、问题、正文、Prompt 或原始异常。
+- Micrometer 记录问答结果/失败分类、总/分段耗时、Token、按配置单价估算的成本、反馈提交、持久化 ACL 拒绝及索引任务结果/耗时；标签只使用固定的 result/failure/stage/rating/action/resource，不包含 tenant、用户、问题、正文、Prompt 或原始异常。
 - Flyway V1-V8 管理 RAG、企业身份/ACL、幂等约束、审计、持久化索引任务、问答观测和用户反馈 schema；Hibernate 只做 schema validate。
 - V2 已包含 tenant、department、role、user-role、knowledge base、membership 和 document ACL。
 - 文档列表/详情和 Chunk 向量查询在 SQL 阶段执行 tenant + user/department/role + knowledge-base/document ACL 过滤。
@@ -110,7 +110,7 @@
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
 - 权限拒绝已有基础审计事件和 tenant 范围内只读查询 API；尚未提供保留策略、脱敏策略和评测记录。
 - 应用自身默认不记录文档正文和 Prompt，但本地真实联调确认 LM Studio Developer Logs 会显示 Embedding 输入、Prompt 和模型输出；客户敏感资料上线前必须单独配置或替换 Provider 日志策略，不能把应用日志边界误认为全链路日志边界。
-- 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针及首批低基数指标；尚未完成反馈率、ACL 拒绝和成本指标。
+- 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针、反馈率/ACL 拒绝/Token/估算成本指标及首版告警 guardrail；尚未用真实 7 天基线调优阈值。
 - 没有 20 题 Golden Dataset、离线 Runner 或回归报告。
 - 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
 - 没有 Agent、Tool Calling 或 MCP。
@@ -120,7 +120,7 @@
 
 进入 Milestone 3：
 
-1. 补充反馈率、ACL 拒绝和成本指标，并定义可执行的告警阈值。
+1. 用真实 7 天数据校准反馈率、ACL 拒绝和估算成本阈值。
 2. 为 Flutter 问答卡增加有帮助/无帮助入口，并保持后端 ACL 为唯一可信边界。
 3. 建立 20 题 Golden Dataset 和最小离线 Runner，为 Hybrid Search / Reranker 是否必要提供证据。
 

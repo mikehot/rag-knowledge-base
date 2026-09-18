@@ -1,6 +1,7 @@
 package com.example.ragknowledgebase.audit;
 
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
+import com.example.ragknowledgebase.observability.OperationalMetrics;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -10,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuditService {
     private final JdbcTemplate jdbcTemplate;
+    private final OperationalMetrics operationalMetrics;
 
-    public AuditService(JdbcTemplate jdbcTemplate) {
+    public AuditService(JdbcTemplate jdbcTemplate, OperationalMetrics operationalMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.operationalMetrics = operationalMetrics;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -39,5 +42,6 @@ public class AuditService {
             resourceId,
             reason
         );
+        operationalMetrics.recordAclDenied(action, resourceType);
     }
 }

@@ -1,20 +1,27 @@
 package com.example.ragknowledgebase.observability;
 
 import com.example.ragknowledgebase.ask.AskResponse;
+import com.example.ragknowledgebase.ask.AskFeedbackRating;
 import com.example.ragknowledgebase.ask.AskResultStatus;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class OperationalMetrics {
     private final MeterRegistry registry;
+    private final double estimatedCostPer1kTokens;
 
-    public OperationalMetrics(MeterRegistry registry) {
+    public OperationalMetrics(
+        MeterRegistry registry,
+        @Value("${app.ai.estimated-cost-per-1k-tokens:0}") double estimatedCostPer1kTokens
+    ) {
         this.registry = registry;
+        this.estimatedCostPer1kTokens = Math.max(0, estimatedCostPer1kTokens);
     }
 
     public void recordAsk(AskResponse response, AskResultStatus resultStatus) {
@@ -42,7 +49,28 @@ public class OperationalMetrics {
                 .description("Model tokens reported by the configured provider")
                 .register(registry)
                 .increment(response.tokenUsage());
+            Counter.builder("rag.ask.estimated.cost")
+                .description("Estimated model cost in the configured currency unit")
+                .register(registry)
+                .increment(response.tokenUsage() / 1000d * estimatedCostPer1kTokens);
         }
+    }
+
+    public void recordFeedback(AskFeedbackRating rating) {
+        Counter.builder("rag.ask.feedback")
+            .description("Submitted answer feedback")
+            .tag("rating", normalized(rating.name()))
+            .register(registry)
+            .increment();
+    }
+
+    public void recordAclDenied(String action, String resourceType) {
+        Counter.builder("rag.acl.denied")
+            .description("Durably recorded ACL denials")
+            .tag("action", normalized(action))
+            .tag("resource", normalized(resourceType))
+            .register(registry)
+            .increment();
     }
 
     public void recordIndexTask(String result, long durationMs) {

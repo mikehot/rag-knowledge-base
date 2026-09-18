@@ -149,7 +149,7 @@ Work:
 - Add request/correlation IDs and stage-level timings for embedding, retrieval, and generation. Implemented and locally verified on 2026-09-18.
 - Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason. Implemented in Flyway V6/V7 and verified locally and in GitHub Actions run `35299110979`.
 - Add user feedback (`helpful`, `not_helpful`, optional sanitized reason). Implemented with tenant/user ownership checks, locally verified on PostgreSQL 16.15, and verified in GitHub Actions run `35300087644` with 51 tests / 0 skipped on 2026-09-18.
-- Add health/readiness checks and operational metrics without logging sensitive content by default. Status-only liveness/readiness probes, SYSTEM_ADMIN/AUDITOR-protected Actuator/Prometheus endpoints, and first-pass ask/index metrics were verified in GitHub Actions run `35301112737` with 56 tests / 0 skipped on 2026-09-18; remaining feedback/ACL/cost metrics are pending.
+- Add health/readiness checks and operational metrics without logging sensitive content by default. Status-only liveness/readiness probes, SYSTEM_ADMIN/AUDITOR-protected Actuator/Prometheus endpoints, ask/index metrics, feedback submissions, persisted ACL denials, and configured-rate cost estimates are implemented; initial PromQL guardrails are documented in `OBSERVABILITY.md`. Real 7-day baseline tuning remains pending.
 - Stabilize normal, fallback, provider-error, timeout, validation, and permission-denied contracts. Provider timeouts now map to `EMBEDDING_TIMEOUT` / `GENERATION_TIMEOUT`; HTTP 400/401/403 semantics are covered by service and MockMvc tests and verified in GitHub Actions run `35319672140` with 61 tests / 0 skipped on 2026-09-18.
 
 Acceptance gate:

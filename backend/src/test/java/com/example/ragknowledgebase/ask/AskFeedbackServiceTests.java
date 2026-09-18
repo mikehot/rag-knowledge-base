@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
+import com.example.ragknowledgebase.observability.OperationalMetrics;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,11 +32,14 @@ class AskFeedbackServiceTests {
     @Mock
     private AskFeedbackRepository askFeedbackRepository;
 
+    @Mock
+    private OperationalMetrics operationalMetrics;
+
     private AskFeedbackService service;
 
     @BeforeEach
     void setUp() {
-        service = new AskFeedbackService(askLogRepository, askFeedbackRepository);
+        service = new AskFeedbackService(askLogRepository, askFeedbackRepository, operationalMetrics);
     }
 
     @Test
@@ -55,6 +59,7 @@ class AskFeedbackServiceTests {
         assertThat(response.rating()).isEqualTo(AskFeedbackRating.HELPFUL);
         assertThat(response.reason()).isEqualTo("回答 很清楚");
         assertThat(response.updatedAt()).isNotNull();
+        verify(operationalMetrics).recordFeedback(AskFeedbackRating.HELPFUL);
     }
 
     @Test

@@ -43,6 +43,7 @@ services:
       AI_API_KEY: ""
       AI_MODEL_ID: google/gemma-4-26b-a4b
       AI_MAX_TOKENS: 1200
+      AI_ESTIMATED_COST_PER_1K_TOKENS: 0
       AI_TIMEOUT_SECONDS: 120
       AI_MAX_RETRIES: 2
       AI_DAILY_LIMIT: 50

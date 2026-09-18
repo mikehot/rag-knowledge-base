@@ -2,6 +2,7 @@ package com.example.ragknowledgebase.ask;
 
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
+import com.example.ragknowledgebase.observability.OperationalMetrics;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,13 +11,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AskFeedbackService {
     private final AskLogRepository askLogRepository;
     private final AskFeedbackRepository askFeedbackRepository;
+    private final OperationalMetrics operationalMetrics;
 
     public AskFeedbackService(
         AskLogRepository askLogRepository,
-        AskFeedbackRepository askFeedbackRepository
+        AskFeedbackRepository askFeedbackRepository,
+        OperationalMetrics operationalMetrics
     ) {
         this.askLogRepository = askLogRepository;
         this.askFeedbackRepository = askFeedbackRepository;
+        this.operationalMetrics = operationalMetrics;
     }
 
     @Transactional
@@ -43,6 +47,7 @@ public class AskFeedbackService {
                 reason
             ));
         AskFeedback saved = askFeedbackRepository.save(feedback);
+        operationalMetrics.recordFeedback(saved.getRating());
         return new AskFeedbackResponse(requestId, saved.getRating(), saved.getReason(), saved.getUpdatedAt());
     }
 

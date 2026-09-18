@@ -3,6 +3,7 @@ package com.example.ragknowledgebase.observability;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.ragknowledgebase.ask.AskFailureReason;
+import com.example.ragknowledgebase.ask.AskFeedbackRating;
 import com.example.ragknowledgebase.ask.AskResponse;
 import com.example.ragknowledgebase.ask.AskResultStatus;
 import com.example.ragknowledgebase.ask.AskTimingsResponse;
@@ -15,7 +16,7 @@ class OperationalMetricsTests {
     @Test
     void recordsOnlyLowCardinalityAskAndIndexDimensions() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        OperationalMetrics metrics = new OperationalMetrics(registry);
+        OperationalMetrics metrics = new OperationalMetrics(registry, 2.5);
         AskResponse response = new AskResponse(
             "暂时无法检索资料，建议转人工。",
             false,
@@ -29,12 +30,23 @@ class OperationalMetricsTests {
 
         metrics.recordAsk(response, AskResultStatus.FAILED);
         metrics.recordIndexTask("retry_scheduled", 250);
+        metrics.recordFeedback(AskFeedbackRating.HELPFUL);
+        metrics.recordAclDenied("DOCUMENT_DELETE", "DOCUMENT");
 
         assertThat(registry.get("rag.ask.requests")
             .tags("result", "failed", "failure", "generation_error")
             .counter()
             .count()).isEqualTo(1);
         assertThat(registry.get("rag.ask.tokens").counter().count()).isEqualTo(32);
+        assertThat(registry.get("rag.ask.estimated.cost").counter().count()).isEqualTo(0.08);
+        assertThat(registry.get("rag.ask.feedback")
+            .tag("rating", "helpful")
+            .counter()
+            .count()).isEqualTo(1);
+        assertThat(registry.get("rag.acl.denied")
+            .tags("action", "document_delete", "resource", "document")
+            .counter()
+            .count()).isEqualTo(1);
         assertThat(registry.get("rag.ask.duration").tag("result", "failed").timer().count()).isEqualTo(1);
         assertThat(registry.get("rag.ask.stage.duration").timers()).hasSize(3);
         assertThat(registry.get("rag.index.tasks").tag("result", "retry_scheduled").counter().count())
@@ -43,6 +55,7 @@ class OperationalMetricsTests {
             .isEqualTo(1);
         assertThat(registry.getMeters())
             .allSatisfy(meter -> assertThat(meter.getId().getTags())
-                .allSatisfy(tag -> assertThat(tag.getKey()).isIn("result", "failure", "stage")));
+                .allSatisfy(tag -> assertThat(tag.getKey())
+                    .isIn("result", "failure", "stage", "rating", "action", "resource")));
     }
 }

@@ -15,7 +15,7 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1-V5、ACL、最小管理 API、可回滚替换和持久化索引任务已落地；V5 PostgreSQL CI 与真实 Provider 异步恢复仍待验证 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1-V5、ACL、最小管理 API、可回滚替换和持久化索引任务已落地；PostgreSQL CI、真实 Provider 重试和重启恢复已验证，管理 UI 等次要范围仍未完成 |
 | 3. 结构化回答、审计、观测、反馈 | `planned` | 已有基础回答结构、Token 和 ask log；缺 requestId、分段耗时、失败分类和反馈 |
 | 4. 20 题评测基线 | `planned` | 尚无版本化评测集和 Runner |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
@@ -75,7 +75,7 @@
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
 | `./mvnw test` | PASS | 2026-09-18 本地 JDK 25.0.3；30 non-PostgreSQL tests passed；本机无 Docker socket，11 个 PostgreSQL integration tests skipped |
-| GitHub Actions CI | PASS | Run `35169350194`；backend-tests 在 Ubuntu + Temurin 25.0.4.1 上实际执行 34 tests，0 failures/errors/skipped；compose-config 通过 |
+| GitHub Actions CI | PASS | Run `35295919726`；backend-tests 在 Ubuntu + Temurin 25.0.4.1 上实际执行 41 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
 | 文档入库 | PASS | `sample_faq.md` 进入 `ready`，生成 2 个 Chunk |
@@ -83,21 +83,23 @@
 | 资料外问题 | PASS | `found=false`、`sources=[]`；保留实际模型 Token 用量 |
 | 文档删除 | PASS | API 返回成功，document/chunk 行清零，原始上传文件删除，再次检索拒答 |
 | 旧库迁移 | PASS | 非空旧 schema 自动 baseline 为 V1，再执行 V2；Hibernate validate 与应用启动通过 |
-| 空库迁移 | PASS | GitHub Actions run `35169350194` 顺序执行 V1/V2/V3/V4；PostgreSQL 16.15、`vector(768)`、默认用户/角色/知识库授权和 `audit_event` 建表通过 |
+| 空库迁移 | PASS | GitHub Actions run `35295919726` 顺序执行 V1-V5；PostgreSQL 16.15、`vector(768)`、默认授权、`audit_event` 和 `index_task` 建表通过 |
 | ACL 隔离 | PASS | 无授权用户列表为空；USER、DEPARTMENT、ROLE 授权范围均有确定性测试；READ 用户删除返回 404；双 tenant 文档列表/详情互不可见 |
 | 文档替换 | PASS | GitHub Actions run `35169350194` 验证版本化新文件、`contentVersion` 递增、旧文件保留和旧 Chunk 在新索引就绪前不被删除；单元测试覆盖同 checksum 幂等、越权拒绝、成功切换和解析失败回滚 |
-| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35169350194` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1/V2/V3/V4 成功，`PostgresEnterpriseIntegrationTests` 10 tests / 0 skipped，并覆盖替换暂存、权限拒绝审计、审计查询、部门/角色授权和跨 tenant 隔离 |
+| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35295919726` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1-V5 成功，`PostgresEnterpriseIntegrationTests` 11 tests / 0 skipped；新增覆盖任务批量创建、幂等、安全领取、失败记录、人工重试和越权审计 |
+| 持久化索引任务真实联调 | PASS | 2026-09-18，PostgreSQL 16.15 + LM Studio；上传一次成功 `SUCCEEDED/attempt=1/23125ms`，Provider 中断后自动重试成功 `attempt=2/32542ms`，连续失败后 `FAILED/attempt=3/93526ms`，人工重试后第 4 次成功，遗留 RUNNING 经后端重启恢复后第 2 次成功 |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前有 30 个稳定单元/上下文测试和 11 个 PostgreSQL/Testcontainers 集成测试；新增任务测试的 PostgreSQL 部分尚需 GitHub Actions 形成远端证据。
+- 后端当前有 30 个稳定单元/上下文测试和 11 个 PostgreSQL/Testcontainers 集成测试；GitHub Actions 已形成 41 tests / 0 skipped 的远端证据。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
 - 权限拒绝已有基础审计事件和 tenant 范围内只读查询 API；尚未提供保留策略、脱敏策略和评测记录。
+- 应用自身默认不记录文档正文和 Prompt，但本地真实联调确认 LM Studio Developer Logs 会显示 Embedding 输入、Prompt 和模型输出；客户敏感资料上线前必须单独配置或替换 Provider 日志策略，不能把应用日志边界误认为全链路日志边界。
 - 问答没有 requestId、分段耗时、结构化失败原因和用户反馈。
 - 没有 20 题 Golden Dataset、离线 Runner 或回归报告。
 - 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
@@ -106,9 +108,11 @@
 
 ## 下一步
 
-1. 通过 GitHub Actions 验证 Flyway V5、PostgreSQL 幂等入队、安全领取、失败记录和人工重试。
-2. 用真实 Provider 验证一次上传成功、自动重试、最终失败和进程重启恢复。
-3. 进入 Milestone 3：补 requestId、分段耗时、结构化失败原因和用户反馈。
+进入 Milestone 3：
+
+1. 增加 requestId，并贯穿 API、检索、Provider 调用和日志。
+2. 记录 embedding、retrieval、generation 分段耗时与结构化失败原因。
+3. 增加用户反馈接口，并保持 Prompt/正文默认不进入应用日志。
 
 ## 文档维护规则
 

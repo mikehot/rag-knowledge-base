@@ -62,6 +62,8 @@ All secrets and runtime choices are environment variables.
 
 The Java `HttpClient` for chat and embedding explicitly uses `HTTP_1_1`, matching the `ai-weekly-report` local provider fix.
 
+Provider logging is a separate security boundary. During the 2026-09-18 local verification, LM Studio Developer Logs displayed embedding inputs, prompts, and model output even though the application itself did not log them. Do not use customer-sensitive documents until the selected Provider's request/response logging, retention, and access controls have been reviewed.
+
 ## Embedding Dimension
 
 `chunk.embedding` is created as `vector(${AI_EMBEDDING_DIM})`. If you change embedding model or dimension after data exists, recreate the database or rebuild the `chunk` table and re-upload documents. pgvector will reject vectors with a different dimension.

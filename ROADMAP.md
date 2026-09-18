@@ -2,7 +2,7 @@
 
 > Version: v2.0
 >
-> Last verified: 2026-09-16
+> Last verified: 2026-09-18
 > Target: evolve the existing RAG MVP into an enterprise knowledge-base V0.1, then extend it into a bounded Agent/FDE delivery case.
 
 ## 1. Product Goal
@@ -62,7 +62,7 @@ Milestone 2 checkpoint on 2026-09-16:
 - JWT authentication carries the tenant boundary, and document/chunk SQL performs security trimming before content reaches generation.
 - Upload and delete require `MANAGE`; list, detail, and retrieval accept inherited `READ`/`MANAGE` grants from user, department, or role principals.
 - Both an existing non-empty database upgrade and a fresh V1+V2 database were verified. A temporary reader saw no document before a grant, saw it after `READ`, and still could not delete it.
-- This milestone remains `in-progress`: the minimum management APIs, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, and cross-tenant cases are complete. Persistent batch reindex, retry, idempotency, and task observability are implemented and awaiting PostgreSQL CI evidence; management UI remains open.
+- This milestone remains `in-progress`: the minimum management APIs, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are verified. Management UI and secondary identity lifecycle operations remain open.
 
 ## 4. Delivery Principles
 

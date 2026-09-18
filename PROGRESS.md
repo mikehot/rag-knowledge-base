@@ -82,7 +82,7 @@
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
 | `./mvnw test` | PASS | 2026-09-18 本地 JDK 25.0.3；49 个非 PostgreSQL 测试通过；新增 Provider 超时分类和 401/403/400 契约测试通过；Testcontainers 与本机 Docker 29 API 协商异常，12 个 PostgreSQL integration tests skipped |
-| GitHub Actions CI | PASS | Run `35301112737`；backend-tests 实际执行 56 tests，0 failures/errors/skipped；compose-config 通过 |
+| GitHub Actions CI | PASS | Run `35319672140`（CI #26）；backend-tests 实际执行 61 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
 | 文档入库 | PASS | `sample_faq.md` 进入 `ready`，生成 2 个 Chunk |
@@ -93,7 +93,7 @@
 | 空库迁移 | PASS | GitHub Actions run `35295919726` 顺序执行 V1-V5；PostgreSQL 16.15、`vector(768)`、默认授权、`audit_event` 和 `index_task` 建表通过 |
 | ACL 隔离 | PASS | 无授权用户列表为空；USER、DEPARTMENT、ROLE 授权范围均有确定性测试；READ 用户删除返回 404；双 tenant 文档列表/详情互不可见 |
 | 文档替换 | PASS | GitHub Actions run `35169350194` 验证版本化新文件、`contentVersion` 递增、旧文件保留和旧 Chunk 在新索引就绪前不被删除；单元测试覆盖同 checksum 幂等、越权拒绝、成功切换和解析失败回滚 |
-| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35301112737` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1-V8 成功，`PostgresEnterpriseIntegrationTests` 12 tests / 0 skipped；覆盖 ACL、任务治理、问答观测及反馈唯一性/所有权边界 |
+| PostgreSQL/Testcontainers 集成测试 | PASS | GitHub Actions run `35319672140` 实际拉起 PostgreSQL 16.15 + pgvector，Flyway V1-V8 成功，`PostgresEnterpriseIntegrationTests` 12 tests / 0 skipped；覆盖 ACL、任务治理、问答观测及反馈唯一性/所有权边界，并通过本轮稳定契约变更 |
 | 持久化索引任务真实联调 | PASS | 2026-09-18，PostgreSQL 16.15 + LM Studio；上传一次成功 `SUCCEEDED/attempt=1/23125ms`，Provider 中断后自动重试成功 `attempt=2/32542ms`，连续失败后 `FAILED/attempt=3/93526ms`，人工重试后第 4 次成功，遗留 RUNNING 经后端重启恢复后第 2 次成功 |
 | 问答观测 V6/V7 迁移 | PASS（本地） | PostgreSQL 16.15 从 V5 顺序升至 V7；12 个新增观测字段存在，历史记录 tenant/request/status 必填字段空值为 0，Hibernate schema validate 与应用启动通过；真实 HTTP 验证保留合法 `X-Request-Id` |
 | 用户反馈 V8 | PASS | PostgreSQL 16.15 从 V7 升至 V8；真实 API 验证创建、修改、单问答唯一反馈、原因清理、非法 rating 400 和不存在/无权 requestId 404；GitHub Actions run `35300087644` 完成 V1-V8 空库迁移及相关回归测试 |
@@ -104,7 +104,7 @@
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前有 49 个稳定单元/上下文测试和 12 个 PostgreSQL/Testcontainers 集成测试；本地为 49 passed + 12 skipped，GitHub Actions run `35301112737` 是本轮前的 56 tests / 0 skipped 远端证据，本轮变更仍待新 CI run 确认。
+- 后端当前有 49 个稳定单元/上下文测试和 12 个 PostgreSQL/Testcontainers 集成测试；本地为 49 passed + 12 skipped，GitHub Actions run `35319672140` 已形成 61 tests / 0 skipped 的远端证据。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
@@ -120,9 +120,9 @@
 
 进入 Milestone 3：
 
-1. 将本轮稳定失败契约提交并通过 GitHub Actions，保持正常/拒答/Provider 错误/超时/权限拒绝路径的回归证据。
-2. 补充反馈率、ACL 拒绝和成本指标，并定义可执行的告警阈值。
-3. 为 Flutter 问答卡增加有帮助/无帮助入口，并保持后端 ACL 为唯一可信边界。
+1. 补充反馈率、ACL 拒绝和成本指标，并定义可执行的告警阈值。
+2. 为 Flutter 问答卡增加有帮助/无帮助入口，并保持后端 ACL 为唯一可信边界。
+3. 建立 20 题 Golden Dataset 和最小离线 Runner，为 Hybrid Search / Reranker 是否必要提供证据。
 
 ## 文档维护规则
 

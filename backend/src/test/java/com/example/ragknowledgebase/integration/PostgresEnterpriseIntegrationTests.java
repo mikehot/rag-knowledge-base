@@ -9,6 +9,9 @@ import com.example.ragknowledgebase.admin.CreateDepartmentRequest;
 import com.example.ragknowledgebase.admin.CreateKnowledgeBaseRequest;
 import com.example.ragknowledgebase.admin.CreateUserRequest;
 import com.example.ragknowledgebase.admin.GrantKnowledgeBaseMembershipRequest;
+import com.example.ragknowledgebase.ask.AskFeedbackRating;
+import com.example.ragknowledgebase.ask.AskFeedbackRequest;
+import com.example.ragknowledgebase.ask.AskFeedbackService;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.audit.AuditQueryService;
@@ -52,6 +55,8 @@ class PostgresEnterpriseIntegrationTests {
     private static final UUID SECOND_USER_ID = UUID.fromString("40000000-0000-0000-0000-000000000102");
     private static final UUID SECOND_KNOWLEDGE_BASE_ID = UUID.fromString("40000000-0000-0000-0000-000000000103");
     private static final UUID SECOND_DOCUMENT_ID = UUID.fromString("40000000-0000-0000-0000-000000000104");
+    private static final UUID ASK_LOG_ID = UUID.fromString("50000000-0000-0000-0000-000000000101");
+    private static final UUID ASK_REQUEST_ID = UUID.fromString("50000000-0000-0000-0000-000000000102");
 
     @Container
     @SuppressWarnings("resource")
@@ -86,6 +91,9 @@ class PostgresEnterpriseIntegrationTests {
     @Autowired
     private AuditQueryService auditQueryService;
 
+    @Autowired
+    private AskFeedbackService askFeedbackService;
+
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -96,6 +104,8 @@ class PostgresEnterpriseIntegrationTests {
 
     @BeforeEach
     void cleanTestData() {
+        jdbcTemplate.update("DELETE FROM ask_feedback WHERE ask_log_id = ?", ASK_LOG_ID);
+        jdbcTemplate.update("DELETE FROM ask_log WHERE id = ?", ASK_LOG_ID);
         jdbcTemplate.update("DELETE FROM audit_event WHERE user_id IN (?, ?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID, SECOND_USER_ID);
         jdbcTemplate.update(
             "DELETE FROM knowledge_base_membership WHERE principal_id IN (?, ?, ?, ?, ?)",
@@ -165,13 +175,72 @@ class PostgresEnterpriseIntegrationTests {
                 """,
             Integer.class
         );
+        Integer feedbackTableCount = jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ask_feedback'",
+            Integer.class
+        );
 
-        assertThat(successfulMigrations).isEqualTo(7);
+        assertThat(successfulMigrations).isEqualTo(8);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
         assertThat(defaultAccessCount).isGreaterThanOrEqualTo(1);
         assertThat(askObservabilityColumnCount).isEqualTo(12);
+        assertThat(feedbackTableCount).isEqualTo(1);
+    }
+
+    @Test
+    void feedbackIsOwnedByAskUserAndUpdatesSinglePostgresRow() {
+        insertUser(READER_ID, "feedback-owner-it");
+        insertUser(OUTSIDER_ID, "feedback-outsider-it");
+        jdbcTemplate.update(
+            """
+                INSERT INTO ask_log (
+                    id, user_id, tenant_id, request_id, question, found, token_usage,
+                    result_status, latency_ms, embedding_latency_ms, retrieval_latency_ms,
+                    generation_latency_ms, created_at
+                ) VALUES (?, ?, ?, ?, ?, true, 10, 'ANSWERED', 100, 10, 20, 70, now())
+                """,
+            ASK_LOG_ID,
+            READER_ID,
+            TENANT_ID,
+            ASK_REQUEST_ID,
+            "反馈测试问题"
+        );
+        AuthenticatedUser owner = new AuthenticatedUser(READER_ID, TENANT_ID, "feedback-owner-it");
+        AuthenticatedUser outsider = new AuthenticatedUser(OUTSIDER_ID, TENANT_ID, "feedback-outsider-it");
+
+        askFeedbackService.submit(
+            owner,
+            ASK_REQUEST_ID,
+            new AskFeedbackRequest(AskFeedbackRating.HELPFUL, "第一次反馈")
+        );
+        askFeedbackService.submit(
+            owner,
+            ASK_REQUEST_ID,
+            new AskFeedbackRequest(AskFeedbackRating.NOT_HELPFUL, "更新后的反馈")
+        );
+
+        Integer feedbackCount = jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM ask_feedback WHERE ask_log_id = ?",
+            Integer.class,
+            ASK_LOG_ID
+        );
+        String ratingAndReason = jdbcTemplate.queryForObject(
+            "SELECT rating || '|' || reason FROM ask_feedback WHERE ask_log_id = ?",
+            String.class,
+            ASK_LOG_ID
+        );
+        assertThat(feedbackCount).isEqualTo(1);
+        assertThat(ratingAndReason).isEqualTo("NOT_HELPFUL|更新后的反馈");
+        assertThatThrownBy(() -> askFeedbackService.submit(
+            outsider,
+            ASK_REQUEST_ID,
+            new AskFeedbackRequest(AskFeedbackRating.HELPFUL, null)
+        ))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(404);
     }
 
     @Test

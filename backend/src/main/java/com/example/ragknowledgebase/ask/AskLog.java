@@ -119,6 +119,10 @@ public class AskLog {
         return requestId;
     }
 
+    public UUID getId() {
+        return id;
+    }
+
     public AskResultStatus getResultStatus() {
         return resultStatus;
     }

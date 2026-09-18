@@ -4,8 +4,11 @@ import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.ApiResponse;
 import com.example.ragknowledgebase.common.BusinessException;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class AskController {
     private final AskService askService;
+    private final AskFeedbackService askFeedbackService;
 
-    public AskController(AskService askService) {
+    public AskController(AskService askService, AskFeedbackService askFeedbackService) {
         this.askService = askService;
+        this.askFeedbackService = askFeedbackService;
     }
 
     @PostMapping("/ask")
@@ -25,6 +30,15 @@ public class AskController {
         @Valid @RequestBody AskRequest request
     ) {
         return ApiResponse.ok(askService.ask(currentUser(authentication), request));
+    }
+
+    @PutMapping("/ask/{requestId}/feedback")
+    public ApiResponse<AskFeedbackResponse> feedback(
+        Authentication authentication,
+        @PathVariable UUID requestId,
+        @Valid @RequestBody AskFeedbackRequest request
+    ) {
+        return ApiResponse.ok(askFeedbackService.submit(currentUser(authentication), requestId, request));
     }
 
     private AuthenticatedUser currentUser(Authentication authentication) {

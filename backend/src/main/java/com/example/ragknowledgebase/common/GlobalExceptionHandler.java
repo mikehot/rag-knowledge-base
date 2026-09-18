@@ -3,12 +3,14 @@ package com.example.ragknowledgebase.common;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -40,6 +42,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleConstraint(ConstraintViolationException ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, "参数不正确"));
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ApiResponse<Void>> handleMalformedRequest(Exception ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(400, "参数不正确"));
     }
 

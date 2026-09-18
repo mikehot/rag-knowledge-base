@@ -128,6 +128,7 @@ Main endpoints:
 - `POST /api/documents/{id}/reindex`
 - `POST /api/documents/{id}/replace`
 - `POST /api/ask`
+- `PUT /api/ask/{requestId}/feedback`
 - `GET /api/admin/roles`
 - `GET /api/admin/users`
 - `POST /api/admin/users`
@@ -151,6 +152,8 @@ Main endpoints:
 `POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM. Every HTTP response includes `X-Request-Id`; a valid caller-supplied UUID is preserved and an invalid value is replaced.
 
 The answer body includes `requestId`, total `latencyMs`, `tokenUsage`, a nullable typed `failureReason`, and `timings` for `embeddingMs`, `retrievalMs`, and `generationMs`. Stable failure reasons are `RETRIEVAL_MISS`, `INSUFFICIENT_CONTEXT`, `EMBEDDING_ERROR`, `RETRIEVAL_ERROR`, and `GENERATION_ERROR`. Flyway V6/V7 stores the same correlation and timing fields with provider, model, and retrieval configuration in `ask_log`; raw exception messages, prompts, and document text are not stored there.
+
+`PUT /api/ask/{requestId}/feedback` accepts `{"rating":"HELPFUL|NOT_HELPFUL","reason":"optional"}`. Only the authenticated user who created that ask record in the same tenant can submit feedback; missing, cross-user, and cross-tenant request IDs all return `404`. Repeating the request updates the single feedback row for that answer. `reason` is optional, limited to 500 characters, normalized for whitespace/control characters, and never written to application logs.
 
 Admin endpoint boundaries:
 

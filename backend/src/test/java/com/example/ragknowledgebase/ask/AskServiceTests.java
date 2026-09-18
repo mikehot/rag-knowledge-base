@@ -218,6 +218,39 @@ class AskServiceTests {
     }
 
     @Test
+    void classifiesEmbeddingTimeoutSeparatelyFromProviderFailure() {
+        when(embeddingProvider.embed(List.of("Embedding 会超时吗？")))
+            .thenThrow(AiCallException.timeout("Embedding timeout", new RuntimeException("timeout")));
+
+        AskResponse response = askService.ask(USER, new AskRequest("Embedding 会超时吗？"));
+
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.EMBEDDING_TIMEOUT);
+        assertThat(response.found()).isFalse();
+    }
+
+    @Test
+    void classifiesGenerationTimeoutSeparatelyFromProviderFailure() {
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "有效资料",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of("生成会超时吗？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString()))
+            .thenThrow(AiCallException.timeout("Generation timeout", new RuntimeException("timeout")));
+
+        AskResponse response = askService.ask(USER, new AskRequest("生成会超时吗？"));
+
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.GENERATION_TIMEOUT);
+        assertThat(response.found()).isFalse();
+    }
+
+    @Test
     void doesNotMisclassifyAskLogStorageFailureAsProviderFailure() {
         float[] embedding = new float[] {0.1f, 0.2f};
         ChunkSearchResult hit = new ChunkSearchResult(

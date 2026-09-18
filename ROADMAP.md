@@ -150,10 +150,11 @@ Work:
 - Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason. Implemented in Flyway V6/V7 and verified locally and in GitHub Actions run `35299110979`.
 - Add user feedback (`helpful`, `not_helpful`, optional sanitized reason). Implemented with tenant/user ownership checks, locally verified on PostgreSQL 16.15, and verified in GitHub Actions run `35300087644` with 51 tests / 0 skipped on 2026-09-18.
 - Add health/readiness checks and operational metrics without logging sensitive content by default. Status-only liveness/readiness probes, SYSTEM_ADMIN/AUDITOR-protected Actuator/Prometheus endpoints, and first-pass ask/index metrics were verified in GitHub Actions run `35301112737` with 56 tests / 0 skipped on 2026-09-18; remaining feedback/ACL/cost metrics are pending.
+- Stabilize normal, fallback, provider-error, timeout, validation, and permission-denied contracts. Provider timeouts now map to `EMBEDDING_TIMEOUT` / `GENERATION_TIMEOUT`; HTTP 400/401/403 semantics are covered by service and MockMvc tests locally on 2026-09-18. Remote CI evidence is pending for this change.
 
 Acceptance gate:
 
-- Normal, fallback, timeout, provider-error, and permission-denied paths have stable contracts.
+- Normal, fallback, timeout, provider-error, validation, and permission-denied paths have stable contracts.
 - A request can be traced across API, retrieval, and model stages by `requestId`.
 - Operators can distinguish retrieval miss, ACL rejection, provider failure, timeout, and validation failure.
 - Feedback can be linked to the corresponding answer and evaluation sample.

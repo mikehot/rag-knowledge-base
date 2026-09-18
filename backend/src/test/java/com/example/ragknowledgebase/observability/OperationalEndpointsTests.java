@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -61,15 +62,54 @@ class OperationalEndpointsTests {
     @Test
     void protectsOperationalMetricsFromAnonymousAccess() throws Exception {
         mockMvc.perform(get("/actuator/metrics"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value(401));
         mockMvc.perform(get("/actuator/prometheus"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void rejectsAnonymousAskWithUnauthorizedContract() throws Exception {
+        mockMvc.perform(post("/api/ask")
+                .contentType("application/json")
+                .content("{\"question\":\"年假怎么申请？\"}"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value(401))
+            .andExpect(jsonPath("$.message").value("登录已失效，请重新登录"));
+    }
+
+    @Test
+    void rejectsInvalidBearerTokenWithUnauthorizedContract() throws Exception {
+        mockMvc.perform(post("/api/ask")
+                .header("Authorization", "Bearer invalid-token")
+                .contentType("application/json")
+                .content("{\"question\":\"年假怎么申请？\"}"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void rejectsMalformedAndInvalidAskRequestsWithBadRequestContract() throws Exception {
+        mockMvc.perform(post("/api/ask")
+                .with(operatorAuthentication())
+                .contentType("application/json")
+                .content("{\"question\":\"  \"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value(400));
+        mockMvc.perform(post("/api/ask")
+                .with(operatorAuthentication())
+                .contentType("application/json")
+                .content("not-json"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value(400));
     }
 
     @Test
     void rejectsMetricsForAuthenticatedNonOperators() throws Exception {
         mockMvc.perform(get("/actuator/metrics").with(operatorAuthentication()))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value(403));
     }
 
     @Test

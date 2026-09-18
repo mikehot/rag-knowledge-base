@@ -25,10 +25,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(ApiResponse.error(ex.code(), ex.getMessage()));
     }
 
-    @ExceptionHandler({BadCredentialsException.class, AccessDeniedException.class})
-    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(Exception ex) {
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(BadCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(ApiResponse.error(401, "登录已失效，请重新登录"));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(ApiResponse.error(403, "没有权限访问该资源"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

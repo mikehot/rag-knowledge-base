@@ -3,6 +3,8 @@ package com.example.ragknowledgebase.config;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.auth.JwtAuthenticationFilter;
+import com.example.ragknowledgebase.common.ApiResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -23,11 +25,25 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
         JwtAuthenticationFilter jwtAuthenticationFilter,
-        AccessControlService accessControlService
+        AccessControlService accessControlService,
+        ObjectMapper objectMapper
     ) throws Exception {
         return http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(exception -> exception
+                .authenticationEntryPoint((request, response, authException) -> writeError(
+                    response,
+                    objectMapper,
+                    401,
+                    "登录已失效，请重新登录"
+                ))
+                .accessDeniedHandler((request, response, accessDeniedException) -> writeError(
+                    response,
+                    objectMapper,
+                    403,
+                    "没有权限访问该资源"
+                )))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/metrics/**", "/actuator/prometheus")
                 .access((authentication, context) -> {
@@ -50,6 +66,17 @@ public class SecurityConfig {
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
+    }
+
+    private void writeError(
+        jakarta.servlet.http.HttpServletResponse response,
+        ObjectMapper objectMapper,
+        int code,
+        String message
+    ) throws java.io.IOException {
+        response.setStatus(code == 401 ? 401 : 403);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.error(code, message)));
     }
 
     @Bean

@@ -3,7 +3,9 @@ package com.example.ragknowledgebase.ask;
 public enum AskFailureReason {
     RETRIEVAL_MISS,
     INSUFFICIENT_CONTEXT,
+    EMBEDDING_TIMEOUT,
     EMBEDDING_ERROR,
     RETRIEVAL_ERROR,
+    GENERATION_TIMEOUT,
     GENERATION_ERROR
 }

@@ -4,6 +4,7 @@ import com.example.ragknowledgebase.config.AppProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
+import java.net.http.HttpTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -48,6 +49,9 @@ public class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
             } catch (Exception ex) {
                 last = ex;
             }
+        }
+        if (last instanceof HttpTimeoutException) {
+            throw AiCallException.timeout("Embedding 调用超时，请稍后重试", last);
         }
         throw new AiCallException("Embedding 调用失败，请检查模型服务配置", last);
     }

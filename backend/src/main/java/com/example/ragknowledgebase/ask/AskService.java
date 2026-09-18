@@ -2,6 +2,7 @@ package com.example.ragknowledgebase.ask;
 
 import com.example.ragknowledgebase.ai.AiProvider;
 import com.example.ragknowledgebase.ai.AiProviderResponse;
+import com.example.ragknowledgebase.ai.AiCallException;
 import com.example.ragknowledgebase.ai.EmbeddingProvider;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
@@ -131,7 +132,9 @@ public class AskService {
             AskFailureReason failureReason = switch (stage) {
                 case EMBEDDING -> {
                     embeddingMs = failedStageMs;
-                    yield AskFailureReason.EMBEDDING_ERROR;
+                    yield isTimeout(ex)
+                        ? AskFailureReason.EMBEDDING_TIMEOUT
+                        : AskFailureReason.EMBEDDING_ERROR;
                 }
                 case RETRIEVAL -> {
                     retrievalMs = failedStageMs;
@@ -139,7 +142,9 @@ public class AskService {
                 }
                 case GENERATION -> {
                     generationMs = failedStageMs;
-                    yield AskFailureReason.GENERATION_ERROR;
+                    yield isTimeout(ex)
+                        ? AskFailureReason.GENERATION_TIMEOUT
+                        : AskFailureReason.GENERATION_ERROR;
                 }
             };
             response = response(
@@ -251,6 +256,17 @@ public class AskService {
             .append(question)
             .append("\n\n请用中文简洁回答，并在末尾不要重复来源（来源由系统单独展示）。");
         return builder.toString();
+    }
+
+    private boolean isTimeout(Exception ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof AiCallException aiCallException && aiCallException.isTimeout()) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private boolean isHandoff(String answer) {

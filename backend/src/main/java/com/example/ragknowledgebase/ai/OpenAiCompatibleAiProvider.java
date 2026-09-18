@@ -4,6 +4,7 @@ import com.example.ragknowledgebase.config.AppProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
+import java.net.http.HttpTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -37,6 +38,9 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
             } catch (Exception ex) {
                 last = ex;
             }
+        }
+        if (last instanceof HttpTimeoutException) {
+            throw AiCallException.timeout("AI 生成超时，请稍后重试", last);
         }
         throw new AiCallException("AI 生成失败，请稍后重试", last);
     }

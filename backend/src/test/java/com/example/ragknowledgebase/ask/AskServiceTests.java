@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,6 +80,12 @@ class AskServiceTests {
         assertThat(response.found()).isTrue();
         assertThat(response.answer()).isEqualTo("请提前三个工作日提交申请。");
         assertThat(response.tokenUsage()).isEqualTo(128);
+        assertThat(response.requestId()).isNotNull();
+        assertThat(response.latencyMs()).isGreaterThanOrEqualTo(0);
+        assertThat(response.failureReason()).isNull();
+        assertThat(response.timings().embeddingMs()).isGreaterThanOrEqualTo(0);
+        assertThat(response.timings().retrievalMs()).isGreaterThanOrEqualTo(0);
+        assertThat(response.timings().generationMs()).isGreaterThanOrEqualTo(0);
         assertThat(response.sources()).singleElement().satisfies(source -> {
             assertThat(source.documentId()).isEqualTo(DOCUMENT_ID);
             assertThat(source.filename()).isEqualTo("employee-handbook.md");
@@ -92,7 +99,12 @@ class AskServiceTests {
             .contains("年假怎么申请？")
             .contains("employee-handbook.md")
             .contains("年假需要提前三个工作日提交申请。");
-        verify(askLogRepository).save(any(AskLog.class));
+        ArgumentCaptor<AskLog> log = ArgumentCaptor.forClass(AskLog.class);
+        verify(askLogRepository).save(log.capture());
+        assertThat(log.getValue().getRequestId()).isEqualTo(response.requestId());
+        assertThat(log.getValue().getResultStatus()).isEqualTo(AskResultStatus.ANSWERED);
+        assertThat(log.getValue().getFailureReason()).isNull();
+        assertThat(log.getValue().getLatencyMs()).isEqualTo(response.latencyMs());
     }
 
     @Test
@@ -115,6 +127,7 @@ class AskServiceTests {
         assertThat(response.answer()).isEqualTo("未找到相关信息，建议转人工。");
         assertThat(response.sources()).isEmpty();
         assertThat(response.tokenUsage()).isZero();
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.RETRIEVAL_MISS);
         verify(aiProvider, never()).generate(anyString());
         verify(askLogRepository).save(any(AskLog.class));
     }
@@ -141,6 +154,7 @@ class AskServiceTests {
         assertThat(response.answer()).isEqualTo("未找到相关信息，建议转人工。");
         assertThat(response.sources()).isEmpty();
         assertThat(response.tokenUsage()).isEqualTo(96);
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.INSUFFICIENT_CONTEXT);
         verify(askLogRepository).save(any(AskLog.class));
     }
 
@@ -154,9 +168,71 @@ class AskServiceTests {
         assertThat(response.found()).isFalse();
         assertThat(response.answer()).isEqualTo("暂时无法检索资料，建议转人工。");
         assertThat(response.sources()).isEmpty();
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.EMBEDDING_ERROR);
+        assertThat(response.timings().embeddingMs()).isGreaterThanOrEqualTo(0);
         verify(chunkRepository, never()).search(any(), any(), any(), any(Integer.class));
         verify(aiProvider, never()).generate(anyString());
         verify(askLogRepository).save(any(AskLog.class));
+    }
+
+    @Test
+    void classifiesRetrievalFailureWithoutCallingModel() {
+        float[] embedding = new float[] {0.1f, 0.2f};
+        when(embeddingProvider.embed(List.of("检索会失败吗？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5))
+            .thenThrow(new IllegalStateException("database unavailable"));
+
+        AskResponse response = askService.ask(USER, new AskRequest("检索会失败吗？"));
+
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.RETRIEVAL_ERROR);
+        assertThat(response.found()).isFalse();
+        verify(aiProvider, never()).generate(anyString());
+    }
+
+    @Test
+    void classifiesGenerationFailureAfterSuccessfulRetrieval() {
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "有效资料",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of("模型会失败吗？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenThrow(new AiCallException("provider timeout"));
+
+        AskResponse response = askService.ask(USER, new AskRequest("模型会失败吗？"));
+
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.GENERATION_ERROR);
+        assertThat(response.found()).isFalse();
+        assertThat(response.timings().embeddingMs()).isGreaterThanOrEqualTo(0);
+        assertThat(response.timings().retrievalMs()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void doesNotMisclassifyAskLogStorageFailureAsProviderFailure() {
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "有效资料",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of("日志会失败吗？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse("资料回答", 42));
+        when(askLogRepository.save(any(AskLog.class))).thenThrow(new IllegalStateException("database unavailable"));
+
+        assertThatThrownBy(() -> askService.ask(USER, new AskRequest("日志会失败吗？")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("database unavailable");
+
+        verify(askLogRepository, times(1)).save(any(AskLog.class));
     }
 
     @Test

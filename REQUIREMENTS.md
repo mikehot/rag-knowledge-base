@@ -116,7 +116,12 @@ V0.1 基线：
   "requestId": "uuid",
   "latencyMs": 1234,
   "tokenUsage": 456,
-  "failureReason": null
+  "failureReason": null,
+  "timings": {
+    "embeddingMs": 120,
+    "retrievalMs": 34,
+    "generationMs": 1080
+  }
 }
 ```
 

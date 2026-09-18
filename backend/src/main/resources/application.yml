@@ -31,6 +31,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+logging:
+  pattern:
+    level: "%5p [requestId:%X{requestId:--}]"
+
 app:
   auth:
     default-username: ${APP_DEFAULT_USERNAME:demo}

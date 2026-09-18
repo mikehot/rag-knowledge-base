@@ -1,11 +1,16 @@
 package com.example.ragknowledgebase.ask;
 
 import java.util.List;
+import java.util.UUID;
 
 public record AskResponse(
     String answer,
     boolean found,
     List<AskSourceResponse> sources,
-    int tokenUsage
+    UUID requestId,
+    long latencyMs,
+    int tokenUsage,
+    AskFailureReason failureReason,
+    AskTimingsResponse timings
 ) {
 }

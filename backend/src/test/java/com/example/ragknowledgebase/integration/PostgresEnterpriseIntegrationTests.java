@@ -151,12 +151,27 @@ class PostgresEnterpriseIntegrationTests {
             "SELECT count(*) FROM user_role ur JOIN app_role r ON r.id = ur.role_id WHERE r.code = 'SYSTEM_ADMIN'",
             Integer.class
         );
+        Integer askObservabilityColumnCount = jdbcTemplate.queryForObject(
+            """
+                SELECT count(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'ask_log'
+                  AND column_name IN (
+                    'tenant_id', 'request_id', 'result_status', 'failure_reason', 'latency_ms',
+                    'embedding_latency_ms', 'retrieval_latency_ms', 'generation_latency_ms',
+                    'model_id', 'provider', 'top_k', 'similarity_threshold'
+                  )
+                """,
+            Integer.class
+        );
 
-        assertThat(successfulMigrations).isEqualTo(5);
+        assertThat(successfulMigrations).isEqualTo(7);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
         assertThat(defaultAccessCount).isGreaterThanOrEqualTo(1);
+        assertThat(askObservabilityColumnCount).isEqualTo(12);
     }
 
     @Test

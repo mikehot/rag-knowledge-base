@@ -134,15 +134,20 @@ Target answer contract:
   "requestId": "...",
   "latencyMs": 0,
   "tokenUsage": 0,
-  "failureReason": null
+  "failureReason": null,
+  "timings": {
+    "embeddingMs": 0,
+    "retrievalMs": 0,
+    "generationMs": 0
+  }
 }
 ```
 
 Work:
 
 - Stabilize typed output for success, fallback, and failure responses.
-- Add request/correlation IDs and stage-level timings for embedding, retrieval, and generation.
-- Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason.
+- Add request/correlation IDs and stage-level timings for embedding, retrieval, and generation. Implemented and locally verified on 2026-09-18.
+- Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason. Implemented in Flyway V6/V7 and locally verified on PostgreSQL 16.15; CI verification is pending.
 - Add user feedback (`helpful`, `not_helpful`, optional sanitized reason).
 - Add health/readiness checks and operational metrics without logging sensitive content by default.
 

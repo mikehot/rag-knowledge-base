@@ -5,6 +5,7 @@ import com.example.ragknowledgebase.ai.AiProviderResponse;
 import com.example.ragknowledgebase.ai.EmbeddingProvider;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.common.BusinessException;
+import com.example.ragknowledgebase.common.RequestIdContext;
 import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.document.ChunkJdbcRepository;
 import com.example.ragknowledgebase.document.ChunkSearchResult;
@@ -46,36 +47,112 @@ public class AskService {
     public AskResponse ask(AuthenticatedUser user, AskRequest request) {
         String question = request.question().trim();
         enforceDailyLimit(user.userId());
+        UUID requestId = RequestIdContext.currentOrNew();
+        long totalStarted = System.nanoTime();
+        long embeddingMs = 0;
+        long retrievalMs = 0;
+        long generationMs = 0;
+        Stage stage = Stage.EMBEDDING;
+        long stageStarted = System.nanoTime();
+        AskResponse response;
+        AskResultStatus resultStatus;
         try {
             List<float[]> questionEmbeddings = embeddingProvider.embed(List.of(question));
+            embeddingMs = elapsedMs(stageStarted);
+            if (questionEmbeddings.isEmpty()) {
+                throw new IllegalStateException("Embedding 返回为空");
+            }
+
+            stage = Stage.RETRIEVAL;
+            stageStarted = System.nanoTime();
             List<ChunkSearchResult> hits = chunkRepository.search(
                 user.tenantId(),
                 user.userId(),
                 questionEmbeddings.get(0),
                 properties.rag().topK()
             );
+            retrievalMs = elapsedMs(stageStarted);
             if (hits.isEmpty() || hits.get(0).similarity() < properties.rag().similarityThreshold()) {
-                return record(user.userId(), question, new AskResponse(HANDOFF, false, List.of(), 0));
-            }
-            String prompt = buildPrompt(question, hits);
-            AiProviderResponse response = aiProvider.generate(prompt);
-            if (isHandoff(response.text())) {
-                return record(
-                    user.userId(),
-                    question,
-                    new AskResponse(HANDOFF, false, List.of(), response.tokenUsage())
+                response = response(
+                    requestId,
+                    totalStarted,
+                    HANDOFF,
+                    false,
+                    List.of(),
+                    0,
+                    AskFailureReason.RETRIEVAL_MISS,
+                    embeddingMs,
+                    retrievalMs,
+                    generationMs
                 );
+                resultStatus = AskResultStatus.NOT_FOUND;
+            } else {
+                String prompt = buildPrompt(question, hits);
+                stage = Stage.GENERATION;
+                stageStarted = System.nanoTime();
+                AiProviderResponse providerResponse = aiProvider.generate(prompt);
+                generationMs = elapsedMs(stageStarted);
+                if (isHandoff(providerResponse.text())) {
+                    response = response(
+                        requestId,
+                        totalStarted,
+                        HANDOFF,
+                        false,
+                        List.of(),
+                        providerResponse.tokenUsage(),
+                        AskFailureReason.INSUFFICIENT_CONTEXT,
+                        embeddingMs,
+                        retrievalMs,
+                        generationMs
+                    );
+                    resultStatus = AskResultStatus.NOT_FOUND;
+                } else {
+                    response = response(
+                        requestId,
+                        totalStarted,
+                        providerResponse.text(),
+                        true,
+                        hits.stream().map(this::sourceOf).toList(),
+                        providerResponse.tokenUsage(),
+                        null,
+                        embeddingMs,
+                        retrievalMs,
+                        generationMs
+                    );
+                    resultStatus = AskResultStatus.ANSWERED;
+                }
             }
-            AskResponse answer = new AskResponse(
-                response.text(),
-                true,
-                hits.stream().map(this::sourceOf).toList(),
-                response.tokenUsage()
-            );
-            return record(user.userId(), question, answer);
         } catch (Exception ex) {
-            return record(user.userId(), question, new AskResponse(TEMPORARY_UNAVAILABLE, false, List.of(), 0));
+            long failedStageMs = elapsedMs(stageStarted);
+            AskFailureReason failureReason = switch (stage) {
+                case EMBEDDING -> {
+                    embeddingMs = failedStageMs;
+                    yield AskFailureReason.EMBEDDING_ERROR;
+                }
+                case RETRIEVAL -> {
+                    retrievalMs = failedStageMs;
+                    yield AskFailureReason.RETRIEVAL_ERROR;
+                }
+                case GENERATION -> {
+                    generationMs = failedStageMs;
+                    yield AskFailureReason.GENERATION_ERROR;
+                }
+            };
+            response = response(
+                requestId,
+                totalStarted,
+                TEMPORARY_UNAVAILABLE,
+                false,
+                List.of(),
+                0,
+                failureReason,
+                embeddingMs,
+                retrievalMs,
+                generationMs
+            );
+            resultStatus = AskResultStatus.FAILED;
         }
+        return record(user, question, response, resultStatus);
     }
 
     private void enforceDailyLimit(UUID userId) {
@@ -92,9 +169,60 @@ public class AskService {
         }
     }
 
-    private AskResponse record(UUID userId, String question, AskResponse response) {
-        askLogRepository.save(new AskLog(UUID.randomUUID(), userId, question, response.found(), response.tokenUsage()));
+    private AskResponse record(
+        AuthenticatedUser user,
+        String question,
+        AskResponse response,
+        AskResultStatus resultStatus
+    ) {
+        askLogRepository.save(new AskLog(
+            UUID.randomUUID(),
+            user.tenantId(),
+            response.requestId(),
+            user.userId(),
+            question,
+            response.found(),
+            response.tokenUsage(),
+            resultStatus,
+            response.failureReason(),
+            response.latencyMs(),
+            response.timings().embeddingMs(),
+            response.timings().retrievalMs(),
+            response.timings().generationMs(),
+            properties.ai().modelId(),
+            properties.ai().provider(),
+            properties.rag().topK(),
+            properties.rag().similarityThreshold()
+        ));
         return response;
+    }
+
+    private AskResponse response(
+        UUID requestId,
+        long totalStarted,
+        String answer,
+        boolean found,
+        List<AskSourceResponse> sources,
+        int tokenUsage,
+        AskFailureReason failureReason,
+        long embeddingMs,
+        long retrievalMs,
+        long generationMs
+    ) {
+        return new AskResponse(
+            answer,
+            found,
+            sources,
+            requestId,
+            elapsedMs(totalStarted),
+            tokenUsage,
+            failureReason,
+            new AskTimingsResponse(embeddingMs, retrievalMs, generationMs)
+        );
+    }
+
+    private long elapsedMs(long startedAt) {
+        return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
     }
 
     private String buildPrompt(String question, List<ChunkSearchResult> hits) {
@@ -139,5 +267,11 @@ public class AskService {
             return compact;
         }
         return compact.substring(0, 360) + "...";
+    }
+
+    private enum Stage {
+        EMBEDDING,
+        RETRIEVAL,
+        GENERATION
     }
 }

@@ -148,7 +148,9 @@ Main endpoints:
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}/retry`
 
-`POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM.
+`POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM. Every HTTP response includes `X-Request-Id`; a valid caller-supplied UUID is preserved and an invalid value is replaced.
+
+The answer body includes `requestId`, total `latencyMs`, `tokenUsage`, a nullable typed `failureReason`, and `timings` for `embeddingMs`, `retrievalMs`, and `generationMs`. Stable failure reasons are `RETRIEVAL_MISS`, `INSUFFICIENT_CONTEXT`, `EMBEDDING_ERROR`, `RETRIEVAL_ERROR`, and `GENERATION_ERROR`. Flyway V6/V7 stores the same correlation and timing fields with provider, model, and retrieval configuration in `ask_log`; raw exception messages, prompts, and document text are not stored there.
 
 Admin endpoint boundaries:
 

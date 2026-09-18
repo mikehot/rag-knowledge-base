@@ -18,6 +18,7 @@ import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.document.ChunkJdbcRepository;
 import com.example.ragknowledgebase.document.ChunkSearchResult;
+import com.example.ragknowledgebase.observability.OperationalMetrics;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -47,6 +48,9 @@ class AskServiceTests {
     @Mock
     private AskLogRepository askLogRepository;
 
+    @Mock
+    private OperationalMetrics operationalMetrics;
+
     private AskService askService;
 
     @BeforeEach
@@ -56,7 +60,8 @@ class AskServiceTests {
             embeddingProvider,
             chunkRepository,
             aiProvider,
-            askLogRepository
+            askLogRepository,
+            operationalMetrics
         );
     }
 
@@ -242,7 +247,8 @@ class AskServiceTests {
             embeddingProvider,
             chunkRepository,
             aiProvider,
-            askLogRepository
+            askLogRepository,
+            operationalMetrics
         );
         when(askLogRepository.countByUserIdAndCreatedAtAfter(any(UUID.class), any(OffsetDateTime.class)))
             .thenReturn(2L);

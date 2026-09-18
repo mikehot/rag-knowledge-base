@@ -9,6 +9,7 @@ import com.example.ragknowledgebase.common.RequestIdContext;
 import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.document.ChunkJdbcRepository;
 import com.example.ragknowledgebase.document.ChunkSearchResult;
+import com.example.ragknowledgebase.observability.OperationalMetrics;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -28,19 +29,22 @@ public class AskService {
     private final ChunkJdbcRepository chunkRepository;
     private final AiProvider aiProvider;
     private final AskLogRepository askLogRepository;
+    private final OperationalMetrics operationalMetrics;
 
     public AskService(
         AppProperties properties,
         EmbeddingProvider embeddingProvider,
         ChunkJdbcRepository chunkRepository,
         AiProvider aiProvider,
-        AskLogRepository askLogRepository
+        AskLogRepository askLogRepository,
+        OperationalMetrics operationalMetrics
     ) {
         this.properties = properties;
         this.embeddingProvider = embeddingProvider;
         this.chunkRepository = chunkRepository;
         this.aiProvider = aiProvider;
         this.askLogRepository = askLogRepository;
+        this.operationalMetrics = operationalMetrics;
     }
 
     @Transactional
@@ -194,6 +198,7 @@ public class AskService {
             properties.rag().topK(),
             properties.rag().similarityThreshold()
         ));
+        operationalMetrics.recordAsk(response, resultStatus);
         return response;
     }
 

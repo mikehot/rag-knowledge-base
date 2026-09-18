@@ -35,6 +35,35 @@ logging:
   pattern:
     level: "%5p [requestId:%X{requestId:--}]"
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState,ping
+        readiness:
+          include: readinessState,db,diskSpace
+  metrics:
+    tags:
+      application: rag-knowledge-base
+    distribution:
+      percentiles-histogram:
+        rag.ask.duration: true
+        rag.ask.stage.duration: true
+        rag.index.duration: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
 app:
   auth:
     default-username: ${APP_DEFAULT_USERNAME:demo}

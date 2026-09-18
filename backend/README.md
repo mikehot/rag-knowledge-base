@@ -26,6 +26,16 @@ Swagger UI:
 http://localhost:8080/swagger-ui.html
 ```
 
+Operational endpoints:
+
+- `GET /actuator/health`, `/livez`, and `/readyz` are public status-only probes; health details are disabled.
+- `GET /actuator/metrics` and `/actuator/prometheus` require a valid JWT plus `SYSTEM_ADMIN` or `AUDITOR`; keep them behind an internal network boundary in a real deployment as well.
+- Readiness covers Spring readiness state, database connectivity, and disk space. Liveness does not call the database or AI Provider.
+- Business meters include `rag.ask.requests`, `rag.ask.duration`, `rag.ask.stage.duration`, `rag.ask.tokens`, `rag.index.tasks`, and `rag.index.duration`; duration histograms support P50/P95 calculation in the metrics backend.
+- Business metric tags are restricted to fixed `result`, `failure`, and `stage` values. Tenant IDs, user IDs, questions, document content, Prompt text, and raw Provider errors are not metric labels.
+
+The Prometheus endpoint is a scrape target, not a public application API. Keep it behind authentication or an internal network boundary in deployment.
+
 Login:
 
 ```bash

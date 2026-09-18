@@ -8,7 +8,7 @@
 
 仓库已具备 JWT、PDF/DOCX/TXT/Markdown 入库、pgvector 向量检索、相似度拒答、引用、Token 记录、Flutter 问答与文档管理等 MVP 代码。Milestone 2 已进入后半程：Flyway migration、tenant/department/role/knowledge-base/document ACL schema、SQL 查询阶段权限过滤、最小管理 API、文档生命周期、拒绝审计和只读审计查询 API 已经落地。
 
-持久化索引任务、批量重建、自动/人工失败重试、幂等入队、任务状态观测和进程重启恢复已经通过 PostgreSQL CI 与本地真实 Provider 验证。问答现已具备请求关联 ID、总/分段耗时、稳定失败分类、数据库观测字段，以及绑定原提问用户和 tenant 的反馈 API；运营指标、20 题评测、Agent Tool 和 MCP 尚未完成。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
+持久化索引任务、批量重建、自动/人工失败重试、幂等入队、任务状态观测和进程重启恢复已经通过 PostgreSQL CI 与本地真实 Provider 验证。问答现已具备请求关联 ID、总/分段耗时、稳定失败分类、数据库观测字段，以及绑定原提问用户和 tenant 的反馈 API；Actuator 存活/就绪探针和第一组低基数 RAG/索引指标已完成本地测试，远端 CI 证据待补。完整运营指标、20 题评测、Agent Tool 和 MCP 尚未完成。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
 
 当前验证状态与已知限制见 [PROGRESS.md](PROGRESS.md)。
 

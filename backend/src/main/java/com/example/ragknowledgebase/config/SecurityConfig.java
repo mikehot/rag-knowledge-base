@@ -1,11 +1,14 @@
 package com.example.ragknowledgebase.config;
 
+import com.example.ragknowledgebase.auth.AccessControlService;
+import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.auth.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -19,18 +22,29 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
-        JwtAuthenticationFilter jwtAuthenticationFilter
+        JwtAuthenticationFilter jwtAuthenticationFilter,
+        AccessControlService accessControlService
     ) throws Exception {
         return http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/metrics/**", "/actuator/prometheus")
+                .access((authentication, context) -> {
+                    Object principal = authentication.get().getPrincipal();
+                    boolean allowed = principal instanceof AuthenticatedUser user
+                        && accessControlService.canReadAuditEvents(user);
+                    return new AuthorizationDecision(allowed);
+                })
                 .requestMatchers(
                     "/api/auth/login",
                     "/v3/api-docs/**",
                     "/swagger-ui.html",
                     "/swagger-ui/**",
-                    "/actuator/health"
+                    "/actuator/health",
+                    "/actuator/health/**",
+                    "/livez",
+                    "/readyz"
                 ).permitAll()
                 .anyRequest().authenticated()
             )

@@ -8,6 +8,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface DocumentRepository extends JpaRepository<KnowledgeDocument, UUID> {
+    List<KnowledgeDocument> findByTenantIdAndKnowledgeBaseIdAndDeletedAtIsNullAndDisabledAtIsNull(
+        UUID tenantId,
+        UUID knowledgeBaseId
+    );
+
     Optional<KnowledgeDocument> findByTenantIdAndKnowledgeBaseIdAndChecksumAndDeletedAtIsNull(
         UUID tenantId,
         UUID knowledgeBaseId,

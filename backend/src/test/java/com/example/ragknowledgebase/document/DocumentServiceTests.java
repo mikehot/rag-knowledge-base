@@ -14,6 +14,9 @@ import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.storage.FileStorageService;
+import com.example.ragknowledgebase.indexing.IndexTaskRecord;
+import com.example.ragknowledgebase.indexing.IndexTaskService;
+import java.time.Instant;
 import java.util.Optional;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -24,7 +27,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,7 +50,7 @@ class DocumentServiceTests {
     private FileStorageService fileStorageService;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private IndexTaskService indexTaskService;
 
     @Mock
     private AuditService auditService;
@@ -63,7 +65,7 @@ class DocumentServiceTests {
             accessControlService,
             chunkRepository,
             fileStorageService,
-            eventPublisher,
+            indexTaskService,
             auditService
         );
     }
@@ -177,7 +179,7 @@ class DocumentServiceTests {
     }
 
     @Test
-    void reindexDeletesChunksBumpsVersionAndPublishesEvent() {
+    void reindexQueuesPersistentTaskWithoutDeletingChunksEarly() {
         KnowledgeDocument document = new KnowledgeDocument(
             DOCUMENT_ID,
             TENANT_ID,
@@ -190,15 +192,16 @@ class DocumentServiceTests {
         document.markReady(2);
         when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(true);
         when(documentRepository.findById(DOCUMENT_ID)).thenReturn(Optional.of(document));
+        when(indexTaskService.enqueue(USER, document, "REINDEX", null)).thenReturn(task("REINDEX", 2, null));
 
         DocumentLifecycleResponse response = documentService.reindex(USER, DOCUMENT_ID);
 
         assertThat(response.status()).isEqualTo("processing");
         assertThat(response.contentVersion()).isEqualTo(2);
         assertThat(response.permissionVersion()).isEqualTo(1);
-        verify(chunkRepository).deleteByDocumentId(DOCUMENT_ID);
-        verify(documentRepository).save(document);
-        verify(eventPublisher).publishEvent(new DocumentCreatedEvent(DOCUMENT_ID));
+        assertThat(response.taskId()).isNotNull();
+        verify(chunkRepository, never()).deleteByDocumentId(DOCUMENT_ID);
+        verify(indexTaskService).enqueue(USER, document, "REINDEX", null);
     }
 
     @Test
@@ -231,6 +234,8 @@ class DocumentServiceTests {
         )).thenReturn(Optional.empty());
         when(fileStorageService.storeVersion(DOCUMENT_ID, 2, file))
             .thenReturn(new FileStorageService.StoredFile("faq-v2.md", "md", "/tmp/faq-v2.md"));
+        when(indexTaskService.enqueue(USER, document, "REPLACE", previous))
+            .thenReturn(task("REPLACE", 2, previous));
 
         DocumentReplaceResponse response = documentService.replace(USER, DOCUMENT_ID, file);
 
@@ -241,8 +246,7 @@ class DocumentServiceTests {
         assertThat(document.getFilePath()).isEqualTo("/tmp/faq-v2.md");
         assertThat(document.getChecksum()).isEqualTo(checksum("new content"));
         verify(chunkRepository, never()).deleteByDocumentId(DOCUMENT_ID);
-        verify(documentRepository).save(document);
-        verify(eventPublisher).publishEvent(new DocumentCreatedEvent(DOCUMENT_ID, previous));
+        verify(indexTaskService).enqueue(USER, document, "REPLACE", previous);
     }
 
     @Test
@@ -279,8 +283,7 @@ class DocumentServiceTests {
         assertThat(response.contentVersion()).isEqualTo(1);
         assertThat(response.status()).isEqualTo("ready");
         verify(fileStorageService, never()).storeVersion(any(), org.mockito.ArgumentMatchers.anyInt(), any());
-        verify(documentRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
+        verify(indexTaskService, never()).enqueue(any(), any(), any(), any());
     }
 
     @Test
@@ -310,6 +313,28 @@ class DocumentServiceTests {
 
     private String checksum(String content) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content.getBytes()));
+    }
+
+    private IndexTaskRecord task(String operation, int contentVersion, DocumentContentSnapshot rollbackContent) {
+        return new IndexTaskRecord(
+            UUID.randomUUID(),
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            DOCUMENT_ID,
+            USER_ID,
+            operation,
+            contentVersion,
+            "PENDING",
+            0,
+            3,
+            null,
+            Instant.now(),
+            null,
+            null,
+            null,
+            rollbackContent,
+            Instant.now()
+        );
     }
 
     private AppProperties properties() {

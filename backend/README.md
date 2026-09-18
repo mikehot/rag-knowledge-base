@@ -57,6 +57,8 @@ All secrets and runtime choices are environment variables.
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
 | `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text` | Default local embedding model |
+| `INDEX_TASKS_ENABLED` | `true` | Enable after-commit dispatch and persistent queue polling |
+| `INDEX_TASK_POLL_DELAY_MS` | `15000` | Delay between recovery/queue polls |
 
 The Java `HttpClient` for chat and embedding explicitly uses `HTTP_1_1`, matching the `ai-weekly-report` local provider fix.
 
@@ -69,6 +71,7 @@ The Java `HttpClient` for chat and embedding explicitly uses `HTTP_1_1`, matchin
 - Flyway owns schema changes in `src/main/resources/db/migration`.
 - V1 creates the original RAG schema and `vector(${AI_EMBEDDING_DIM})` column.
 - V2 adds tenant, department, role, knowledge-base membership, document lifecycle metadata, and document ACL tables.
+- V5 adds persistent indexing tasks for upload, replacement, single reindex, and batch reindex.
 - `spring.jpa.hibernate.ddl-auto=validate`; application startup fails when entity mappings and the migrated schema disagree.
 - `baseline-on-migrate=true` upgrades the pre-Flyway MVP database by recording it as V1 before applying V2. Back up a real deployment before its first migration.
 - The fixed default tenant and knowledge-base IDs are compatibility identities for the local V0.1 environment; they are not request-controlled values.
@@ -138,6 +141,10 @@ Main endpoints:
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
 - `DELETE /api/admin/knowledge-bases/{knowledgeBaseId}/memberships/{membershipId}`
 - `GET /api/admin/audit-events`
+- `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/batch-reindex`
+- `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks`
+- `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}`
+- `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}/retry`
 
 `POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM.
 
@@ -148,6 +155,7 @@ Admin endpoint boundaries:
 - Knowledge-base creation, activation, and disabling require `SYSTEM_ADMIN`.
 - Knowledge-base membership administration requires `MANAGE` on that knowledge base.
 - Audit-event queries require `SYSTEM_ADMIN` or `AUDITOR` and are always restricted to the caller's tenant.
+- Index-task batch creation, status queries, and manual retry require `MANAGE` on the target knowledge base.
 - Creating a user defaults to the `EMPLOYEE` role when `roleCodes` is omitted.
 
 Role matrix:
@@ -172,8 +180,13 @@ Document lifecycle boundaries:
 - Upload calculates SHA-256 and returns the existing undeleted document when the same checksum already exists in the same knowledge base.
 - Delete is a soft delete for the document row, but clears chunks and deletes the raw uploaded file.
 - Disable hides a document from list, detail, and retrieval without deleting its row or raw file.
-- Reindex clears existing chunks, increments `contentVersion`, marks the document as `processing`, and publishes a processing event.
+- Upload, reindex, and replacement persist an `index_task` before asynchronous processing starts. API responses include `taskId` for newly queued work.
+- Reindex increments `contentVersion` and marks the document as `processing`; existing chunks are retained until the replacement index is ready, then swapped transactionally.
 - Replace accepts a multipart `file`, requires document `MANAGE`, and rejects disabled or already-processing documents.
 - Replacing with the current checksum is idempotent (`unchanged=true`); matching another active document in the same knowledge base returns `409`.
 - A replacement is stored under a versioned path and increments `contentVersion`. Existing chunks and the old raw file remain intact until parsing and embedding succeed.
 - Successful processing swaps chunks transactionally and cleans the old raw file after commit. Parser or embedding failure restores the previous metadata/version/status, keeps the old chunks searchable, and cleans the failed replacement file.
+- Task identity is `documentId:contentVersion`, so repeated enqueue attempts return the same task. Workers claim due tasks with PostgreSQL `FOR UPDATE SKIP LOCKED`.
+- Failed work retries automatically up to three attempts with bounded backoff. Final failures retain the sanitized reason, attempt count, start/end time, and duration; a manager can explicitly queue another three attempts for upload/reindex work.
+- A failed replacement restores the prior document and deletes the failed staged file, so that old replacement task cannot be retried; submit the replacement file again to create a new version/task.
+- A startup/poll recovery pass returns stale `RUNNING` tasks to `PENDING`. This is an in-process PostgreSQL queue for V0.1, not a distributed message-broker guarantee.

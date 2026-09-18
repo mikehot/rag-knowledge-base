@@ -55,6 +55,9 @@ app:
     default-tenant-id: 00000000-0000-0000-0000-000000000001
     default-knowledge-base-id: 00000000-0000-0000-0000-000000000101
     initialize-default-access: true
+  indexing:
+    enabled: ${INDEX_TASKS_ENABLED:true}
+    poll-delay-ms: ${INDEX_TASK_POLL_DELAY_MS:15000}
   ai:
     provider: ${AI_PROVIDER:openai-compatible}
     base-url: ${AI_BASE_URL:http://localhost:1234/v1}

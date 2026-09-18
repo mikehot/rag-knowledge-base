@@ -8,7 +8,8 @@ public record DocumentLifecycleResponse(
     int contentVersion,
     int permissionVersion,
     boolean disabled,
-    boolean deleted
+    boolean deleted,
+    UUID taskId
 ) {
     public static DocumentLifecycleResponse from(KnowledgeDocument document) {
         return new DocumentLifecycleResponse(
@@ -17,7 +18,20 @@ public record DocumentLifecycleResponse(
             document.getContentVersion(),
             document.getPermissionVersion(),
             document.getDisabledAt() != null,
-            document.getDeletedAt() != null
+            document.getDeletedAt() != null,
+            null
+        );
+    }
+
+    public static DocumentLifecycleResponse from(KnowledgeDocument document, UUID taskId) {
+        return new DocumentLifecycleResponse(
+            document.getId(),
+            document.getStatus().apiValue(),
+            document.getContentVersion(),
+            document.getPermissionVersion(),
+            document.getDisabledAt() != null,
+            document.getDeletedAt() != null,
+            taskId
         );
     }
 }

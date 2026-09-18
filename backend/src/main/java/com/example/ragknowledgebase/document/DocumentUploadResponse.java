@@ -5,6 +5,7 @@ import java.util.UUID;
 public record DocumentUploadResponse(
     UUID documentId,
     String status,
-    boolean duplicated
+    boolean duplicated,
+    UUID taskId
 ) {
 }

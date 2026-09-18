@@ -10,5 +10,7 @@ spring:
     enabled: false
 
 app:
+  indexing:
+    enabled: false
   enterprise:
     initialize-default-access: false

@@ -15,6 +15,8 @@ import com.example.ragknowledgebase.audit.AuditQueryService;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.DocumentRepository;
 import com.example.ragknowledgebase.document.DocumentService;
+import com.example.ragknowledgebase.indexing.IndexTaskRepository;
+import com.example.ragknowledgebase.indexing.IndexTaskService;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -70,6 +72,12 @@ class PostgresEnterpriseIntegrationTests {
     private DocumentService documentService;
 
     @Autowired
+    private IndexTaskRepository indexTaskRepository;
+
+    @Autowired
+    private IndexTaskService indexTaskService;
+
+    @Autowired
     private AccessControlService accessControlService;
 
     @Autowired
@@ -83,6 +91,7 @@ class PostgresEnterpriseIntegrationTests {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("app.indexing.enabled", () -> "false");
     }
 
     @BeforeEach
@@ -143,7 +152,7 @@ class PostgresEnterpriseIntegrationTests {
             Integer.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(4);
+        assertThat(successfulMigrations).isEqualTo(5);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
@@ -470,9 +479,8 @@ class PostgresEnterpriseIntegrationTests {
 
         assertThat(reindex.status()).isEqualTo("processing");
         assertThat(reindex.contentVersion()).isEqualTo(2);
-        assertThat(countChunks(DOCUMENT_ID)).isZero();
-
-        insertChunk();
+        assertThat(reindex.taskId()).isNotNull();
+        assertThat(countChunks(DOCUMENT_ID)).isEqualTo(1);
 
         assertThat(documentService.delete(admin, DOCUMENT_ID).deleted()).isTrue();
         assertThat(countChunks(DOCUMENT_ID)).isZero();
@@ -505,6 +513,7 @@ class PostgresEnterpriseIntegrationTests {
             assertThat(response.status()).isEqualTo("processing");
             assertThat(response.contentVersion()).isEqualTo(2);
             assertThat(response.unchanged()).isFalse();
+            assertThat(response.taskId()).isNotNull();
             assertThat(countChunks(DOCUMENT_ID)).isEqualTo(1);
             assertThat(Files.exists(oldFile)).isTrue();
             assertThat(Files.exists(newFile)).isTrue();
@@ -518,6 +527,78 @@ class PostgresEnterpriseIntegrationTests {
             Files.deleteIfExists(newFile);
             Files.deleteIfExists(oldFile);
         }
+    }
+
+    @Test
+    void persistentIndexTasksAreBatchCreatedIdempotentObservableAndRetryable() {
+        insertUser(OWNER_ID, "index-admin-it");
+        insertUser(READER_ID, "index-reader-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        insertDocument();
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "index-admin-it");
+        AuthenticatedUser reader = new AuthenticatedUser(READER_ID, TENANT_ID, "index-reader-it");
+
+        var batch = indexTaskService.batchReindex(admin, KNOWLEDGE_BASE_ID);
+
+        assertThat(batch.taskCount()).isEqualTo(1);
+        assertThat(batch.taskIds()).hasSize(1);
+        UUID taskId = batch.taskIds().get(0);
+        var pending = indexTaskService.get(admin, KNOWLEDGE_BASE_ID, taskId);
+        assertThat(pending.status()).isEqualTo("PENDING");
+        assertThat(pending.operation()).isEqualTo("REINDEX");
+        assertThat(pending.contentVersion()).isEqualTo(2);
+        assertThat(pending.attemptCount()).isZero();
+        assertThat(pending.createdAt()).isNotNull();
+
+        var duplicate = indexTaskRepository.enqueue(
+            TENANT_ID,
+            KNOWLEDGE_BASE_ID,
+            DOCUMENT_ID,
+            OWNER_ID,
+            "REINDEX",
+            2,
+            null
+        );
+        assertThat(duplicate.id()).isEqualTo(taskId);
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM index_task WHERE document_id = ? AND content_version = 2",
+            Integer.class,
+            DOCUMENT_ID
+        )).isEqualTo(1);
+
+        var claimed = indexTaskRepository.claimNext().orElseThrow();
+        assertThat(claimed.id()).isEqualTo(taskId);
+        assertThat(claimed.status()).isEqualTo("RUNNING");
+        assertThat(claimed.attemptCount()).isEqualTo(1);
+        assertThat(claimed.startedAt()).isNotNull();
+
+        indexTaskRepository.markFailed(taskId, "integration failure");
+        var failed = indexTaskService.get(admin, KNOWLEDGE_BASE_ID, taskId);
+        assertThat(failed.status()).isEqualTo("FAILED");
+        assertThat(failed.errorMessage()).isEqualTo("integration failure");
+        assertThat(failed.finishedAt()).isNotNull();
+        assertThat(failed.durationMs()).isNotNull().isGreaterThanOrEqualTo(0);
+
+        jdbcTemplate.update("UPDATE document SET status = 'FAILED', error_msg = 'integration failure' WHERE id = ?", DOCUMENT_ID);
+        var retried = indexTaskService.retry(admin, KNOWLEDGE_BASE_ID, taskId);
+        assertThat(retried.status()).isEqualTo("PENDING");
+        assertThat(retried.errorMessage()).isNull();
+        assertThat(retried.maxAttempts()).isEqualTo(4);
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT status FROM document WHERE id = ?",
+            String.class,
+            DOCUMENT_ID
+        )).isEqualTo("PROCESSING");
+        assertThat(indexTaskService.list(admin, KNOWLEDGE_BASE_ID, "pending", 20).items())
+            .extracting("id")
+            .containsExactly(taskId);
+
+        assertThatThrownBy(() -> indexTaskService.list(reader, KNOWLEDGE_BASE_ID, null, 20))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(403);
+        assertThat(countDeniedAudit(READER_ID, "INDEX_TASK_LIST", "KNOWLEDGE_BASE", KNOWLEDGE_BASE_ID))
+            .isEqualTo(1);
     }
 
     private void insertUser(UUID id, String username) {

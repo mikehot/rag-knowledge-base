@@ -41,29 +41,24 @@ public class DocumentProcessor {
 
     @Transactional
     public void process(UUID documentId, DocumentContentSnapshot rollbackContent) {
-        KnowledgeDocument document = documentRepository.findById(documentId).orElse(null);
-        if (document == null) {
-            return;
-        }
-        if (document.getDeletedAt() != null || document.getDisabledAt() != null) {
-            return;
-        }
-        List<ChunkRecord> chunks;
         try {
-            chunks = prepareChunks(document);
+            processOrThrow(documentId, rollbackContent);
         } catch (Exception ex) {
-            String failedFilePath = document.getFilePath();
-            if (rollbackContent != null) {
-                document.restoreContent(rollbackContent);
-                eventPublisher.publishEvent(new DocumentFileCleanupEvent(failedFilePath));
-            } else {
-                chunkRepository.deleteByDocumentId(document.getId());
-                document.markFailed(messageOf(ex));
-            }
-            documentRepository.save(document);
-            return;
+            fail(documentId, rollbackContent, messageOf(ex));
         }
+    }
 
+    @Transactional
+    public void processOrThrow(UUID documentId, DocumentContentSnapshot rollbackContent) {
+        KnowledgeDocument document = documentRepository.findById(documentId)
+            .orElseThrow(() -> new IllegalStateException("文档不存在"));
+        if (document.getDeletedAt() != null) {
+            throw new IllegalStateException("文档已删除");
+        }
+        if (document.getDisabledAt() != null) {
+            throw new IllegalStateException("文档已停用");
+        }
+        List<ChunkRecord> chunks = prepareChunks(document);
         chunkRepository.deleteByDocumentId(document.getId());
         chunkRepository.insertAll(chunks);
         document.markReady(chunks.size());
@@ -71,6 +66,22 @@ public class DocumentProcessor {
         if (rollbackContent != null) {
             eventPublisher.publishEvent(new DocumentFileCleanupEvent(rollbackContent.filePath()));
         }
+    }
+
+    @Transactional
+    public void fail(UUID documentId, DocumentContentSnapshot rollbackContent, String errorMessage) {
+        KnowledgeDocument document = documentRepository.findById(documentId).orElse(null);
+        if (document == null) {
+            return;
+        }
+        String failedFilePath = document.getFilePath();
+        if (rollbackContent != null) {
+            document.restoreContent(rollbackContent);
+            eventPublisher.publishEvent(new DocumentFileCleanupEvent(failedFilePath));
+        } else {
+            document.markFailed(errorMessage);
+        }
+        documentRepository.save(document);
     }
 
     private List<ChunkRecord> prepareChunks(KnowledgeDocument document) {

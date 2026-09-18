@@ -7,6 +7,8 @@ import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.storage.FileStorageService;
 import com.example.ragknowledgebase.storage.FileStorageService.StoredFile;
+import com.example.ragknowledgebase.indexing.IndexTaskRecord;
+import com.example.ragknowledgebase.indexing.IndexTaskService;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -16,7 +18,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -30,7 +31,7 @@ public class DocumentService {
     private final AccessControlService accessControlService;
     private final ChunkJdbcRepository chunkRepository;
     private final FileStorageService fileStorageService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final IndexTaskService indexTaskService;
     private final AuditService auditService;
 
     public DocumentService(
@@ -39,7 +40,7 @@ public class DocumentService {
         AccessControlService accessControlService,
         ChunkJdbcRepository chunkRepository,
         FileStorageService fileStorageService,
-        ApplicationEventPublisher eventPublisher,
+        IndexTaskService indexTaskService,
         AuditService auditService
     ) {
         this.documentRepository = documentRepository;
@@ -47,7 +48,7 @@ public class DocumentService {
         this.accessControlService = accessControlService;
         this.chunkRepository = chunkRepository;
         this.fileStorageService = fileStorageService;
-        this.eventPublisher = eventPublisher;
+        this.indexTaskService = indexTaskService;
         this.auditService = auditService;
     }
 
@@ -74,7 +75,8 @@ public class DocumentService {
             return new DocumentUploadResponse(
                 existing.get().getId(),
                 existing.get().getStatus().apiValue(),
-                true
+                true,
+                null
             );
         }
         UUID documentId = UUID.randomUUID();
@@ -89,9 +91,8 @@ public class DocumentService {
             stored.path(),
             checksum
         );
-        documentRepository.save(document);
-        eventPublisher.publishEvent(new DocumentCreatedEvent(documentId));
-        return new DocumentUploadResponse(documentId, DocumentStatus.PROCESSING.apiValue(), false);
+        IndexTaskRecord task = indexTaskService.enqueue(user, document, "UPLOAD", null);
+        return new DocumentUploadResponse(documentId, DocumentStatus.PROCESSING.apiValue(), false, task.id());
     }
 
     @Transactional(readOnly = true)
@@ -155,12 +156,10 @@ public class DocumentService {
         if (document.getDisabledAt() != null) {
             throw new BusinessException(409, "文档已停用，启用后再重建索引");
         }
-        chunkRepository.deleteByDocumentId(document.getId());
         document.bumpContentVersion();
         document.markProcessing();
-        documentRepository.save(document);
-        eventPublisher.publishEvent(new DocumentCreatedEvent(documentId));
-        return DocumentLifecycleResponse.from(document);
+        IndexTaskRecord task = indexTaskService.enqueue(user, document, "REINDEX", null);
+        return DocumentLifecycleResponse.from(document, task.id());
     }
 
     @Transactional
@@ -181,7 +180,7 @@ public class DocumentService {
         );
         if (checksumMatch.isPresent()) {
             if (checksumMatch.get().getId().equals(documentId)) {
-                return DocumentReplaceResponse.from(document, true);
+                return DocumentReplaceResponse.from(document, true, null);
             }
             throw new BusinessException(409, "相同内容已存在于当前知识库");
         }
@@ -190,9 +189,8 @@ public class DocumentService {
         StoredFile stored = fileStorageService.storeVersion(documentId, document.getContentVersion() + 1, file);
         deleteStoredFileOnRollback(stored.path());
         document.replaceContent(stored.originalName(), stored.extension(), stored.path(), checksum);
-        documentRepository.save(document);
-        eventPublisher.publishEvent(new DocumentCreatedEvent(documentId, rollbackContent));
-        return DocumentReplaceResponse.from(document, false);
+        IndexTaskRecord task = indexTaskService.enqueue(user, document, "REPLACE", rollbackContent);
+        return DocumentReplaceResponse.from(document, false, task.id());
     }
 
     private KnowledgeDocument manageableDocument(AuthenticatedUser user, UUID documentId, String action) {

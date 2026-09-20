@@ -24,12 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class AskService {
     private static final String HANDOFF = "未找到相关信息，建议转人工。";
     private static final String TEMPORARY_UNAVAILABLE = "暂时无法检索资料，建议转人工。";
+    private static final String STRUCTURED_OUTPUT_FALLBACK = "暂时无法生成可验证的回答，建议转人工。";
+    private static final String CITATION_FALLBACK = "回答缺少可验证引用，建议转人工。";
 
     private final AppProperties properties;
     private final EmbeddingProvider embeddingProvider;
     private final ChunkJdbcRepository chunkRepository;
     private final AiProvider aiProvider;
     private final AskLogRepository askLogRepository;
+    private final AskRetrievalHitRepository retrievalHitRepository;
     private final OperationalMetrics operationalMetrics;
 
     public AskService(
@@ -38,6 +41,7 @@ public class AskService {
         ChunkJdbcRepository chunkRepository,
         AiProvider aiProvider,
         AskLogRepository askLogRepository,
+        AskRetrievalHitRepository retrievalHitRepository,
         OperationalMetrics operationalMetrics
     ) {
         this.properties = properties;
@@ -45,6 +49,7 @@ public class AskService {
         this.chunkRepository = chunkRepository;
         this.aiProvider = aiProvider;
         this.askLogRepository = askLogRepository;
+        this.retrievalHitRepository = retrievalHitRepository;
         this.operationalMetrics = operationalMetrics;
     }
 
@@ -57,6 +62,7 @@ public class AskService {
         long embeddingMs = 0;
         long retrievalMs = 0;
         long generationMs = 0;
+        List<ChunkSearchResult> retrievalHits = List.of();
         Stage stage = Stage.EMBEDDING;
         long stageStarted = System.nanoTime();
         AskResponse response;
@@ -76,12 +82,14 @@ public class AskService {
                 questionEmbeddings.get(0),
                 properties.rag().topK()
             );
+            retrievalHits = hits;
             retrievalMs = elapsedMs(stageStarted);
             if (hits.isEmpty() || hits.get(0).similarity() < properties.rag().similarityThreshold()) {
                 response = response(
                     requestId,
                     totalStarted,
                     HANDOFF,
+                    false,
                     false,
                     List.of(),
                     0,
@@ -97,11 +105,32 @@ public class AskService {
                 stageStarted = System.nanoTime();
                 AiProviderResponse providerResponse = aiProvider.generate(prompt);
                 generationMs = elapsedMs(stageStarted);
-                if (isHandoff(providerResponse.text())) {
+                StructuredAnswer structuredAnswer;
+                try {
+                    structuredAnswer = new StructuredOutputParser().parse(providerResponse.text());
+                } catch (StructuredOutputException ex) {
+                    response = response(
+                        requestId,
+                        totalStarted,
+                        STRUCTURED_OUTPUT_FALLBACK,
+                        false,
+                        false,
+                        List.of(),
+                        providerResponse.tokenUsage(),
+                        AskFailureReason.STRUCTURED_OUTPUT_INVALID,
+                        embeddingMs,
+                        retrievalMs,
+                        generationMs
+                    );
+                    resultStatus = AskResultStatus.FAILED;
+                    return record(user, question, response, resultStatus, retrievalHits);
+                }
+                if (!structuredAnswer.found()) {
                     response = response(
                         requestId,
                         totalStarted,
                         HANDOFF,
+                        false,
                         false,
                         List.of(),
                         providerResponse.tokenUsage(),
@@ -111,13 +140,29 @@ public class AskService {
                         generationMs
                     );
                     resultStatus = AskResultStatus.NOT_FOUND;
+                } else if (!hasValidCitations(structuredAnswer, hits)) {
+                    response = response(
+                        requestId,
+                        totalStarted,
+                        CITATION_FALLBACK,
+                        false,
+                        false,
+                        List.of(),
+                        providerResponse.tokenUsage(),
+                        AskFailureReason.CITATION_MISSING,
+                        embeddingMs,
+                        retrievalMs,
+                        generationMs
+                    );
+                    resultStatus = AskResultStatus.FAILED;
                 } else {
                     response = response(
                         requestId,
                         totalStarted,
-                        providerResponse.text(),
+                        structuredAnswer.answer(),
                         true,
-                        hits.stream().map(this::sourceOf).toList(),
+                        structuredAnswer.grounded(),
+                        sourcesOf(hits, structuredAnswer.sourceIndexes()),
                         providerResponse.tokenUsage(),
                         null,
                         embeddingMs,
@@ -132,7 +177,7 @@ public class AskService {
             AskFailureReason failureReason = switch (stage) {
                 case EMBEDDING -> {
                     embeddingMs = failedStageMs;
-                    yield isTimeout(ex)
+                    yield AiCallException.isTimeout(ex)
                         ? AskFailureReason.EMBEDDING_TIMEOUT
                         : AskFailureReason.EMBEDDING_ERROR;
                 }
@@ -142,7 +187,7 @@ public class AskService {
                 }
                 case GENERATION -> {
                     generationMs = failedStageMs;
-                    yield isTimeout(ex)
+                    yield AiCallException.isTimeout(ex)
                         ? AskFailureReason.GENERATION_TIMEOUT
                         : AskFailureReason.GENERATION_ERROR;
                 }
@@ -151,6 +196,7 @@ public class AskService {
                 requestId,
                 totalStarted,
                 TEMPORARY_UNAVAILABLE,
+                false,
                 false,
                 List.of(),
                 0,
@@ -161,7 +207,7 @@ public class AskService {
             );
             resultStatus = AskResultStatus.FAILED;
         }
-        return record(user, question, response, resultStatus);
+        return record(user, question, response, resultStatus, retrievalHits);
     }
 
     private void enforceDailyLimit(UUID userId) {
@@ -182,9 +228,10 @@ public class AskService {
         AuthenticatedUser user,
         String question,
         AskResponse response,
-        AskResultStatus resultStatus
+        AskResultStatus resultStatus,
+        List<ChunkSearchResult> retrievalHits
     ) {
-        askLogRepository.save(new AskLog(
+        AskLog askLog = new AskLog(
             UUID.randomUUID(),
             user.tenantId(),
             response.requestId(),
@@ -202,7 +249,10 @@ public class AskService {
             properties.ai().provider(),
             properties.rag().topK(),
             properties.rag().similarityThreshold()
-        ));
+        );
+        askLogRepository.save(askLog);
+        askLogRepository.flush();
+        retrievalHitRepository.saveAll(askLog.getId(), user.tenantId(), retrievalHits);
         operationalMetrics.recordAsk(response, resultStatus);
         return response;
     }
@@ -212,6 +262,7 @@ public class AskService {
         long totalStarted,
         String answer,
         boolean found,
+        boolean grounded,
         List<AskSourceResponse> sources,
         int tokenUsage,
         AskFailureReason failureReason,
@@ -222,6 +273,7 @@ public class AskService {
         return new AskResponse(
             answer,
             found,
+            grounded,
             sources,
             requestId,
             elapsedMs(totalStarted),
@@ -239,6 +291,7 @@ public class AskService {
         StringBuilder builder = new StringBuilder();
         builder.append("你是知识库问答助手。只能根据下面提供的资料片段回答用户问题，不得编造。\n")
             .append("若资料不足以回答，请直接回复：\"未找到相关信息，建议转人工。\"\n\n")
+            .append("如果问题包含多个部分（例如‘以及’、‘分别’、‘同时’、‘综合’），请先在内部拆成编号清单，再按编号逐项回答。每一项必须给出资料中的具体动作、条件、数字或时间；不能用‘确认’、‘注意检查’等空泛短语代替具体检查项。回答结束前，逐项核对用户问题中的每个动作和对象都已经覆盖，资料中明确的数字、时间、条件或双方责任必须完整保留，不要只回答其中一半。\n\n")
             .append("【资料片段】\n");
         for (int i = 0; i < hits.size(); i++) {
             ChunkSearchResult hit = hits.get(i);
@@ -254,23 +307,25 @@ public class AskService {
         }
         builder.append("【用户问题】\n")
             .append(question)
-            .append("\n\n请用中文简洁回答，并在末尾不要重复来源（来源由系统单独展示）。");
+            .append("\n\n请用中文简洁回答，并在末尾不要重复来源（来源由系统单独展示）。")
+            .append("\n\n必须只输出一个 JSON 对象，不要输出 Markdown、解释文字或代码围栏。JSON 字段必须是：")
+            .append("answer（字符串）、found（布尔值）、grounded（布尔值）、sourceIndexes（正整数数组）。")
+            .append("sourceIndexes 只能引用上面资料片段的编号；found=false 时 answer 必须为未找到相关信息，grounded=false 且 sourceIndexes=[]。")
+            .append("found=true 时必须 grounded=true、sourceIndexes 非空，并且回答中的每个重要结论都能被所引用资料支持。");
         return builder.toString();
     }
 
-    private boolean isTimeout(Exception ex) {
-        Throwable current = ex;
-        while (current != null) {
-            if (current instanceof AiCallException aiCallException && aiCallException.isTimeout()) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
+    private boolean hasValidCitations(StructuredAnswer answer, List<ChunkSearchResult> hits) {
+        return answer.grounded()
+            && !answer.sourceIndexes().isEmpty()
+            && answer.sourceIndexes().stream().allMatch(index -> index >= 1 && index <= hits.size());
     }
 
-    private boolean isHandoff(String answer) {
-        return answer != null && answer.contains(HANDOFF);
+    private List<AskSourceResponse> sourcesOf(List<ChunkSearchResult> hits, List<Integer> indexes) {
+        return indexes.stream()
+            .distinct()
+            .map(index -> sourceOf(hits.get(index - 1)))
+            .toList();
     }
 
     private AskSourceResponse sourceOf(ChunkSearchResult hit) {

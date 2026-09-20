@@ -6,6 +6,7 @@ import java.util.UUID;
 public record AskResponse(
     String answer,
     boolean found,
+    boolean grounded,
     List<AskSourceResponse> sources,
     UUID requestId,
     long latencyMs,
@@ -13,4 +14,16 @@ public record AskResponse(
     AskFailureReason failureReason,
     AskTimingsResponse timings
 ) {
+    public AskResponse(
+        String answer,
+        boolean found,
+        List<AskSourceResponse> sources,
+        UUID requestId,
+        long latencyMs,
+        int tokenUsage,
+        AskFailureReason failureReason,
+        AskTimingsResponse timings
+    ) {
+        this(answer, found, found, sources, requestId, latencyMs, tokenUsage, failureReason, timings);
+    }
 }

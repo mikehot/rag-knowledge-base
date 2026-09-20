@@ -98,13 +98,13 @@
 | 空库迁移 | PASS | GitHub Actions run `35295919726` 顺序执行 V1-V5；PostgreSQL 16.15、`vector(768)`、默认授权、`audit_event` 和 `index_task` 建表通过 |
 | ACL 隔离 | PASS | 无授权用户列表为空；USER、DEPARTMENT、ROLE 授权范围均有确定性测试；READ 用户删除返回 404；双 tenant 文档列表/详情互不可见 |
 | 文档替换 | PASS | GitHub Actions run `35169350194` 验证版本化新文件、`contentVersion` 递增、旧文件保留和旧 Chunk 在新索引就绪前不被删除；单元测试覆盖同 checksum 幂等、越权拒绝、成功切换和解析失败回滚 |
-| PostgreSQL/Testcontainers 集成测试 | 待下一次 CI | 既有 GitHub Actions run `35319672140` 验证 V1-V8 和 12 个集成测试；本轮新增 V9/V10 schema 断言尚未在 Docker-backed CI 复跑 |
+| PostgreSQL/Testcontainers 集成测试 | 待下一次 CI | 既有 GitHub Actions run `35319672140` 验证 V1-V8 和 12 个集成测试；本地 Docker CLI/Compose 与 Spring Boot JDBC 均正常，但 Testcontainers 1.21.3 本次仍因 Docker API server metadata 探测失败而 `13 skipped / 0 failures`，新增 V9/V10 schema 断言尚未在 Docker-backed CI 复跑 |
 | 持久化索引任务真实联调 | PASS | 2026-09-18，PostgreSQL 16.15 + LM Studio；上传一次成功 `SUCCEEDED/attempt=1/23125ms`，Provider 中断后自动重试成功 `attempt=2/32542ms`，连续失败后 `FAILED/attempt=3/93526ms`，人工重试后第 4 次成功，遗留 RUNNING 经后端重启恢复后第 2 次成功 |
 | 问答观测 V6/V7 迁移 | PASS（本地） | PostgreSQL 16.15 从 V5 顺序升至 V7；12 个新增观测字段存在，历史记录 tenant/request/status 必填字段空值为 0，Hibernate schema validate 与应用启动通过；真实 HTTP 验证保留合法 `X-Request-Id` |
 | 用户反馈 V8 | PASS | PostgreSQL 16.15 从 V7 升至 V8；真实 API 验证创建、修改、单问答唯一反馈、原因清理、非法 rating 400 和不存在/无权 requestId 404；GitHub Actions run `35300087644` 完成 V1-V8 空库迁移及相关回归测试 |
 | 健康检查与运营指标 | PASS | 公开 health/liveness/readiness 只返回状态；匿名和普通已登录用户均不能读取 metrics/prometheus，仅 SYSTEM_ADMIN/AUDITOR 可读取；GitHub Actions run `35321425249` 验证问答/索引/反馈/ACL/估算成本指标、Prometheus histogram 和低基数标签边界 |
 | 20 题 Golden Dataset 与离线 Runner | PASS（数据契约） | `python3 evaluation/run_eval.py`；`golden-v1` 共 20 题，`dataset_valid=true`，行为分布为 ANSWER 16、ACL_FILTERED_REFUSAL 2、REFUSE 2；尚未代表真实模型质量结果 |
-| 20 题真实 API 评测 | PASS（本地两次回归） | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；两次均 20/20 通过，答案点/引用/拒答/ACL 均 100%，ACL leakage=0；P50 6.34s/6.28s、P95 9.13s/9.17s；聚合报告见 `evaluation/reports/golden-v1-local-2026-09-18.md` |
+| 20 题真实 API 评测 | 历史基线 PASS；结构化契约复核待收口 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；历史两次均 20/20 通过，答案点/引用/拒答/ACL 均 100%，ACL leakage=0；2026-09-20 结构化契约复核首轮 13/20，2 题被旧账号日限额污染，临时提高配额后拒答恢复；剩余失败集中在 Top-K 召回和本地生成吞吐，ACL leakage=0，详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
 | 检索压力集真实 API 评测 | PASS 8/8 | 2026-09-20 修正 LM Studio 模型 ID，并将 Gemma 本地默认 `AI_MAX_TOKENS` 从 1200 调整为 2400 后，最新完整运行 8/8；答案点/引用/拒答均 100%、ACL leakage=0；V10 Recall@1/3/5=75%/91.67%/100%；报告见 `evaluation/reports/retrieval-stress-v1-local-2026-09-20.md` |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
@@ -123,17 +123,17 @@
 - 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针、反馈率/ACL 拒绝/Token/估算成本指标及首版告警 guardrail；尚未用真实 7 天基线调优阈值。
 - 已有 `golden-v1`（20 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；云端成本对照和独立的模型评分仍未完成。
 - 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
-- 没有 Agent、Tool Calling 或 MCP。
+- 应用内只读 Agent Tool Registry 已实现并完成单元测试和真实 HTTP 复核；尚无 MCP adapter、模型驱动 Agent loop 或写工具。
 - 没有公开 Demo、架构图、部署 Runbook、Case Study 和英文说明。
 
 ## 下一步
 
-RAG 基线、ACL、评测和本地 Provider 预算问题已经收口，Structured Output 和应用内只读 Agent Tool 边界已完成，下一阶段进入真实 HTTP/ACL 复核与 MCP 适配：
+RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经具备实现与真实 HTTP 证据；本地评测仍暴露召回排序和 Provider 吞吐问题，下一阶段先收敛证据，再决定是否进入 MCP：
 
-1. 在可用 Docker/CI 中复核新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由。
-2. 用更新后的 `grounded` 契约重跑 Golden/Stress 真实 API 评测。
-3. 在应用内 Tool Registry 稳定后，再增加只读 MCP adapter；写操作继续不开放。
-4. 只有后续评测出现文档召回失败，才按 Chunk、Metadata、BM25、Hybrid Search、Reranker 的顺序推进。
+1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
+2. 用隔离评测身份/数据库重跑更新后的 Golden/Stress 真实 API 评测，避免日限额污染。
+3. 读取受保护 retrieval diagnostics，按失败类别决定 Chunk/Metadata、BM25、Hybrid Search 或 Reranker 是否必要。
+4. 先收敛 LM Studio structured output、最大输出和超时配置，再增加只读 MCP adapter；写操作继续不开放。
 
 ## 文档维护规则
 

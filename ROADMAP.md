@@ -225,7 +225,7 @@ Acceptance gate:
 
 Goal: extend a secure, measured knowledge system into a bounded Agent delivery.
 
-Current status (2026-09-20): the application-owned read-only Tool Registry is implemented at `GET /api/agent/tools` and `POST /api/agent/tools/execute`. It exposes only `search_knowledge`, `list_documents`, and `get_document_status`; calls inherit the authenticated tenant/user context, reject unknown arguments, cap each batch at three calls, and write allow/deny/error outcomes to the existing audit table. Unit coverage includes ACL denial, empty result, timeout, unknown tool, invalid arguments, document filtering, status reads, and budget exhaustion. MCP exposure and a model-driven loop remain deliberately deferred until this boundary has real HTTP/ACL evidence.
+Current status (2026-09-20): the application-owned read-only Tool Registry is implemented at `GET /api/agent/tools` and `POST /api/agent/tools/execute`. It exposes only `search_knowledge`, `list_documents`, and `get_document_status`; calls inherit the authenticated tenant/user context, reject unknown arguments, cap each batch at three calls, and write allow/deny/error outcomes to the existing audit table. Unit coverage includes ACL denial, empty result, timeout, unknown tool, invalid arguments, document filtering, status reads, and budget exhaustion. Real HTTP verification against PostgreSQL/LM Studio confirmed the three definitions, successful list/search/status calls, authentication, unknown-tool rejection, identity-override rejection, and batch-limit rejection. MCP exposure and a model-driven loop remain deliberately deferred until the evaluation and Docker-backed integration gates are stable.
 
 Initial read-only tools:
 

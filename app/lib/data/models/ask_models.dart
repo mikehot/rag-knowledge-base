@@ -18,10 +18,12 @@ class AskAnswer {
     required this.found,
     required this.sources,
     required this.tokenUsage,
+    this.grounded = false,
   });
 
   final String answer;
   final bool found;
+  final bool grounded;
   final List<ChunkSource> sources;
   final int tokenUsage;
 

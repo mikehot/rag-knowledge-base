@@ -19,11 +19,13 @@ AskAnswer _$AskAnswerFromJson(Map<String, dynamic> json) => AskAnswer(
       .map((e) => ChunkSource.fromJson(e as Map<String, dynamic>))
       .toList(),
   tokenUsage: (json['tokenUsage'] as num).toInt(),
+  grounded: json['grounded'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$AskAnswerToJson(AskAnswer instance) => <String, dynamic>{
   'answer': instance.answer,
   'found': instance.found,
+  'grounded': instance.grounded,
   'sources': instance.sources,
   'tokenUsage': instance.tokenUsage,
 };

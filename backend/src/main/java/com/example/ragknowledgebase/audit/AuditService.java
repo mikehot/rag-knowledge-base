@@ -26,12 +26,45 @@ public class AuditService {
         UUID resourceId,
         String reason
     ) {
+        record(user, action, resourceType, resourceId, "DENY", reason);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordAllowed(
+        AuthenticatedUser user,
+        String action,
+        String resourceType,
+        UUID resourceId,
+        String reason
+    ) {
+        record(user, action, resourceType, resourceId, "ALLOW", reason);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordError(
+        AuthenticatedUser user,
+        String action,
+        String resourceType,
+        UUID resourceId,
+        String reason
+    ) {
+        record(user, action, resourceType, resourceId, "ERROR", reason);
+    }
+
+    private void record(
+        AuthenticatedUser user,
+        String action,
+        String resourceType,
+        UUID resourceId,
+        String outcome,
+        String reason
+    ) {
         jdbcTemplate.update(
             """
                 INSERT INTO audit_event (
                     id, tenant_id, user_id, username, action, resource_type, resource_id, outcome, reason
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'DENY', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             UUID.randomUUID(),
             user.tenantId(),
@@ -40,8 +73,11 @@ public class AuditService {
             action,
             resourceType,
             resourceId,
+            outcome,
             reason
         );
-        operationalMetrics.recordAclDenied(action, resourceType);
+        if ("DENY".equals(outcome)) {
+            operationalMetrics.recordAclDenied(action, resourceType);
+        }
     }
 }

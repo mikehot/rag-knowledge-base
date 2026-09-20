@@ -17,7 +17,9 @@ import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.audit.AuditQueryService;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.DocumentRepository;
+import com.example.ragknowledgebase.document.DocumentAclService;
 import com.example.ragknowledgebase.document.DocumentService;
+import com.example.ragknowledgebase.document.GrantDocumentAclRequest;
 import com.example.ragknowledgebase.indexing.IndexTaskRepository;
 import com.example.ragknowledgebase.indexing.IndexTaskService;
 import java.nio.file.Files;
@@ -77,6 +79,9 @@ class PostgresEnterpriseIntegrationTests {
     private DocumentService documentService;
 
     @Autowired
+    private DocumentAclService documentAclService;
+
+    @Autowired
     private IndexTaskRepository indexTaskRepository;
 
     @Autowired
@@ -105,6 +110,7 @@ class PostgresEnterpriseIntegrationTests {
     @BeforeEach
     void cleanTestData() {
         jdbcTemplate.update("DELETE FROM ask_feedback WHERE ask_log_id = ?", ASK_LOG_ID);
+        jdbcTemplate.update("DELETE FROM ask_retrieval_hit WHERE ask_log_id = ?", ASK_LOG_ID);
         jdbcTemplate.update("DELETE FROM ask_log WHERE id = ?", ASK_LOG_ID);
         jdbcTemplate.update("DELETE FROM audit_event WHERE user_id IN (?, ?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID, SECOND_USER_ID);
         jdbcTemplate.update(
@@ -179,14 +185,30 @@ class PostgresEnterpriseIntegrationTests {
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ask_feedback'",
             Integer.class
         );
+        String appUserCreatedAtDefault = jdbcTemplate.queryForObject(
+            """
+                SELECT column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'app_user'
+                  AND column_name = 'created_at'
+                """,
+            String.class
+        );
 
-        assertThat(successfulMigrations).isEqualTo(8);
+        assertThat(successfulMigrations).isEqualTo(10);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
         assertThat(defaultAccessCount).isGreaterThanOrEqualTo(1);
         assertThat(askObservabilityColumnCount).isEqualTo(12);
         assertThat(feedbackTableCount).isEqualTo(1);
+        Integer retrievalDiagnosticsTableCount = jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ask_retrieval_hit'",
+            Integer.class
+        );
+        assertThat(appUserCreatedAtDefault).containsIgnoringCase("now()");
+        assertThat(retrievalDiagnosticsTableCount).isEqualTo(1);
     }
 
     @Test
@@ -570,6 +592,46 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(countChunks(DOCUMENT_ID)).isZero();
         assertThat(Files.exists(rawFile)).isFalse();
         assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID)).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void documentAclApiGrantAndRevokeChangesVisibilityAndPermissionVersion() {
+        insertUser(OWNER_ID, "document-acl-owner-it");
+        insertUser(READER_ID, "document-acl-reader-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        insertDocument();
+        AuthenticatedUser owner = new AuthenticatedUser(OWNER_ID, TENANT_ID, "document-acl-owner-it");
+
+        var granted = documentAclService.grant(
+            owner,
+            DOCUMENT_ID,
+            new GrantDocumentAclRequest("USER", READER_ID, "READ")
+        );
+
+        assertThat(granted.documentId()).isEqualTo(DOCUMENT_ID);
+        assertThat(granted.principalId()).isEqualTo(READER_ID);
+        assertThat(granted.permission()).isEqualTo("READ");
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT permission_version FROM document WHERE id = ?",
+            Integer.class,
+            DOCUMENT_ID
+        )).isEqualTo(2);
+        assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID))
+            .extracting("id")
+            .containsExactly(DOCUMENT_ID);
+
+        assertThat(documentAclService.list(owner, DOCUMENT_ID))
+            .extracting("id")
+            .containsExactly(granted.id());
+
+        assertThat(documentAclService.revoke(owner, DOCUMENT_ID, granted.id()).deleted()).isTrue();
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT permission_version FROM document WHERE id = ?",
+            Integer.class,
+            DOCUMENT_ID
+        )).isEqualTo(3);
+        assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID)).isEmpty();
     }
 
     @Test

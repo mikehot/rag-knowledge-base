@@ -61,18 +61,31 @@ All secrets and runtime choices are environment variables.
 | `RAG_SIMILARITY_THRESHOLD` | `0.35` | Below this, return handoff without LLM |
 | `AI_EMBEDDING_DIM` | `768` | Must match embedding model |
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |
-| `AI_MODEL_ID` | `google/gemma-4-26b-a4b` | Chat model |
+| `AI_MODEL_ID` | `google/gemma-4-26b-a4b-qat` | Chat model; verify the identifier in `GET http://localhost:1234/v1/models` |
 | `AI_API_KEY` | empty | Optional for local providers |
+| `AI_MAX_TOKENS` | `2400` | Completion budget; reasoning models may consume part of it before returning answer content |
 | `AI_TIMEOUT_SECONDS` | `120` | Local model can be slow |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
-| `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text` | Default local embedding model |
+| `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text-v1.5` | Default local embedding model; must return 768 dimensions |
 | `INDEX_TASKS_ENABLED` | `true` | Enable after-commit dispatch and persistent queue polling |
 | `INDEX_TASK_POLL_DELAY_MS` | `15000` | Delay between recovery/queue polls |
 
 The Java `HttpClient` for chat and embedding explicitly uses `HTTP_1_1`, matching the `ai-weekly-report` local provider fix.
 
 Provider logging is a separate security boundary. During the 2026-09-18 local verification, LM Studio Developer Logs displayed embedding inputs, prompts, and model output even though the application itself did not log them. Do not use customer-sensitive documents until the selected Provider's request/response logging, retention, and access controls have been reviewed.
+
+### LM Studio smoke check
+
+Opening the LM Studio desktop window does not prove that its OpenAI-compatible API server is running. Check both the server and the exact model identifiers before starting the backend:
+
+```bash
+lms server status
+lms server start --port 1234
+curl -s http://localhost:1234/v1/models
+```
+
+The configured model IDs must match the returned `id` values exactly. For the current local fixture they are `google/gemma-4-26b-a4b-qat` and `text-embedding-nomic-embed-text-v1.5`; the latter must return 768 dimensions. If the GUI reports an unexpected exit but the CLI server starts and `/v1/models` responds, the desktop UI process and the local API service are separate failure surfaces.
 
 ## Embedding Dimension
 
@@ -84,6 +97,7 @@ Provider logging is a separate security boundary. During the 2026-09-18 local ve
 - V1 creates the original RAG schema and `vector(${AI_EMBEDDING_DIM})` column.
 - V2 adds tenant, department, role, knowledge-base membership, document lifecycle metadata, and document ACL tables.
 - V5 adds persistent indexing tasks for upload, replacement, single reindex, and batch reindex.
+- V6-V8 add ask observability, feedback, and operational audit/metric fields; V9 repairs the `app_user.created_at` default for older baseline databases; V10 stores protected Top-K retrieval snapshots for diagnostics.
 - `spring.jpa.hibernate.ddl-auto=validate`; application startup fails when entity mappings and the migrated schema disagree.
 - `baseline-on-migrate=true` upgrades the pre-Flyway MVP database by recording it as V1 before applying V2. Back up a real deployment before its first migration.
 - The fixed default tenant and knowledge-base IDs are compatibility identities for the local V0.1 environment; they are not request-controlled values.
@@ -132,6 +146,9 @@ Main endpoints:
 - `POST /api/documents/upload`
 - `GET /api/documents`
 - `GET /api/documents/{id}`
+- `GET /api/documents/{id}/acl`
+- `POST /api/documents/{id}/acl`
+- `DELETE /api/documents/{id}/acl/{aclId}`
 - `DELETE /api/documents/{id}`
 - `POST /api/documents/{id}/disable`
 - `POST /api/documents/{id}/enable`
@@ -139,6 +156,8 @@ Main endpoints:
 - `POST /api/documents/{id}/replace`
 - `POST /api/ask`
 - `PUT /api/ask/{requestId}/feedback`
+- `GET /api/agent/tools`
+- `POST /api/agent/tools/execute`
 - `GET /api/admin/roles`
 - `GET /api/admin/users`
 - `POST /api/admin/users`
@@ -154,6 +173,7 @@ Main endpoints:
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/memberships`
 - `DELETE /api/admin/knowledge-bases/{knowledgeBaseId}/memberships/{membershipId}`
 - `GET /api/admin/audit-events`
+- `GET /api/admin/retrieval-diagnostics/{requestId}`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/batch-reindex`
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks`
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}`
@@ -161,9 +181,13 @@ Main endpoints:
 
 `POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM. Every HTTP response includes `X-Request-Id`; a valid caller-supplied UUID is preserved and an invalid value is replaced.
 
-The answer body includes `requestId`, total `latencyMs`, `tokenUsage`, a nullable typed `failureReason`, and `timings` for `embeddingMs`, `retrievalMs`, and `generationMs`. Stable failure reasons are `RETRIEVAL_MISS`, `INSUFFICIENT_CONTEXT`, `EMBEDDING_ERROR`, `RETRIEVAL_ERROR`, and `GENERATION_ERROR`. Flyway V6/V7 stores the same correlation and timing fields with provider, model, and retrieval configuration in `ask_log`; raw exception messages, prompts, and document text are not stored there.
+The answer body includes `requestId`, `found`, backend-validated `grounded`, ACL-derived `sources`, total `latencyMs`, `tokenUsage`, a nullable typed `failureReason`, and `timings` for `embeddingMs`, `retrievalMs`, and `generationMs`. The model must return only `answer`, `found`, `grounded`, and `sourceIndexes`; the backend validates that contract and maps source indexes to retrieved ACL-filtered metadata. Invalid JSON, missing grounding, or invalid citations fail closed to a stable handoff response. Stable failure reasons are `RETRIEVAL_MISS`, `INSUFFICIENT_CONTEXT`, `EMBEDDING_TIMEOUT`, `EMBEDDING_ERROR`, `RETRIEVAL_ERROR`, `GENERATION_TIMEOUT`, `GENERATION_ERROR`, `STRUCTURED_OUTPUT_INVALID`, and `CITATION_MISSING`. Flyway V6/V7 stores the same correlation and timing fields with provider, model, and retrieval configuration in `ask_log`; raw exception messages, prompts, and document text are not stored there.
+
+The read-only Agent Tool boundary exposes exactly three tools through `POST /api/agent/tools/execute`: `search_knowledge`, `list_documents`, and `get_document_status`. Calls inherit the authenticated user and tenant; `tenantId`, `userId`, arbitrary SQL, write operations, and raw file content are not accepted. Tool arguments use closed schemas, results are capped by the existing Top-K, a batch is limited to three calls, and every allow/deny/error outcome is written to the existing audit event table. Empty search/list results are successful no-result responses; unknown tools, invalid arguments, permission failures, provider errors, and timeouts return stable per-call failure reasons. This is the application-owned boundary for a future MCP adapter; no write tool is enabled.
 
 `PUT /api/ask/{requestId}/feedback` accepts `{"rating":"HELPFUL|NOT_HELPFUL","reason":"optional"}`. Only the authenticated user who created that ask record in the same tenant can submit feedback; missing, cross-user, and cross-tenant request IDs all return `404`. Repeating the request updates the single feedback row for that answer. `reason` is optional, limited to 500 characters, normalized for whitespace/control characters, and never written to application logs.
+
+Document ACL endpoints (`/api/documents/{id}/acl`) require document `MANAGE`. They validate that the USER/DEPARTMENT/ROLE principal belongs to the caller's tenant, support `READ`/`MANAGE`, increment `permissionVersion`, and hide unauthorized document targets as `404`.
 
 Admin endpoint boundaries:
 
@@ -191,6 +215,7 @@ Audit boundaries:
 - Audit records include tenant, user, action, resource type, resource id, outcome, reason, and timestamp.
 - `GET /api/admin/audit-events` supports optional `userId`, `action`, `resourceType`, `resourceId`, `outcome`, `from`, `to`, and `limit` filters. `from`/`to` use ISO-8601 timestamps; `limit` defaults to 100 and is capped at 200.
 - Audit results are ordered newest first and include `hasMore`; unauthorized query attempts return `403` and are themselves recorded as `AUDIT_EVENT_LIST` denials.
+- Retrieval diagnostics are restricted to `SYSTEM_ADMIN` or `AUDITOR` and the current tenant. They expose rank, filename, locator, similarity, configured Top-K/threshold, result status, and failure reason; they deliberately exclude question text, Prompt, and Chunk content. Unauthorized requests return `403` and are recorded as `RETRIEVAL_DIAGNOSTIC_GET` denials.
 
 Document lifecycle boundaries:
 

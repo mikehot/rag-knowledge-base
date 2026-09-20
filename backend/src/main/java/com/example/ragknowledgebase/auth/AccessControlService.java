@@ -63,6 +63,57 @@ public class AccessControlService {
         return count != null && count > 0;
     }
 
+    public boolean canReadKnowledgeBase(AuthenticatedUser user, UUID knowledgeBaseId) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+                SELECT count(*)
+                FROM knowledge_base kb
+                WHERE kb.id = ?
+                  AND kb.tenant_id = ?
+                  AND kb.status = 'ACTIVE'
+                  AND (
+                    EXISTS (
+                      SELECT 1
+                      FROM user_role ur
+                      JOIN app_role r ON r.id = ur.role_id
+                      WHERE ur.user_id = ?
+                        AND r.tenant_id = ?
+                        AND r.code = 'SYSTEM_ADMIN'
+                    )
+                    OR EXISTS (
+                      SELECT 1
+                      FROM knowledge_base_membership m
+                      WHERE m.knowledge_base_id = kb.id
+                        AND m.tenant_id = ?
+                        AND m.permission IN ('READ', 'MANAGE')
+                        AND (
+                          (m.principal_type = 'USER' AND m.principal_id = ?)
+                          OR (m.principal_type = 'DEPARTMENT' AND m.principal_id = (
+                            SELECT u.department_id FROM app_user u
+                            WHERE u.id = ? AND u.tenant_id = ?
+                          ))
+                          OR (m.principal_type = 'ROLE' AND EXISTS (
+                            SELECT 1 FROM user_role ur
+                            WHERE ur.user_id = ? AND ur.role_id = m.principal_id
+                          ))
+                        )
+                    )
+                  )
+                """,
+            Integer.class,
+            knowledgeBaseId,
+            user.tenantId(),
+            user.userId(),
+            user.tenantId(),
+            user.tenantId(),
+            user.userId(),
+            user.userId(),
+            user.tenantId(),
+            user.userId()
+        );
+        return count != null && count > 0;
+    }
+
     public boolean isSystemAdmin(AuthenticatedUser user) {
         Integer count = jdbcTemplate.queryForObject(
             """

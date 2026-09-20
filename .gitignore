@@ -4,6 +4,7 @@ node_modules/
 dist/
 build/
 coverage/
+evaluation/__pycache__/
 app/.dart_tool/
 app/.flutter-plugins
 app/.flutter-plugins-dependencies

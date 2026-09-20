@@ -37,13 +37,25 @@ public class ChunkJdbcRepository {
     }
 
     public List<ChunkSearchResult> search(UUID tenantId, UUID userId, float[] embedding, int topK) {
+        return search(tenantId, userId, embedding, topK, null);
+    }
+
+    public List<ChunkSearchResult> search(
+        UUID tenantId,
+        UUID userId,
+        float[] embedding,
+        int topK,
+        UUID knowledgeBaseId
+    ) {
         String vector = vectorLiteral(embedding);
+        String knowledgeBaseFilter = knowledgeBaseId == null ? "" : " AND d.knowledge_base_id = ?\n";
         String sql = """
             SELECT c.id, c.document_id, d.filename, c.locator, c.content,
                    (1 - (c.embedding <=> ?::vector)) AS similarity
             FROM chunk c
             JOIN document d ON d.id = c.document_id
             WHERE d.tenant_id = ?
+            """ + knowledgeBaseFilter + """
               AND d.status = 'READY'
               AND d.deleted_at IS NULL
               AND d.disabled_at IS NULL
@@ -94,6 +106,27 @@ public class ChunkJdbcRepository {
             ORDER BY c.embedding <=> ?::vector
             LIMIT ?
             """;
+        List<Object> args = new ArrayList<>();
+        args.add(vector);
+        args.add(tenantId);
+        if (knowledgeBaseId != null) {
+            args.add(knowledgeBaseId);
+        }
+        args.add(userId);
+        args.add(userId);
+        args.add(tenantId);
+        args.add(tenantId);
+        args.add(userId);
+        args.add(userId);
+        args.add(tenantId);
+        args.add(userId);
+        args.add(tenantId);
+        args.add(userId);
+        args.add(userId);
+        args.add(tenantId);
+        args.add(userId);
+        args.add(vector);
+        args.add(topK);
         return jdbcTemplate.query(
             sql,
             (rs, rowNum) -> new ChunkSearchResult(
@@ -104,23 +137,7 @@ public class ChunkJdbcRepository {
                 rs.getString("content"),
                 rs.getDouble("similarity")
             ),
-            vector,
-            tenantId,
-            userId,
-            userId,
-            tenantId,
-            tenantId,
-            userId,
-            userId,
-            tenantId,
-            userId,
-            tenantId,
-            userId,
-            userId,
-            tenantId,
-            userId,
-            vector,
-            topK
+            args.toArray()
         );
     }
 

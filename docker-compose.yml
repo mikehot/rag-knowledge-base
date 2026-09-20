@@ -41,8 +41,8 @@ services:
       AI_PROVIDER: openai-compatible
       AI_BASE_URL: http://host.docker.internal:1234/v1
       AI_API_KEY: ""
-      AI_MODEL_ID: google/gemma-4-26b-a4b
-      AI_MAX_TOKENS: 1200
+      AI_MODEL_ID: google/gemma-4-26b-a4b-qat
+      AI_MAX_TOKENS: 2400
       AI_ESTIMATED_COST_PER_1K_TOKENS: 0
       AI_TIMEOUT_SECONDS: 120
       AI_MAX_RETRIES: 2
@@ -50,7 +50,7 @@ services:
       AI_EMBEDDING_PROVIDER: openai-compatible
       AI_EMBEDDING_BASE_URL: http://host.docker.internal:1234/v1
       AI_EMBEDDING_API_KEY: ""
-      AI_EMBEDDING_MODEL_ID: text-embedding-nomic-embed-text
+      AI_EMBEDDING_MODEL_ID: text-embedding-nomic-embed-text-v1.5
       AI_EMBEDDING_BATCH_SIZE: 16
       AI_EMBEDDING_TIMEOUT_SECONDS: 120
       AI_EMBEDDING_MAX_RETRIES: 2

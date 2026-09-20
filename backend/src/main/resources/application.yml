@@ -95,8 +95,8 @@ app:
     provider: ${AI_PROVIDER:openai-compatible}
     base-url: ${AI_BASE_URL:http://localhost:1234/v1}
     api-key: ${AI_API_KEY:}
-    model-id: ${AI_MODEL_ID:google/gemma-4-26b-a4b}
-    max-tokens: ${AI_MAX_TOKENS:1200}
+    model-id: ${AI_MODEL_ID:google/gemma-4-26b-a4b-qat}
+    max-tokens: ${AI_MAX_TOKENS:2400}
     estimated-cost-per-1k-tokens: ${AI_ESTIMATED_COST_PER_1K_TOKENS:0}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:120}
     max-retries: ${AI_MAX_RETRIES:2}
@@ -105,7 +105,7 @@ app:
     provider: ${AI_EMBEDDING_PROVIDER:openai-compatible}
     base-url: ${AI_EMBEDDING_BASE_URL:${AI_BASE_URL:http://localhost:1234/v1}}
     api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:}}
-    model-id: ${AI_EMBEDDING_MODEL_ID:text-embedding-nomic-embed-text}
+    model-id: ${AI_EMBEDDING_MODEL_ID:text-embedding-nomic-embed-text-v1.5}
     batch-size: ${AI_EMBEDDING_BATCH_SIZE:16}
     timeout-seconds: ${AI_EMBEDDING_TIMEOUT_SECONDS:120}
     max-retries: ${AI_EMBEDDING_MAX_RETRIES:2}

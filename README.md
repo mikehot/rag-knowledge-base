@@ -8,7 +8,7 @@
 
 仓库已具备 JWT、PDF/DOCX/TXT/Markdown 入库、pgvector 向量检索、相似度拒答、引用、Token 记录、Flutter 问答与文档管理等 MVP 代码。Milestone 2 已进入后半程：Flyway migration、tenant/department/role/knowledge-base/document ACL schema、SQL 查询阶段权限过滤、最小管理 API、文档生命周期、拒绝审计和只读审计查询 API 已经落地。
 
-持久化索引任务、批量重建、自动/人工失败重试、幂等入队、任务状态观测和进程重启恢复已经通过 PostgreSQL CI 与本地真实 Provider 验证。问答现已具备请求关联 ID、总/分段耗时、稳定失败分类、数据库观测字段，以及绑定原提问用户和 tenant 的反馈 API；Actuator 存活/就绪探针、问答反馈、ACL 拒绝、Token/估算成本和第一组低基数 RAG/索引指标已通过本地测试与 GitHub CI。20 题评测、Agent Tool 和 MCP 尚未完成。指标与首版告警边界见 [OBSERVABILITY.md](OBSERVABILITY.md)。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
+持久化索引任务、批量重建、自动/人工失败重试、幂等入队、任务状态观测和进程重启恢复已经通过 PostgreSQL CI 与本地真实 Provider 验证。问答现已具备请求关联 ID、总/分段耗时、稳定失败分类、数据库观测字段，以及绑定原提问用户和 tenant 的反馈 API；Actuator 存活/就绪探针、问答反馈、ACL 拒绝、Token/估算成本和第一组低基数 RAG/索引指标已通过本地测试与 GitHub CI。20 题 `golden-v1` 数据集、8 题 `retrieval-stress-v1`、离线 Runner、真实 API 采集入口、文档 ACL 管理 API 和仅管理员/审计员可读的检索诊断 API 已建立；历史本地 Golden 两次 20/20、压力集最新 8/8 通过；STRESS-003 的 Gemma 生成预算问题已通过默认 `AI_MAX_TOKENS=2400` 修复并由完整套件验证。现在 `/api/ask` 已执行 Structured Output Contract，应用内只读 Agent Tool Registry 已提供 `search_knowledge`、`list_documents`、`get_document_status`，但 MCP 和写操作尚未开放。聚合报告见 [evaluation/reports](evaluation/reports/)。指标与首版告警边界见 [OBSERVABILITY.md](OBSERVABILITY.md)。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
 
 当前验证状态与已知限制见 [PROGRESS.md](PROGRESS.md)。
 
@@ -17,6 +17,7 @@
 - [REQUIREMENTS.md](REQUIREMENTS.md)：企业知识库 V0.1 需求、边界与验收标准。
 - [ROADMAP.md](ROADMAP.md)：从真实 RAG 基线到 ACL、评测、Agent/MCP 和 FDE 交付包的推进顺序。
 - [PROGRESS.md](PROGRESS.md)：代码已实现范围、当前验证证据与下一步。
+- [evaluation/README.md](evaluation/README.md)：Golden Dataset、检索压力集、离线 Runner 和真实响应评测边界。
 - [PORTFOLIO.md](PORTFOLIO.md)：对外展示口径；只能使用已经验证的证据。
 - [backend/README.md](backend/README.md)：后端配置、Provider 和 API。
 - [app/README.md](app/README.md)：Flutter 运行方式和客户端说明。
@@ -47,8 +48,9 @@ cd backend
 默认 AI 配置：
 
 - Chat base URL: `http://localhost:1234/v1`
-- Embedding model: `text-embedding-nomic-embed-text`
+- Embedding model: `text-embedding-nomic-embed-text-v1.5` (the exact identifier must match LM Studio's `/v1/models` output)
 - Embedding dim: `768`
+- Chat completion budget: `2400` tokens by default; reasoning models may use part of this budget before returning visible answer content.
 
 如果后端运行在 Docker 中而 LM Studio/Ollama 运行在宿主机，`AI_BASE_URL` 和 `AI_EMBEDDING_BASE_URL` 通常需要设置为 `http://host.docker.internal:1234/v1`。
 

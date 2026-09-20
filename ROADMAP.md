@@ -2,7 +2,7 @@
 
 > Version: v2.0
 >
-> Last verified: 2026-09-18
+> Last verified: 2026-09-20
 > Target: evolve the existing RAG MVP into an enterprise knowledge-base V0.1, then extend it into a bounded Agent/FDE delivery case.
 
 ## 1. Product Goal
@@ -62,7 +62,7 @@ Milestone 2 checkpoint on 2026-09-16:
 - JWT authentication carries the tenant boundary, and document/chunk SQL performs security trimming before content reaches generation.
 - Upload and delete require `MANAGE`; list, detail, and retrieval accept inherited `READ`/`MANAGE` grants from user, department, or role principals.
 - Both an existing non-empty database upgrade and a fresh V1+V2 database were verified. A temporary reader saw no document before a grant, saw it after `READ`, and still could not delete it.
-- This milestone remains `in-progress`: the minimum management APIs, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are verified. Management UI and secondary identity lifecycle operations remain open.
+- This milestone remains `in-progress`: the minimum management APIs, document ACL grant/list/revoke boundary, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are implemented with coverage; the new document ACL integration test still needs the next Docker-backed CI run. Management UI and secondary identity lifecycle operations remain open.
 
 ## 4. Delivery Principles
 
@@ -146,6 +146,7 @@ Target answer contract:
 Work:
 
 - Stabilize typed output for success, fallback, and failure responses.
+- Enforce a model-owned JSON contract containing only `answer`, `found`, `grounded`, and `sourceIndexes`; backend-owned source metadata, request IDs, failure reasons, and timings are never accepted from the model. Invalid output and missing citations fail closed to a stable handoff response. Implemented locally on 2026-09-20.
 - Add request/correlation IDs and stage-level timings for embedding, retrieval, and generation. Implemented and locally verified on 2026-09-18.
 - Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason. Implemented in Flyway V6/V7 and verified locally and in GitHub Actions run `35299110979`.
 - Add user feedback (`helpful`, `not_helpful`, optional sanitized reason). Implemented with tenant/user ownership checks, locally verified on PostgreSQL 16.15, and verified in GitHub Actions run `35300087644` with 51 tests / 0 skipped on 2026-09-18.
@@ -162,6 +163,10 @@ Acceptance gate:
 ### Milestone 4 — Twenty-Question Evaluation Baseline
 
 Goal: replace subjective demos with reproducible evidence.
+
+Current status (2026-09-20): `golden-v1` is checked in at `evaluation/datasets/golden_v1.jsonl`, and the separate `retrieval-stress-v1` set is checked in at `evaluation/datasets/retrieval_stress_v1.jsonl`. Two authenticated local API runs passed 20/20 golden cases; the historical stress run passed 8/8, and the latest full run passed 8/8 after increasing the local Gemma completion budget from 1200 to 2400. The latest stress run has 100% answer-point coverage, citation coverage/correctness, refusal correctness, and zero ACL leakage. Protected candidate-rank/similarity snapshots show Recall@1/3/5=75%/91.67%/100% with all expected documents present at Top-K; larger-corpus ranking evidence, cloud cost comparison, and independent model judging remain open.
+
+Provider follow-up (2026-09-20): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; default `AI_MAX_TOKENS=2400` was validated by the latest 8/8 stress run. The project can now move to Structured Output and bounded read-only tools.
 
 Each evaluation case records:
 
@@ -187,6 +192,17 @@ Acceptance gate:
 - Model-based scoring, if used, is reported separately from deterministic checks.
 - Failed cases and error categories are retained instead of being hidden by an average score.
 
+Current local evidence:
+
+```text
+python3 evaluation/run_eval.py
+dataset_valid: true
+case_count: 20
+behavior_counts: ANSWER=16, ACL_FILTERED_REFUSAL=2, REFUSE=2
+```
+
+The checked-in aggregate report is the live local result; it does not represent a production SLO or independent semantic judge.
+
 ### Milestone 5 — Evaluation-Driven Retrieval Improvements
 
 Goal: add retrieval complexity only when a measured failure justifies it.
@@ -209,6 +225,8 @@ Acceptance gate:
 
 Goal: extend a secure, measured knowledge system into a bounded Agent delivery.
 
+Current status (2026-09-20): the application-owned read-only Tool Registry is implemented at `GET /api/agent/tools` and `POST /api/agent/tools/execute`. It exposes only `search_knowledge`, `list_documents`, and `get_document_status`; calls inherit the authenticated tenant/user context, reject unknown arguments, cap each batch at three calls, and write allow/deny/error outcomes to the existing audit table. Unit coverage includes ACL denial, empty result, timeout, unknown tool, invalid arguments, document filtering, status reads, and budget exhaustion. MCP exposure and a model-driven loop remain deliberately deferred until this boundary has real HTTP/ACL evidence.
+
 Initial read-only tools:
 
 - `search_knowledge(query, knowledgeBaseId)`
@@ -217,7 +235,7 @@ Initial read-only tools:
 
 Work:
 
-- Add typed Tool Calling behind an application-owned allowlist/registry.
+- Add typed Tool Calling behind the implemented application-owned allowlist/registry.
 - Pass authenticated user, tenant, role, and request context outside model-controlled arguments.
 - Validate arguments and enforce ACL again before execution.
 - Bound tool calls, loop iterations, wall-clock time, tokens, and result size.

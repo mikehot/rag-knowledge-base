@@ -22,7 +22,7 @@
 - `flutter analyze --no-pub`：通过。
 - `flutter test --no-pub --concurrency=1`：通过，但当前只有一个 Widget smoke test。
 - `docker compose config --quiet`：通过，仅证明 Compose 配置可解析。
-- `./mvnw test`：本地 JDK 25.0.3 下 76 个测试通过，13 个 PostgreSQL/Testcontainers 测试因本机 Docker socket 当前不可用而跳过；Docker-backed 集成测试仍需 CI/可用 Docker daemon 复核。
+- `./mvnw test`：本地 JDK 25.0.3 下 84 个测试通过，13 个 PostgreSQL/Testcontainers 测试因本机 Docker socket 当前不可用而跳过；Docker-backed 集成测试仍需 CI/可用 Docker daemon 复核。
 - PostgreSQL 16.15 + pgvector 0.8.6：扩展、业务表和 HNSW cosine 索引已验证。
 - LM Studio：Gemma 4 26B + Nomic Embedding 真实完成上传、2 个 Chunk 入库、资料内回答与引用、资料外拒答和删除。
 - 删除验证：document/chunk 行和原始上传文件都被清理，删除后再次查询返回拒答。

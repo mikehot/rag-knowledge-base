@@ -86,7 +86,7 @@
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | 2026-09-20 本地 JDK 25.0.3；76 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因本机 Docker socket 当前不可用而 skipped；Structured Output 与 Agent Tool 单元测试通过 |
+| `./mvnw test` | PASS | 2026-09-20 本地 JDK 25.0.3；84 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因本机 Docker socket 当前不可用而 skipped；Structured Output 与 Agent Tool 单元测试通过 |
 | GitHub Actions CI | PASS | Run `35319672140`（CI #26）；backend-tests 实际执行 61 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |

@@ -48,6 +48,7 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         String requestBody = objectMapper.writeValueAsString(Map.of(
             "model", properties.ai().modelId(),
             "messages", List.of(Map.of("role", "user", "content", prompt)),
+            "response_format", structuredResponseFormat(),
             "max_tokens", properties.ai().maxTokens(),
             "stream", false
         ));
@@ -68,6 +69,30 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
             throw new AiCallException("OpenAI 兼容接口返回内容为空");
         }
         return new AiProviderResponse(text.trim(), tokenUsage(root));
+    }
+
+    private Map<String, Object> structuredResponseFormat() {
+        return Map.of(
+            "type", "json_schema",
+            "json_schema", Map.of(
+                "name", "rag_answer",
+                "strict", true,
+                "schema", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "answer", Map.of("type", "string"),
+                        "found", Map.of("type", "boolean"),
+                        "grounded", Map.of("type", "boolean"),
+                        "sourceIndexes", Map.of(
+                            "type", "array",
+                            "items", Map.of("type", "integer", "minimum", 1)
+                        )
+                    ),
+                    "required", List.of("answer", "found", "grounded", "sourceIndexes"),
+                    "additionalProperties", false
+                )
+            )
+        );
     }
 
     private URI chatCompletionsUri() {

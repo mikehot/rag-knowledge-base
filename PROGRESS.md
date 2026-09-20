@@ -16,7 +16,7 @@
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1-V10、ACL、最小管理 API、可回滚替换和持久化索引任务已落地；PostgreSQL CI、真实 Provider 重试和重启恢复已验证，管理 UI 等次要范围仍未完成 |
-| 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地并通过单元/全量回归；真实 Provider 回归仍需用新契约重跑 |
+| 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；全量回归 85 passed/13 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
 | 4. 评测基线与检索压力集 | `verified` | `golden-v1` 两次 20/20、最新压力集 8/8 通过；答案点、引用、拒答均 100%，ACL leakage=0；V10 受保护诊断及 Recall@1/3/5 评分已落地 |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
 | 6. Agent Tool / MCP | `in-progress` | 三个只读 Agent Tool、闭合参数 schema、ACL/租户继承、空结果/超时/未知工具/预算/审计测试已落地；MCP 适配器和真实 Agent loop 尚未开放 |
@@ -46,7 +46,7 @@
 - Flyway V1-V10 管理 RAG、企业身份/ACL、幂等约束、审计、持久化索引任务、问答观测、用户反馈和检索诊断 schema；V9 修复旧库 `app_user.created_at` 默认值兼容性，V10 保存不含问题正文的 Top-K 检索快照；Hibernate 只做 schema validate。
 - V2 已包含 tenant、department、role、user-role、knowledge base、membership 和 document ACL。
 - 文档列表/详情和 Chunk 向量查询在 SQL 阶段执行 tenant + user/department/role + knowledge-base/document ACL 过滤。
-- `/api/ask` 已执行 Structured Output Contract：模型只返回 `answer`、`found`、`grounded`、`sourceIndexes`；后端校验结构和引用编号，再生成 `sources`、`requestId`、`failureReason`、`timings`。
+- `/api/ask` 已执行 Structured Output Contract：模型只返回 `answer`、`found`、`grounded`、`sourceIndexes`；OpenAI-compatible Provider 同时发送 `response_format=json_schema`；后端继续校验结构和引用编号，再生成 `sources`、`requestId`、`failureReason`、`timings`。
 - `/api/agent/tools` 已建立应用自有只读 Tool Registry，只注册 `search_knowledge`、`list_documents`、`get_document_status`；单次最多 3 个调用，拒绝未知字段、越权知识库、越权文档和所有写操作。
 - 文档 ACL 管理 API 已支持按 USER/DEPARTMENT/ROLE 授权或撤权；操作要求文档 `MANAGE`，权限版本递增，越权按隐藏资源返回 404。
 - 上传和删除要求 `MANAGE`；无权限删除统一返回 404，避免暴露资源存在性。
@@ -86,7 +86,7 @@
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | 2026-09-20 本地 JDK 25.0.3；84 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因本机 Docker socket 当前不可用而 skipped；Structured Output 与 Agent Tool 单元测试通过 |
+| `./mvnw test` | PASS | 2026-09-20 本地 JDK 25.0.3；85 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因 Testcontainers Docker API 探测失败而 skipped；Structured Output Provider、AskService 与 Agent Tool 回归通过 |
 | GitHub Actions CI | PASS | Run `35319672140`（CI #26）；backend-tests 实际执行 61 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
@@ -104,7 +104,7 @@
 | 用户反馈 V8 | PASS | PostgreSQL 16.15 从 V7 升至 V8；真实 API 验证创建、修改、单问答唯一反馈、原因清理、非法 rating 400 和不存在/无权 requestId 404；GitHub Actions run `35300087644` 完成 V1-V8 空库迁移及相关回归测试 |
 | 健康检查与运营指标 | PASS | 公开 health/liveness/readiness 只返回状态；匿名和普通已登录用户均不能读取 metrics/prometheus，仅 SYSTEM_ADMIN/AUDITOR 可读取；GitHub Actions run `35321425249` 验证问答/索引/反馈/ACL/估算成本指标、Prometheus histogram 和低基数标签边界 |
 | 20 题 Golden Dataset 与离线 Runner | PASS（数据契约） | `python3 evaluation/run_eval.py`；`golden-v1` 共 20 题，`dataset_valid=true`，行为分布为 ANSWER 16、ACL_FILTERED_REFUSAL 2、REFUSE 2；尚未代表真实模型质量结果 |
-| 20 题真实 API 评测 | 历史基线 PASS；结构化契约复核待收口 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；历史两次均 20/20 通过，答案点/引用/拒答/ACL 均 100%，ACL leakage=0；2026-09-20 结构化契约复核首轮 13/20，2 题被旧账号日限额污染，临时提高配额后拒答恢复；剩余失败集中在 Top-K 召回和本地生成吞吐，ACL leakage=0，详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
+| 20 题真实 API 评测 | 历史基线 PASS；结构化契约复核进行中 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；历史两次均 20/20 通过，答案点/引用/拒答/ACL 均 100%，ACL leakage=0；本轮已完成诊断和 5 题 native JSON Schema A/B，schema failure=0，剩余问题集中在召回排序与 reasoning budget；详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
 | 检索压力集真实 API 评测 | PASS 8/8 | 2026-09-20 修正 LM Studio 模型 ID，并将 Gemma 本地默认 `AI_MAX_TOKENS` 从 1200 调整为 2400 后，最新完整运行 8/8；答案点/引用/拒答均 100%、ACL leakage=0；V10 Recall@1/3/5=75%/91.67%/100%；报告见 `evaluation/reports/retrieval-stress-v1-local-2026-09-20.md` |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
@@ -133,7 +133,7 @@ RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经�
 1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
 2. 用隔离评测身份/数据库重跑更新后的 Golden/Stress 真实 API 评测，避免日限额污染。
 3. 读取受保护 retrieval diagnostics，按失败类别决定 Chunk/Metadata、BM25、Hybrid Search 或 Reranker 是否必要。
-4. 先收敛 LM Studio structured output、最大输出和超时配置，再增加只读 MCP adapter；写操作继续不开放。
+4. 先完成 LM Studio structured output、最大输出和超时的完整回归，再增加只读 MCP adapter；写操作继续不开放。
 
 ## 文档维护规则
 

@@ -146,7 +146,7 @@ Target answer contract:
 Work:
 
 - Stabilize typed output for success, fallback, and failure responses.
-- Enforce a model-owned JSON contract containing only `answer`, `found`, `grounded`, and `sourceIndexes`; backend-owned source metadata, request IDs, failure reasons, and timings are never accepted from the model. Invalid output and missing citations fail closed to a stable handoff response. Implemented locally on 2026-09-20.
+- Enforce a model-owned JSON contract containing only `answer`, `found`, `grounded`, and `sourceIndexes`; the OpenAI-compatible provider also sends a strict `response_format=json_schema` request. Backend-owned source metadata, request IDs, failure reasons, and timings are never accepted from the model. Invalid output and missing citations fail closed to a stable handoff response. Implemented locally on 2026-09-20.
 - Add request/correlation IDs and stage-level timings for embedding, retrieval, and generation. Implemented and locally verified on 2026-09-18.
 - Record model/provider, retrieval parameters, token usage, result status, and sanitized failure reason. Implemented in Flyway V6/V7 and verified locally and in GitHub Actions run `35299110979`.
 - Add user feedback (`helpful`, `not_helpful`, optional sanitized reason). Implemented with tenant/user ownership checks, locally verified on PostgreSQL 16.15, and verified in GitHub Actions run `35300087644` with 51 tests / 0 skipped on 2026-09-18.
@@ -166,7 +166,7 @@ Goal: replace subjective demos with reproducible evidence.
 
 Current status (2026-09-20): `golden-v1` is checked in at `evaluation/datasets/golden_v1.jsonl`, and the separate `retrieval-stress-v1` set is checked in at `evaluation/datasets/retrieval_stress_v1.jsonl`. Two authenticated local API runs passed 20/20 golden cases; the historical stress run passed 8/8, and the latest full run passed 8/8 after increasing the local Gemma completion budget from 1200 to 2400. The latest stress run has 100% answer-point coverage, citation coverage/correctness, refusal correctness, and zero ACL leakage. Protected candidate-rank/similarity snapshots show Recall@1/3/5=75%/91.67%/100% with all expected documents present at Top-K; larger-corpus ranking evidence, cloud cost comparison, and independent model judging remain open.
 
-Provider follow-up (2026-09-20): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; default `AI_MAX_TOKENS=2400` was validated by the latest 8/8 stress run. The project can now move to Structured Output and bounded read-only tools.
+Provider follow-up (2026-09-20): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; default `AI_MAX_TOKENS=2400` remains the checked-in baseline, while native JSON Schema reduced malformed/truncated responses in a 5-case A/B. A 4000-token single-combination experiment passed but still needs full cost/latency regression before becoming the default.
 
 Each evaluation case records:
 

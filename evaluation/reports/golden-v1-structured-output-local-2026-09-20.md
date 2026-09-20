@@ -22,6 +22,19 @@
 
 这证明模型输出经过后端结构化解析、引用索引校验和后端来源重建后，可以完成真实闭环；模型没有成为 `sources`、`requestId` 或失败原因的权威来源。
 
+## Native JSON Schema A/B 复核
+
+Provider 已在 OpenAI-compatible Chat Completions 请求中增加 `response_format=json_schema`，schema 名称为 `rag_answer`，并将 `answer`、`found`、`grounded`、`sourceIndexes` 设为必填且禁止额外字段。后端原有 parser 和 fail-closed 分支仍保留，作为第二道校验。
+
+在相同 5 个失败样本、`RAG_TOP_K=8`、`AI_MAX_TOKENS=2400` 条件下复核：
+
+- 5 题均返回 HTTP 200，4 题完整通过答案点和引用检查。
+- 结构化 schema failure 为 0；引用覆盖率/正确性为 80%，答案点覆盖率为 68.33%。
+- 之前的 `GENERATION_ERROR` 不再出现；剩余组合题返回明确的 `STRUCTURED_OUTPUT_INVALID`，因为 Gemma 的 reasoning 消耗完 2400 token 后没有结束 JSON。
+- 单独将本地实验预算提高到 `AI_MAX_TOKENS=4000` 后，组合题恢复为 `found=true`、`grounded=true`，两条引用正确，端到端约 5.3 秒；4000 尚未作为默认配置发布，仍需完整 Golden/Stress 回归和成本/延迟比较。
+
+LM Studio 服务日志显示，失败请求的 `reasoning_tokens` 接近整个 completion budget，并以 `finish_reason=length` 结束；因此这部分属于模型推理预算/Provider 配置问题，不是后端结构化 parser 或 ACL 边界问题。
+
 ## Agent Tool 真实 HTTP 结果
 
 `GET /api/agent/tools` 只暴露以下三项：

@@ -81,6 +81,35 @@ The report retains per-case failures instead of hiding them behind an average. I
 
 The first two real local API runs are recorded in [reports/golden-v1-local-2026-09-18.md](reports/golden-v1-local-2026-09-18.md). Each run passed 20/20 cases, with 100% answerable pass rate, citation coverage/correctness, refusal correctness, and zero ACL leakage. Latency and token figures are local-provider evidence only, not production SLOs.
 
+## Run the answer-quality extension set
+
+`datasets/answer_quality_v1.jsonl` adds 12 focused cases to the frozen 20-case baseline: 8 answerable questions covering battery, installation, warranty, returns, password recovery, and temporary passwords, plus 2 out-of-scope refusals and 2 ACL-filtered refusals. Together with `golden_v1`, the repository now has 32 versioned cases without rewriting the historical baseline.
+
+Run the dataset contract check:
+
+```bash
+python3 evaluation/run_eval.py \
+  --dataset evaluation/datasets/answer_quality_v1.jsonl \
+  --expected-case-count 12
+```
+
+For a live capture, use the same external fixture/credentials flow as Golden, then score the responses:
+
+```bash
+python3 evaluation/run_api_eval.py \
+  --dataset evaluation/datasets/answer_quality_v1.jsonl \
+  --credentials /private/tmp/rag-quality-credentials.json \
+  --output /private/tmp/rag-quality-v1-responses.jsonl
+
+python3 evaluation/run_eval.py \
+  --dataset evaluation/datasets/answer_quality_v1.jsonl \
+  --expected-case-count 12 \
+  --responses /private/tmp/rag-quality-v1-responses.jsonl \
+  --output /tmp/rag-quality-v1-report.json
+```
+
+The optional `quality_rules` are a deterministic rubric separate from the HTTP/Structured Output contract. They can require full expected-answer-point coverage, grounded output, no unexpected cited documents, and a fail-closed refusal. The report exposes `quality_gate_pass_rate`, `quality_gate_failure_count`, per-case `quality_errors`, and `unexpected_sources`. This is evidence-based answer checking, not an LLM judge and not a claim of factual correctness beyond the sanitized fixture.
+
 The separate retrieval stress set is `datasets/retrieval_stress_v1.jsonl`. It has 8 cases for cross-document answers, similar terminology, a firmware version document, a multi-chunk operations document, out-of-scope refusal, and ACL-filtered refusal. The historical 8/8 run is recorded in [reports/retrieval-stress-v1-local-2026-09-18.md](reports/retrieval-stress-v1-local-2026-09-18.md); the current V10 diagnostics run, including the corrected LM Studio model IDs and the single cross-document generation miss, is recorded in [reports/retrieval-stress-v1-local-2026-09-20.md](reports/retrieval-stress-v1-local-2026-09-20.md).
 
 To validate or score it, pass its expected case count explicitly:
@@ -202,4 +231,4 @@ The scorer compares answer/citation/refusal contract behavior, Structured Output
 
 ## Deliberate boundary
 
-Raw live-model response captures remain outside the repository because they contain request IDs and environment-specific output. The checked-in aggregate reports prove the authenticated local Golden and stress runs in addition to the versioned datasets and deterministic runner. The backend now persists protected retrieval-level snapshots, and the collector/scorer for `SYSTEM_ADMIN`/`AUDITOR` diagnostics is implemented; the 2026-09-20 Structured Output/Agent HTTP report records the current contract evidence and remaining retrieval/provider failures. An independently identified LLM-as-judge or rubric-based groundedness score remains optional. Retrieval changes such as BM25, hybrid search, or a reranker should be justified by the resulting failure categories.
+Raw live-model response captures remain outside the repository because they contain request IDs and environment-specific output. The checked-in aggregate reports prove the authenticated local Golden and stress runs in addition to the versioned datasets and deterministic runner. The backend now persists protected retrieval-level snapshots, and the collector/scorer for `SYSTEM_ADMIN`/`AUDITOR` diagnostics is implemented; the 2026-09-20 Structured Output/Agent HTTP report records the current contract evidence and remaining retrieval/provider failures. The answer-quality extension adds a deterministic rubric; an LLM-as-judge remains optional and must be reported separately. Retrieval changes such as BM25, hybrid search, or a reranker should be justified by the resulting failure categories.

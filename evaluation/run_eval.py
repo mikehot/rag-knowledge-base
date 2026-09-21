@@ -33,6 +33,13 @@ REQUIRED_CASE_FIELDS = {
     "refusal_match_terms",
 }
 REQUIRED_USER_FIELDS = {"id", "department", "role", "knowledge_base"}
+QUALITY_RULE_FIELDS = {
+    "min_point_coverage",
+    "max_unexpected_source_count",
+    "max_source_count",
+    "require_grounded",
+    "require_refusal_contract",
+}
 
 
 def fail(message: str) -> None:
@@ -108,6 +115,24 @@ def validate_case(case: dict[str, Any], expected_version: str) -> None:
             fail(f"{case['id']} ACL_FILTERED_REFUSAL requires forbidden documents")
     elif behavior == "PERMISSION_DENIED" and case["answerable"]:
         fail(f"{case['id']} PERMISSION_DENIED cannot be answerable")
+    quality_rules = case.get("quality_rules", {})
+    if not isinstance(quality_rules, dict):
+        fail(f"{case['id']}.quality_rules must be an object")
+    unknown_rules = set(quality_rules) - QUALITY_RULE_FIELDS
+    if unknown_rules:
+        fail(f"{case['id']}.quality_rules has unsupported fields: {sorted(unknown_rules)}")
+    if "min_point_coverage" in quality_rules:
+        value = quality_rules["min_point_coverage"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            fail(f"{case['id']}.quality_rules.min_point_coverage must be between 0 and 1")
+    for field in ("max_unexpected_source_count", "max_source_count"):
+        if field in quality_rules:
+            value = quality_rules[field]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                fail(f"{case['id']}.quality_rules.{field} must be a non-negative integer")
+    for field in ("require_grounded", "require_refusal_contract"):
+        if field in quality_rules and not isinstance(quality_rules[field], bool):
+            fail(f"{case['id']}.quality_rules.{field} must be boolean")
 
 
 def validate_dataset(cases: list[dict[str, Any]], expected_case_count: int = 20) -> tuple[str, Counter[str]]:
@@ -172,6 +197,7 @@ def score_response(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
         matched_terms = [term for term in point["match_any"] if normalize(term) in answer_normalized]
         point_results.append({"id": point["id"], "matched": bool(matched_terms), "matched_terms": matched_terms})
     expected_sources = set(case["expected_source_documents"])
+    unexpected_sources = sorted(names - expected_sources)
     citation_coverage = bool(names) if expected_sources else None
     citation_correctness = bool(expected_sources <= names) if expected_sources else None
     behavior = case["expected_behavior"]
@@ -200,6 +226,26 @@ def score_response(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
         if point_results
         else None
     )
+    quality_rules = case.get("quality_rules", {})
+    quality_errors: list[str] = []
+    if "min_point_coverage" in quality_rules and (
+        point_coverage is None or point_coverage < quality_rules["min_point_coverage"]
+    ):
+        quality_errors.append(
+            f"point coverage below {quality_rules['min_point_coverage']:.4f}"
+        )
+    if "max_unexpected_source_count" in quality_rules and len(unexpected_sources) > quality_rules["max_unexpected_source_count"]:
+        quality_errors.append(f"unexpected source count: {len(unexpected_sources)}")
+    if "max_source_count" in quality_rules and len(names) > quality_rules["max_source_count"]:
+        quality_errors.append(f"source count: {len(names)}")
+    if quality_rules.get("require_grounded") and not grounded:
+        quality_errors.append("grounded contract is false")
+    if quality_rules.get("require_refusal_contract"):
+        if found or grounded or names:
+            quality_errors.append("refusal contract is not fail-closed")
+        if not any(normalize(term) in answer_normalized for term in case["refusal_match_terms"]):
+            quality_errors.append("refusal answer does not contain an allowed handoff term")
+    quality_gate_pass = not quality_errors if quality_rules else None
     return {
         "id": case["id"],
         "passed": not errors,
@@ -208,6 +254,9 @@ def score_response(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
         "point_coverage": point_coverage,
         "citation_coverage": citation_coverage,
         "citation_correctness": citation_correctness,
+        "unexpected_sources": unexpected_sources,
+        "quality_gate_pass": quality_gate_pass,
+        "quality_errors": quality_errors,
         "acl_leakage": bool(leakage),
         "errors": errors,
     }
@@ -237,6 +286,7 @@ def evaluate_responses(cases: list[dict[str, Any]], responses: list[dict[str, An
 
     answerable = [item for item in results if item["behavior"] == "ANSWER"]
     refusals = [item for item in results if item["behavior"] in {"REFUSE", "ACL_FILTERED_REFUSAL"}]
+    quality_results = [item for item in results if item.get("quality_gate_pass") is not None]
     return {
         "responses_evaluated": len(results),
         "passed": sum(1 for item in all_results if item["passed"]),
@@ -246,6 +296,8 @@ def evaluate_responses(cases: list[dict[str, Any]], responses: list[dict[str, An
         "citation_correctness": average("citation_correctness", answerable),
         "expected_answer_point_coverage": average("point_coverage", answerable),
         "refusal_correctness": round(sum(1 for item in refusals if item["passed"]) / len(refusals), 4) if refusals else None,
+        "quality_gate_pass_rate": round(sum(1 for item in quality_results if item["quality_gate_pass"]) / len(quality_results), 4) if quality_results else None,
+        "quality_gate_failure_count": sum(1 for item in quality_results if not item["quality_gate_pass"]),
         "acl_leakage_count": sum(1 for item in results if item["acl_leakage"]),
         "schema_failure_count": sum(1 for item in results if not item["schema_ok"]),
         "case_results": all_results,

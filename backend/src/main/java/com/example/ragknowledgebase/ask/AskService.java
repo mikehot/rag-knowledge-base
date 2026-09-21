@@ -35,6 +35,7 @@ public class AskService {
     private final AskRetrievalHitRepository retrievalHitRepository;
     private final OperationalMetrics operationalMetrics;
     private final QuestionComplexityClassifier questionComplexityClassifier;
+    private final KeywordRrfRetriever keywordRrfRetriever;
 
     public AskService(
         AppProperties properties,
@@ -53,10 +54,19 @@ public class AskService {
         this.retrievalHitRepository = retrievalHitRepository;
         this.operationalMetrics = operationalMetrics;
         this.questionComplexityClassifier = new QuestionComplexityClassifier();
+        this.keywordRrfRetriever = new KeywordRrfRetriever();
     }
 
     @Transactional
     public AskResponse ask(AuthenticatedUser user, AskRequest request) {
+        return ask(user, request, RetrievalMode.VECTOR);
+    }
+
+    @Transactional
+    public AskResponse ask(AuthenticatedUser user, AskRequest request, RetrievalMode retrievalMode) {
+        if (retrievalMode == RetrievalMode.KEYWORD_RRF && !properties.rag().hybridExperimentEnabled()) {
+            throw new BusinessException(400, "检索实验未启用");
+        }
         String question = request.question().trim();
         enforceDailyLimit(user.userId());
         UUID requestId = RequestIdContext.currentOrNew();
@@ -78,15 +88,30 @@ public class AskService {
 
             stage = Stage.RETRIEVAL;
             stageStarted = System.nanoTime();
-            List<ChunkSearchResult> hits = chunkRepository.search(
+            List<ChunkSearchResult> vectorHits = chunkRepository.search(
                 user.tenantId(),
                 user.userId(),
                 questionEmbeddings.get(0),
                 properties.rag().topK()
             );
+            int hybridCandidateK = Math.max(properties.rag().topK(), properties.rag().hybridCandidateK());
+            List<ChunkSearchResult> hits = retrievalMode == RetrievalMode.VECTOR
+                ? vectorHits
+                : keywordRrfRetriever.retrieve(
+                    question,
+                    vectorHits,
+                    chunkRepository.findVisibleReadyChunks(user.tenantId(), user.userId(), hybridCandidateK),
+                    properties.rag().topK(),
+                    hybridCandidateK,
+                    properties.rag().hybridKeywordWeight(),
+                    properties.rag().hybridRrfK()
+                );
             retrievalHits = hits;
             retrievalMs = elapsedMs(stageStarted);
-            if (hits.isEmpty() || hits.get(0).similarity() < properties.rag().similarityThreshold()) {
+            boolean retrievalMiss = hits.isEmpty()
+                || (retrievalMode == RetrievalMode.VECTOR
+                    && hits.get(0).similarity() < properties.rag().similarityThreshold());
+            if (retrievalMiss) {
                 response = response(
                     requestId,
                     totalStarted,
@@ -125,7 +150,7 @@ public class AskService {
                         generationMs
                     );
                     resultStatus = AskResultStatus.FAILED;
-                    return record(user, question, response, resultStatus, retrievalHits);
+                    return record(user, question, response, resultStatus, retrievalHits, retrievalMode);
                 }
                 if (!structuredAnswer.found()) {
                     response = response(
@@ -224,7 +249,7 @@ public class AskService {
             );
             resultStatus = AskResultStatus.FAILED;
         }
-        return record(user, question, response, resultStatus, retrievalHits);
+        return record(user, question, response, resultStatus, retrievalHits, retrievalMode);
     }
 
     private AiProviderResponse generate(String prompt, String question) {
@@ -258,7 +283,8 @@ public class AskService {
         String question,
         AskResponse response,
         AskResultStatus resultStatus,
-        List<ChunkSearchResult> retrievalHits
+        List<ChunkSearchResult> retrievalHits,
+        RetrievalMode retrievalMode
     ) {
         AskLog askLog = new AskLog(
             UUID.randomUUID(),
@@ -276,6 +302,7 @@ public class AskService {
             response.timings().generationMs(),
             properties.ai().modelId(),
             properties.ai().provider(),
+            retrievalMode,
             properties.rag().topK(),
             properties.rag().similarityThreshold()
         );

@@ -122,6 +122,84 @@ python3 evaluation/run_retrieval_eval.py \
 
 The scorer is deterministic and only treats the protected diagnostic response as retrieval evidence. It does not infer relevance from the answer text or citation presence. The PostgreSQL/HTTP path is now verified locally; a new aggregate retrieval report is still withheld until the Docker-backed Java integration gate is executable in CI.
 
+## Run the offline keyword candidate benchmark
+
+`datasets/keyword_candidates_v1.jsonl` is a retrieval-only projection of the stress fixture. It intentionally contains no `expected_answer_points` or `refusal_match_terms`; the runner rejects those fields and derives keyword candidates only from the question and the sanitized fixture corpus. ACL visibility is applied before scoring.
+
+Run:
+
+```bash
+python3 evaluation/run_keyword_candidate_benchmark.py \
+  --iterations 20 \
+  --output /tmp/keyword-candidates-v1-local.json
+```
+
+The benchmark compares raw CJK character n-grams/ASCII terms with generic-question-word normalization. It reports document Recall@1/3/5, expected-source rank, ACL leakage, refusal candidates, candidate latency, and Top-K context interference. The current local result is recorded in [reports/keyword-candidates-v1-local-2026-09-21.md](reports/keyword-candidates-v1-local-2026-09-21.md). It is a candidate-stage signal only; it does not modify PostgreSQL, the online retrieval path, Top-K=5, or the Reranker decision.
+
+## Run the matched-case fusion benchmark
+
+After a protected diagnostics capture and the keyword benchmark are available, compare document-level vector candidates with normalized keyword candidates and RRF variants:
+
+```bash
+python3 evaluation/run_retrieval_fusion_benchmark.py \
+  --diagnostics /private/tmp/rag-stress-native-4000-diagnostics-20260921.jsonl \
+  --keyword-report /tmp/keyword-candidates-v1-local.json \
+  --output /tmp/retrieval-fusion-v1-local.json
+```
+
+This is an offline matched-case simulation. It applies the same fixture ACL expectations and evaluates Recall@1/3/5, context interference, refusal candidates, and ACL leakage. The result is recorded in [reports/retrieval-fusion-v1-local-2026-09-21.md](reports/retrieval-fusion-v1-local-2026-09-21.md). A ranking signal is not permission to enable the runtime path: the next gate is an authenticated online A/B comparison with the same request, context budget, latency, token, and failure metrics.
+
+## Run the authenticated online retrieval A/B
+
+The online runner reuses a captured `/api/ask` vector response and protected retrieval diagnostics, then queries only ACL-visible READY chunks from the local database to evaluate normalized keyword ranking and keyword-weight-2 RRF on the same eight cases:
+
+```bash
+python3 evaluation/run_online_retrieval_ab.py \
+  --responses /private/tmp/rag-online-ab-vector-20260921.jsonl \
+  --diagnostics /private/tmp/rag-online-ab-vector-diagnostics-20260921.jsonl \
+  --manifest /private/tmp/rag-online-ab-fixture-20260921.json \
+  --output /tmp/retrieval-online-ab-v1-local.json
+```
+
+This is an evaluation-only candidate comparison. The keyword/fused candidates are not injected back into `AskService`, so the runner must not be used to claim end-to-end Hybrid Search quality, token savings, cost savings, or production latency. The current local result is recorded in [reports/retrieval-online-ab-v1-local-2026-09-21.md](reports/retrieval-online-ab-v1-local-2026-09-21.md). Raw responses, diagnostics, fixture manifests, and credentials remain outside the repository.
+
+## Run the backend-owned paired A/B
+
+The backend-owned experiment is disabled by default. For a disposable local environment, restart the backend with:
+
+```bash
+RAG_HYBRID_EXPERIMENT_ENABLED=true docker compose up -d --build backend
+```
+
+Capture the same dataset twice with the same external credentials, changing only the retrieval mode:
+
+```bash
+python3 evaluation/run_api_eval.py \
+  --dataset evaluation/datasets/keyword_candidates_v1.jsonl \
+  --credentials /private/tmp/rag-online-ab-credentials.json \
+  --retrieval-mode vector \
+  --output /private/tmp/rag-online-ab-vector-api.jsonl
+
+python3 evaluation/run_api_eval.py \
+  --dataset evaluation/datasets/keyword_candidates_v1.jsonl \
+  --credentials /private/tmp/rag-online-ab-credentials.json \
+  --retrieval-mode keyword-rrf \
+  --output /private/tmp/rag-online-ab-keyword-rrf-api.jsonl
+```
+
+Collect protected diagnostics separately for both response files, then run the paired scorer:
+
+```bash
+python3 evaluation/run_backend_retrieval_ab.py \
+  --vector-responses /private/tmp/rag-online-ab-vector-api.jsonl \
+  --vector-diagnostics /private/tmp/rag-online-ab-vector-diagnostics.jsonl \
+  --keyword-responses /private/tmp/rag-online-ab-keyword-rrf-api.jsonl \
+  --keyword-diagnostics /private/tmp/rag-online-ab-keyword-rrf-diagnostics.jsonl \
+  --output /tmp/backend-retrieval-ab-v1-local.json
+```
+
+The scorer compares answer/citation/refusal contract behavior, Structured Output failures, HTTP/API latency, stage timings, token usage, ACL leakage, retrieval ranking, and persisted retrieval mode without printing answers or chunk content. Estimated cost is not concluded when the API capture does not expose it. The current local result is recorded in [reports/retrieval-backend-ab-v1-local-2026-09-21.md](reports/retrieval-backend-ab-v1-local-2026-09-21.md). Turn the flag off after the experiment.
+
 ## Deliberate boundary
 
 Raw live-model response captures remain outside the repository because they contain request IDs and environment-specific output. The checked-in aggregate reports prove the authenticated local Golden and stress runs in addition to the versioned datasets and deterministic runner. The backend now persists protected retrieval-level snapshots, and the collector/scorer for `SYSTEM_ADMIN`/`AUDITOR` diagnostics is implemented; the 2026-09-20 Structured Output/Agent HTTP report records the current contract evidence and remaining retrieval/provider failures. An independently identified LLM-as-judge or rubric-based groundedness score remains optional. Retrieval changes such as BM25, hybrid search, or a reranker should be justified by the resulting failure categories.

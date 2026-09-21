@@ -11,6 +11,7 @@ public record AskRetrievalDiagnostics(
     AskResultStatus resultStatus,
     AskFailureReason failureReason,
     boolean found,
+    RetrievalMode retrievalMode,
     Integer topK,
     Double similarityThreshold,
     List<AskRetrievalHit> hits

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Collect real /api/ask responses for the versioned Golden Dataset.
+"""Collect real /api/ask responses for a versioned evaluation dataset.
 
 Credentials are supplied by an external JSON file and are never written to the
-repository. The output is intentionally flattened so run_eval.py can score it
-without knowing the API transport details.
+repository. The optional retrieval mode is sent as an experiment header and is
+also recorded in capture metadata so paired A/B files remain distinguishable.
+The output is intentionally flattened so run_eval.py can score it without
+knowing the API transport details.
 """
 
 from __future__ import annotations
@@ -52,11 +54,20 @@ def load_credentials(path: Path) -> dict[str, dict[str, str]]:
     return result
 
 
-def request_json(base_url: str, path: str, payload: dict[str, Any], token: str | None, timeout: float) -> tuple[int, dict[str, Any], float]:
+def request_json(
+    base_url: str,
+    path: str,
+    payload: dict[str, Any],
+    token: str | None,
+    timeout: float,
+    retrieval_mode: str | None = None,
+) -> tuple[int, dict[str, Any], float]:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    if retrieval_mode:
+        headers["X-RAG-Retrieval-Mode"] = retrieval_mode
     request = urllib.request.Request(f"{base_url.rstrip('/')}{path}", data=body, headers=headers, method="POST")
     started = time.monotonic()
     try:
@@ -84,13 +95,21 @@ def login(base_url: str, credentials: dict[str, str], timeout: float) -> str:
     return str(data["token"])
 
 
-def flatten_case(case: dict[str, Any], status: int, envelope: dict[str, Any], wall_latency_ms: float, actor_id: str) -> dict[str, Any]:
+def flatten_case(
+    case: dict[str, Any],
+    status: int,
+    envelope: dict[str, Any],
+    wall_latency_ms: float,
+    actor_id: str,
+    retrieval_mode: str,
+) -> dict[str, Any]:
     data = envelope.get("data")
     if not isinstance(data, dict):
         data = {}
     return {
         "id": case["id"],
         "actorId": actor_id,
+        "retrievalMode": retrieval_mode.upper().replace("-", "_"),
         "answer": data.get("answer", "") if isinstance(data.get("answer", ""), str) else "",
         "found": data.get("found", False) is True,
         "grounded": data.get("grounded", False) is True,
@@ -114,6 +133,7 @@ def main() -> int:
     parser.add_argument("--credentials", type=Path, required=True, help="External JSON map keyed by acting_user.id")
     parser.add_argument("--output", type=Path, required=True, help="JSONL response capture path")
     parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--retrieval-mode", choices=("vector", "keyword-rrf"), default="vector")
     args = parser.parse_args()
     try:
         cases = load_jsonl(args.dataset)
@@ -134,8 +154,9 @@ def main() -> int:
                 {"question": case["question"]},
                 tokens[actor_id],
                 args.timeout,
+                args.retrieval_mode,
             )
-            rows.append(flatten_case(case, status, envelope, elapsed_ms, actor_id))
+            rows.append(flatten_case(case, status, envelope, elapsed_ms, actor_id, args.retrieval_mode))
         args.output.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8")
         print(f"captured {len(rows)} responses to {args.output}")
         return 0

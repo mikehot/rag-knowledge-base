@@ -59,6 +59,10 @@ All secrets and runtime choices are environment variables.
 | `RAG_CHUNK_OVERLAP` | `100` | Character overlap |
 | `RAG_TOP_K` | `5` | Retrieval count |
 | `RAG_SIMILARITY_THRESHOLD` | `0.35` | Below this, return handoff without LLM |
+| `RAG_HYBRID_EXPERIMENT_ENABLED` | `false` | Gate for the evaluation-only `keyword-rrf` request header; default vector path is unchanged |
+| `RAG_HYBRID_CANDIDATE_K` | `50` | ACL-visible chunks inspected by the gated in-memory keyword experiment |
+| `RAG_HYBRID_KEYWORD_WEIGHT` | `2.0` | Keyword weight in the gated RRF comparison |
+| `RAG_HYBRID_RRF_K` | `60` | RRF smoothing constant for the gated comparison |
 | `AI_EMBEDDING_DIM` | `768` | Must match embedding model |
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |
 | `AI_MODEL_ID` | `google/gemma-4-26b-a4b-qat` | Chat model; verify the identifier in `GET http://localhost:1234/v1/models` |
@@ -99,7 +103,7 @@ The configured model IDs must match the returned `id` values exactly. For the cu
 - V1 creates the original RAG schema and `vector(${AI_EMBEDDING_DIM})` column.
 - V2 adds tenant, department, role, knowledge-base membership, document lifecycle metadata, and document ACL tables.
 - V5 adds persistent indexing tasks for upload, replacement, single reindex, and batch reindex.
-- V6-V8 add ask observability, feedback, and operational audit/metric fields; V9 repairs the `app_user.created_at` default for older baseline databases; V10 stores protected Top-K retrieval snapshots for diagnostics.
+- V6-V8 add ask observability, feedback, and operational audit/metric fields; V9 repairs the `app_user.created_at` default for older baseline databases; V10 stores protected Top-K retrieval snapshots for diagnostics; V11 records the retrieval mode used by each ask.
 - `spring.jpa.hibernate.ddl-auto=validate`; application startup fails when entity mappings and the migrated schema disagree.
 - `baseline-on-migrate=true` upgrades the pre-Flyway MVP database by recording it as V1 before applying V2. Back up a real deployment before its first migration.
 - The fixed default tenant and knowledge-base IDs are compatibility identities for the local V0.1 environment; they are not request-controlled values.
@@ -111,7 +115,7 @@ The configured model IDs must match the returned `id` values exactly. For the cu
 ./mvnw test
 ```
 
-The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers 1.21.4 with `pgvector/pgvector:pg16`. With Docker Desktop 4.91.0, local `./mvnw test` executed all 91 tests, including 13 PostgreSQL/pgvector integration tests, with 0 skipped. In environments where Docker is unavailable to Testcontainers, those integration tests remain skipped, so CI output must still be checked before treating PostgreSQL coverage as proven.
+The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers 1.21.4 with `pgvector/pgvector:pg16`. With Docker Desktop 4.91.0, local `./mvnw test` executed all 98 tests, including 13 PostgreSQL/pgvector integration tests, with 0 skipped. In environments where Docker is unavailable to Testcontainers, those integration tests remain skipped, so CI output must still be checked before treating PostgreSQL coverage as proven.
 
 ## Cloud Provider Examples
 
@@ -178,6 +182,13 @@ Main endpoints:
 - `GET /api/admin/retrieval-diagnostics/{requestId}`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/batch-reindex`
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks`
+
+For the local, explicitly enabled retrieval experiment only, send
+`X-RAG-Retrieval-Mode: keyword-rrf`. The header is rejected while
+`RAG_HYBRID_EXPERIMENT_ENABLED=false`; omitting it always uses `VECTOR`.
+The experiment reuses server-side tenant/knowledge-base/document ACLs and
+records `retrievalMode` in protected diagnostics. It reads a bounded set of
+ACL-visible chunks in memory and is not a production full-text index.
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}/retry`
 

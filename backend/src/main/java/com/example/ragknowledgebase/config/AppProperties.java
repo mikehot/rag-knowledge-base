@@ -32,7 +32,11 @@ public record AppProperties(
         int chunkOverlap,
         int topK,
         double similarityThreshold,
-        int embeddingDim
+        int embeddingDim,
+        boolean hybridExperimentEnabled,
+        int hybridCandidateK,
+        double hybridKeywordWeight,
+        int hybridRrfK
     ) {
     }
 

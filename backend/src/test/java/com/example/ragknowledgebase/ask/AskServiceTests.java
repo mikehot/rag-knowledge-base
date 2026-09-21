@@ -163,6 +163,67 @@ class AskServiceTests {
     }
 
     @Test
+    void rejectsKeywordRrfWhenTheExperimentIsDisabled() {
+        assertThatThrownBy(() -> askService.ask(USER, new AskRequest("保修期限是多少？"), RetrievalMode.KEYWORD_RRF))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(400);
+
+        verify(embeddingProvider, never()).embed(any());
+        verify(chunkRepository, never()).search(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void runsKeywordRrfThroughTheSameStructuredAnswerPathWhenEnabled() {
+        askService = new AskService(
+            properties(0, false, true),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        String question = "保修期限是多少？";
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult vectorDistractor = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "operations.md",
+            "chunk#1",
+            "设备需要重新启动后再检查网络。",
+            0.92
+        );
+        ChunkSearchResult exactKeyword = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "sample_faq.md",
+            "chunk#2",
+            "保修期限为一年，申请时需要提供订单信息。",
+            0.0
+        );
+        when(embeddingProvider.embed(List.of(question))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(vectorDistractor));
+        when(chunkRepository.findVisibleReadyChunks(TENANT_ID, USER_ID, 50))
+            .thenReturn(List.of(vectorDistractor, exactKeyword));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"保修期为一年。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            128
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest(question), RetrievalMode.KEYWORD_RRF);
+
+        assertThat(response.found()).isTrue();
+        assertThat(response.sources()).singleElement().satisfies(source ->
+            assertThat(source.filename()).isEqualTo("sample_faq.md")
+        );
+        ArgumentCaptor<AskLog> log = ArgumentCaptor.forClass(AskLog.class);
+        verify(askLogRepository).save(log.capture());
+        assertThat(log.getValue().getRetrievalMode()).isEqualTo(RetrievalMode.KEYWORD_RRF);
+        verify(chunkRepository).findVisibleReadyChunks(TENANT_ID, USER_ID, 50);
+    }
+
+    @Test
     void returnsHandoffWithoutCallingModelWhenSimilarityIsTooLow() {
         float[] embedding = new float[] {0.3f, 0.4f};
         ChunkSearchResult hit = new ChunkSearchResult(
@@ -440,10 +501,14 @@ class AskServiceTests {
     }
 
     private AppProperties properties(int dailyLimit, boolean complexRoutingEnabled) {
+        return properties(dailyLimit, complexRoutingEnabled, false);
+    }
+
+    private AppProperties properties(int dailyLimit, boolean complexRoutingEnabled, boolean hybridExperimentEnabled) {
         return new AppProperties(
             null,
             null,
-            new AppProperties.Rag(700, 100, 5, 0.35, 768),
+            new AppProperties.Rag(700, 100, 5, 0.35, 768, hybridExperimentEnabled, 50, 2.0, 60),
             null,
             new AppProperties.Ai(
                 "openai-compatible", "", "", "", 1200, 3200, complexRoutingEnabled, 120, 1, dailyLimit

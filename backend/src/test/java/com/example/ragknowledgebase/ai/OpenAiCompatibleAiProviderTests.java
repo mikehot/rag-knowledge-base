@@ -89,7 +89,7 @@ class OpenAiCompatibleAiProviderTests {
         return new AppProperties(
             new AppProperties.Auth("demo", "demo123456", "test-secret", 86400),
             new AppProperties.Upload("./uploads", 20_971_520, List.of("md")),
-            new AppProperties.Rag(700, 100, 5, 0.35, 768),
+            new AppProperties.Rag(700, 100, 5, 0.35, 768, false, 50, 2.0, 60),
             new AppProperties.Enterprise(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 UUID.fromString("00000000-0000-0000-0000-000000000101"),

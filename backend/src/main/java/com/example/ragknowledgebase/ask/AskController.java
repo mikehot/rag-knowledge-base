@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,9 +28,14 @@ public class AskController {
     @PostMapping("/ask")
     public ApiResponse<AskResponse> ask(
         Authentication authentication,
-        @Valid @RequestBody AskRequest request
+        @Valid @RequestBody AskRequest request,
+        @RequestHeader(value = "X-RAG-Retrieval-Mode", required = false) String retrievalMode
     ) {
-        return ApiResponse.ok(askService.ask(currentUser(authentication), request));
+        return ApiResponse.ok(askService.ask(
+            currentUser(authentication),
+            request,
+            RetrievalMode.fromHeader(retrievalMode)
+        ));
     }
 
     @PutMapping("/ask/{requestId}/feedback")

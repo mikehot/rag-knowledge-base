@@ -176,7 +176,7 @@ class PostgresEnterpriseIntegrationTests {
                   AND column_name IN (
                     'tenant_id', 'request_id', 'result_status', 'failure_reason', 'latency_ms',
                     'embedding_latency_ms', 'retrieval_latency_ms', 'generation_latency_ms',
-                    'model_id', 'provider', 'top_k', 'similarity_threshold'
+                    'model_id', 'provider', 'retrieval_mode', 'top_k', 'similarity_threshold'
                   )
                 """,
             Integer.class
@@ -196,12 +196,12 @@ class PostgresEnterpriseIntegrationTests {
             String.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(10);
+        assertThat(successfulMigrations).isEqualTo(11);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
         assertThat(defaultAccessCount).isGreaterThanOrEqualTo(1);
-        assertThat(askObservabilityColumnCount).isEqualTo(12);
+        assertThat(askObservabilityColumnCount).isEqualTo(13);
         assertThat(feedbackTableCount).isEqualTo(1);
         Integer retrievalDiagnosticsTableCount = jdbcTemplate.queryForObject(
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ask_retrieval_hit'",

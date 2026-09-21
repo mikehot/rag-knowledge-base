@@ -141,6 +141,97 @@ public class ChunkJdbcRepository {
         );
     }
 
+    /**
+     * Returns only the current user's visible READY chunks for the gated
+     * retrieval experiment. The ACL predicates intentionally mirror search().
+     */
+    public List<ChunkSearchResult> findVisibleReadyChunks(UUID tenantId, UUID userId, int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("visible chunk limit must be positive");
+        }
+        String sql = """
+            SELECT c.id, c.document_id, d.filename, c.locator, c.content
+            FROM chunk c
+            JOIN document d ON d.id = c.document_id
+            WHERE d.tenant_id = ?
+              AND d.status = 'READY'
+              AND d.deleted_at IS NULL
+              AND d.disabled_at IS NULL
+              AND (
+                d.user_id = ?
+                OR EXISTS (
+                  SELECT 1 FROM user_role ur
+                  JOIN app_role r ON r.id = ur.role_id
+                  WHERE ur.user_id = ?
+                    AND r.tenant_id = ?
+                    AND r.code = 'SYSTEM_ADMIN'
+                )
+                OR EXISTS (
+                  SELECT 1 FROM knowledge_base_membership m
+                  WHERE m.knowledge_base_id = d.knowledge_base_id
+                    AND m.tenant_id = ?
+                    AND m.permission IN ('READ', 'MANAGE')
+                    AND (
+                      (m.principal_type = 'USER' AND m.principal_id = ?)
+                      OR (m.principal_type = 'DEPARTMENT' AND m.principal_id = (
+                        SELECT u.department_id FROM app_user u
+                        WHERE u.id = ? AND u.tenant_id = ?
+                      ))
+                      OR (m.principal_type = 'ROLE' AND EXISTS (
+                        SELECT 1 FROM user_role ur
+                        WHERE ur.user_id = ? AND ur.role_id = m.principal_id
+                      ))
+                    )
+                )
+                OR EXISTS (
+                  SELECT 1 FROM document_acl a
+                  WHERE a.document_id = d.id
+                    AND a.tenant_id = ?
+                    AND a.permission IN ('READ', 'MANAGE')
+                    AND (
+                      (a.principal_type = 'USER' AND a.principal_id = ?)
+                      OR (a.principal_type = 'DEPARTMENT' AND a.principal_id = (
+                        SELECT u.department_id FROM app_user u
+                        WHERE u.id = ? AND u.tenant_id = ?
+                      ))
+                      OR (a.principal_type = 'ROLE' AND EXISTS (
+                        SELECT 1 FROM user_role ur
+                        WHERE ur.user_id = ? AND ur.role_id = a.principal_id
+                      ))
+                    )
+                )
+              )
+            ORDER BY d.filename, c.seq, c.id
+            LIMIT ?
+            """;
+        return jdbcTemplate.query(
+            sql,
+            (rs, rowNum) -> new ChunkSearchResult(
+                rs.getObject("id", UUID.class),
+                rs.getObject("document_id", UUID.class),
+                rs.getString("filename"),
+                rs.getString("locator"),
+                rs.getString("content"),
+                0.0
+            ),
+            tenantId,
+            userId,
+            userId,
+            tenantId,
+            tenantId,
+            userId,
+            userId,
+            tenantId,
+            userId,
+            tenantId,
+            userId,
+            userId,
+            tenantId,
+            userId,
+            limit
+        );
+    }
+
     private String vectorLiteral(float[] values) {
         List<String> parts = new ArrayList<>(values.length);
         for (float value : values) {

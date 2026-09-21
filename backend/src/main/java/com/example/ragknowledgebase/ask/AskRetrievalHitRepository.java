@@ -49,7 +49,7 @@ public class AskRetrievalHitRepository {
         List<AskRetrievalDiagnostics> diagnostics = jdbcTemplate.query(
             """
                 SELECT id, request_id, created_at, result_status, failure_reason,
-                       found, top_k, similarity_threshold
+                       found, retrieval_mode, top_k, similarity_threshold
                 FROM ask_log
                 WHERE tenant_id = ? AND request_id = ?
                 """,
@@ -64,6 +64,7 @@ public class AskRetrievalHitRepository {
                         ? null
                         : AskFailureReason.valueOf(rs.getString("failure_reason")),
                     rs.getBoolean("found"),
+                    RetrievalMode.valueOf(rs.getString("retrieval_mode")),
                     (Integer) rs.getObject("top_k"),
                     (Double) rs.getObject("similarity_threshold"),
                     findHits(askLogId)

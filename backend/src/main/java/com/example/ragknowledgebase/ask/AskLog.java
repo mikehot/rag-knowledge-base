@@ -60,6 +60,10 @@ public class AskLog {
     @Column(name = "provider")
     private String provider;
 
+    @Column(name = "retrieval_mode", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private RetrievalMode retrievalMode;
+
     @Column(name = "top_k")
     private Integer topK;
 
@@ -91,6 +95,48 @@ public class AskLog {
         Integer topK,
         Double similarityThreshold
     ) {
+        this(
+            id,
+            tenantId,
+            requestId,
+            userId,
+            question,
+            found,
+            tokenUsage,
+            resultStatus,
+            failureReason,
+            latencyMs,
+            embeddingLatencyMs,
+            retrievalLatencyMs,
+            generationLatencyMs,
+            modelId,
+            provider,
+            RetrievalMode.VECTOR,
+            topK,
+            similarityThreshold
+        );
+    }
+
+    public AskLog(
+        UUID id,
+        UUID tenantId,
+        UUID requestId,
+        UUID userId,
+        String question,
+        boolean found,
+        int tokenUsage,
+        AskResultStatus resultStatus,
+        AskFailureReason failureReason,
+        long latencyMs,
+        long embeddingLatencyMs,
+        long retrievalLatencyMs,
+        long generationLatencyMs,
+        String modelId,
+        String provider,
+        RetrievalMode retrievalMode,
+        Integer topK,
+        Double similarityThreshold
+    ) {
         this.id = id;
         this.tenantId = tenantId;
         this.requestId = requestId;
@@ -106,6 +152,7 @@ public class AskLog {
         this.generationLatencyMs = generationLatencyMs;
         this.modelId = modelId;
         this.provider = provider;
+        this.retrievalMode = retrievalMode;
         this.topK = topK;
         this.similarityThreshold = similarityThreshold;
     }
@@ -125,6 +172,10 @@ public class AskLog {
 
     public AskResultStatus getResultStatus() {
         return resultStatus;
+    }
+
+    public RetrievalMode getRetrievalMode() {
+        return retrievalMode;
     }
 
     public AskFailureReason getFailureReason() {

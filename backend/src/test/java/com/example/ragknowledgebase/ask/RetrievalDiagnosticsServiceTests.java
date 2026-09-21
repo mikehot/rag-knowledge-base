@@ -63,6 +63,7 @@ class RetrievalDiagnosticsServiceTests {
                 AskResultStatus.ANSWERED,
                 null,
                 true,
+                RetrievalMode.VECTOR,
                 5,
                 0.35,
                 List.of(hit)
@@ -75,6 +76,7 @@ class RetrievalDiagnosticsServiceTests {
         assertThat(response.candidateCount()).isEqualTo(1);
         assertThat(response.topSimilarity()).isEqualTo(0.91);
         assertThat(response.topK()).isEqualTo(5);
+        assertThat(response.retrievalMode()).isEqualTo(RetrievalMode.VECTOR);
         assertThat(response.hits()).singleElement().satisfies(item -> {
             assertThat(item.rank()).isEqualTo(1);
             assertThat(item.filename()).isEqualTo("handbook.md");

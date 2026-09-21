@@ -110,6 +110,8 @@ python3 evaluation/run_eval.py \
 
 The optional `quality_rules` are a deterministic rubric separate from the HTTP/Structured Output contract. They can require full expected-answer-point coverage, grounded output, no unexpected cited documents, and a fail-closed refusal. The report exposes `quality_gate_pass_rate`, `quality_gate_failure_count`, per-case `quality_errors`, and `unexpected_sources`. This is evidence-based answer checking, not an LLM judge and not a claim of factual correctness beyond the sanitized fixture.
 
+The first real backend-owned VECTOR/KEYWORD_RRF comparison for this set is recorded in [reports/answer-quality-v1-backend-ab-local-2026-09-21.md](reports/answer-quality-v1-backend-ab-local-2026-09-21.md). It is a small local-provider sample: use it to separate retrieval misses from generation/Structured Output failures, not as a production SLO.
+
 The separate retrieval stress set is `datasets/retrieval_stress_v1.jsonl`. It has 8 cases for cross-document answers, similar terminology, a firmware version document, a multi-chunk operations document, out-of-scope refusal, and ACL-filtered refusal. The historical 8/8 run is recorded in [reports/retrieval-stress-v1-local-2026-09-18.md](reports/retrieval-stress-v1-local-2026-09-18.md); the current V10 diagnostics run, including the corrected LM Studio model IDs and the single cross-document generation miss, is recorded in [reports/retrieval-stress-v1-local-2026-09-20.md](reports/retrieval-stress-v1-local-2026-09-20.md).
 
 To validate or score it, pass its expected case count explicitly:

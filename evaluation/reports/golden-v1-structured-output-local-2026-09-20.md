@@ -65,6 +65,24 @@ LM Studio 服务日志显示，失败请求的 `reasoning_tokens` 接近整个 c
 
 这轮结果不支持打开路由：Golden 低于 2400 基线，Stress 也出现语义不一致。后端已增加一致性 fail-closed：当模型标记 `found=true` 但正文是系统拒答文案时，统一归一化为 `found=false`、`grounded=false`、无来源和 `INSUFFICIENT_CONTEXT`。预算路由继续保持默认关闭。
 
+## 2026-09-21 评测 Fixture 角色修复与 Top-K 对照
+
+复核 RAG-014/RAG-020 的受保护检索快照时发现，之前的 disposable fixture 复用了已有 `candidate-admin` 用户，却没有按评测凭据中的 `roleCodes` 补齐角色；该用户实际只有 `EMPLOYEE`，而 Golden 的 `demo.admin` 要求 `SYSTEM_ADMIN`。因此部分“召回失败”其实是 ACL 安全裁剪后的空结果。`evaluation/prepare_api_fixture.py` 已改为对已有用户幂等补齐缺失角色，并为四个 Golden actor 提供安全默认角色；本次重新初始化后 `candidate-admin` 为 `EMPLOYEE,SYSTEM_ADMIN`。
+
+修复 fixture 后，在默认 `RAG_TOP_K=5 / AI_MAX_TOKENS=2400` 下重新执行 Golden：
+
+- 16/20 通过，answerable pass rate=`75%`，引用正确性=`81.25%`，答案点覆盖率=`79.17%`，ACL leakage=`0`。
+- 7 次原始 `STRUCTURED_OUTPUT_INVALID`，其中 3 次影响可回答题，4 次是拒答路径但后端仍稳定返回拒答契约；没有新的 `RETRIEVAL_MISS`。
+- 受保护检索诊断 Recall@1/3/5=`6.25%/75%/93.75%`；唯一未进入 Top-5 的可回答来源是 RAG-014 的 `sample_faq.md`，其余目标来源均在候选集内。
+
+随后只把 `RAG_TOP_K` 调整为 8，保持预算、模型和 fixture 不变：
+
+- RAG-014 的 `sample_faq.md` 进入 rank 8，单题回答和引用恢复正常。
+- 完整 Golden 为 15/20，answerable pass rate=`68.75%`，答案点覆盖率=`88.54%`，原始结构化失败降为 4 次；平均 API 延迟约 `12.24s`，平均 Token=`1945`。
+- 受保护诊断 Recall@1/3/5/8=`6.25%/75%/93.75%/100%`，但更多候选文档增加上下文干扰，RAG-009、RAG-010、RAG-013、RAG-014、RAG-015 出现答案点或引用退化。
+
+结论：Top-K=8 能覆盖唯一检索缺口，但全局质量低于修复后的 Top-K=5，且 Token 成本更高；默认继续保持 Top-K=5。RAG-014 说明后续可以评估轻量 keyword/full-text 补召回，但当前证据还不足以直接引入复杂 Hybrid Search 或 Reranker。
+
 ## Agent Tool 真实 HTTP 结果
 
 `GET /api/agent/tools` 只暴露以下三项：

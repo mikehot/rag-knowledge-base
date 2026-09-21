@@ -168,6 +168,8 @@ Current status (2026-09-21): `golden-v1` is checked in at `evaluation/datasets/g
 
 Provider follow-up (2026-09-21): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; native JSON Schema remains enabled and the checked-in `AI_MAX_TOKENS=2400` baseline is retained. The full 4000-token/Top-K=8 candidate and the 3200-token complex-question route both failed to beat the 2400 Golden baseline, so neither is enabled globally. The backend now also rejects contradictory `found=true` plus handoff-text responses; retrieval and provider stability remain ahead of MCP.
 
+Evaluation fixture follow-up (2026-09-21): an existing `candidate-admin` account had been reused without reconciling its `SYSTEM_ADMIN` role, which made RAG-014/RAG-020 look like retrieval failures after ACL trimming. The fixture preparer now idempotently assigns requested/default actor roles. With corrected roles, Top-K=5/2400 achieved 16/20 and exposed one real Top-5 miss (RAG-014); Top-K=8 recovered that source but fell to 15/20 because of context interference and higher token usage. The default remains Top-K=5; a bounded keyword/full-text experiment is the next retrieval step.
+
 Each evaluation case records:
 
 - question and answerability;

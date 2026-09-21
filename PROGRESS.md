@@ -17,7 +17,7 @@
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1-V10、ACL、最小管理 API、可回滚替换和持久化索引任务已落地；PostgreSQL CI、真实 Provider 重试和重启恢复已验证，管理 UI 等次要范围仍未完成 |
 | 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；本地 Docker-backed 全量回归 91 passed/0 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
-| 4. 评测基线与检索压力集 | `verified` | `golden-v1` 两次 20/20、最新压力集 8/8 通过；答案点、引用、拒答均 100%，ACL leakage=0；V10 受保护诊断及 Recall@1/3/5 评分已落地 |
+| 4. 评测基线与检索压力集 | `verified` | `golden-v1` 历史两次 20/20、修复评测 fixture 后默认 Top-K=5 为 16/20、压力集 8/8；ACL leakage=0；V10 受保护诊断及 Recall@1/3/5 评分已落地，Top-K=8 对照未通过全局质量门槛 |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
 | 6. Agent Tool / MCP | `in-progress` | 三个只读 Agent Tool、闭合参数 schema、ACL/租户继承、空结果/超时/未知工具/预算/审计测试已落地；MCP 适配器和真实 Agent loop 尚未开放 |
 | 7. 交付包 / FDE Case Study | `in-progress` | Roadmap 与需求基线已形成；架构图、Demo、Runbook、Case Study 未完成 |
@@ -104,7 +104,7 @@
 | 用户反馈 V8 | PASS | PostgreSQL 16.15 从 V7 升至 V8；真实 API 验证创建、修改、单问答唯一反馈、原因清理、非法 rating 400 和不存在/无权 requestId 404；GitHub Actions run `35300087644` 完成 V1-V8 空库迁移及相关回归测试 |
 | 健康检查与运营指标 | PASS | 公开 health/liveness/readiness 只返回状态；匿名和普通已登录用户均不能读取 metrics/prometheus，仅 SYSTEM_ADMIN/AUDITOR 可读取；GitHub Actions run `35321425249` 验证问答/索引/反馈/ACL/估算成本指标、Prometheus histogram 和低基数标签边界 |
 | 20 题 Golden Dataset 与离线 Runner | PASS（数据契约） | `python3 evaluation/run_eval.py`；`golden-v1` 共 20 题，`dataset_valid=true`，行为分布为 ANSWER 16、ACL_FILTERED_REFUSAL 2、REFUSE 2；尚未代表真实模型质量结果 |
-| 20 题真实 API 评测 | 有证据；默认保持 2400 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；历史 2400 基线为 16/20，4000 全局候选为 15/20，3200 复杂路由实测为 13/20；预算路由未达质量门槛，默认不切换；详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
+| 20 题真实 API 评测 | 有证据；默认保持 Top-K=5/2400 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；修复 actor role fixture 后 Top-K=5/2400 为 16/20，Top-K=8/2400 为 15/20，4000 全局候选为 15/20，3200 复杂路由为 13/20；预算路由和 Top-K=8 均未达全局质量门槛，默认不切换；详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
 | 检索压力集真实 API 评测 | 基线 PASS；路由候选否决 | 默认历史压力集为 8/8；4000 候选为 8/8；3200 复杂路由本轮为 7/8，出现 1 个模型拒答字段不一致但 ACL leakage=0；V10 Recall@1/3/5=75%/91.67%/100% |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
@@ -121,10 +121,10 @@
 - 权限拒绝已有基础审计事件、tenant 范围内只读查询 API 和低基数拒绝计数；尚未提供保留策略、脱敏策略和评测记录。
 - 应用自身默认不记录文档正文和 Prompt，但本地真实联调确认 LM Studio Developer Logs 会显示 Embedding 输入、Prompt 和模型输出；客户敏感资料上线前必须单独配置或替换 Provider 日志策略，不能把应用日志边界误认为全链路日志边界。
 - 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针、反馈率/ACL 拒绝/Token/估算成本指标及首版告警 guardrail；尚未用真实 7 天基线调优阈值。
-- 已有 `golden-v1`（20 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；云端成本对照和独立的模型评分仍未完成。
+- 已有 `golden-v1`（20 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；评测 fixture 现在会幂等补齐 actor roles；云端成本对照和独立的模型评分仍未完成。
 - 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
 - 应用内只读 Agent Tool Registry 已实现并完成单元测试和真实 HTTP 复核；尚无 MCP adapter、模型驱动 Agent loop 或写工具。
-- 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。
+- 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。Top-K=8 可找回 RAG-014 但整体质量低于 Top-K=5，默认继续保持 5。
 - 没有公开 Demo、架构图、部署 Runbook、Case Study 和英文说明。
 
 ## 下一步
@@ -132,7 +132,7 @@
 RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经具备实现与真实 HTTP 证据；本地评测仍暴露召回排序和 Provider 吞吐问题，下一阶段先收敛证据，再决定是否进入 MCP：
 
 1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
-2. 读取受保护 retrieval diagnostics，按失败类别拆分 Chunk/Metadata、BM25、Hybrid Search、Reranker 与模型路由的必要性。
+2. 基于修复 fixture 后的诊断结果，先针对 RAG-014 做轻量 keyword/full-text 补召回实验，再决定是否需要 BM25/Hybrid Search；不直接把 Top-K 或 Reranker 切到默认。
 3. 保持 2400 默认，优先修复召回缺口和本地模型稳定性；未通过质量、P95 和成本门槛前不打开 `AI_COMPLEX_ROUTING_ENABLED`。
 4. 评测与 Docker-backed 集成门槛稳定后，再增加只读 MCP adapter；写操作继续不开放。
 

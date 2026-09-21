@@ -33,7 +33,7 @@ Example credentials file shape:
 ```json
 {
   "demo.employee": {"username":"managed-employee","password":"provided-outside-repo"},
-  "demo.admin": {"username":"managed-admin","password":"provided-outside-repo"},
+  "demo.admin": {"username":"managed-admin","password":"provided-outside-repo","roleCodes":["SYSTEM_ADMIN"]},
   "demo.outsider": {"username":"managed-outsider","password":"provided-outside-repo"},
   "demo.auditor": {"username":"managed-auditor","password":"provided-outside-repo","roleCodes":["AUDITOR"]}
 }
@@ -41,7 +41,7 @@ Example credentials file shape:
 
 The map must be backed by real users whose departments, roles, knowledge-base memberships, and document ACLs match the dataset fixture. The admin credential must belong to a `SYSTEM_ADMIN` or document manager. The `POST /api/documents/{id}/acl` and `DELETE /api/documents/{id}/acl/{aclId}` endpoints can provision document grants using a document manager token. The collector fails before making API calls when an actor is missing.
 
-For a disposable local tenant, `prepare_api_fixture.py` can create or reuse the actor users, upload `sample_faq.md` plus two synthetic policy documents, wait for indexing, and grant only the shared FAQ to non-admin actors:
+For a disposable local tenant, `prepare_api_fixture.py` can create or reuse the actor users, idempotently reconcile the requested `roleCodes` (including the Golden defaults `demo.admin=SYSTEM_ADMIN` and `demo.auditor=AUDITOR`), upload `sample_faq.md` plus synthetic policy/stress documents, wait for indexing, and grant only the shared FAQ to non-admin actors:
 
 ```bash
 python3 evaluation/prepare_api_fixture.py \

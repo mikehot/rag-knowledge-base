@@ -23,6 +23,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SAMPLE = ROOT / "sample_faq.md"
 DEFAULT_KB_ID = "00000000-0000-0000-0000-000000000101"
+DEFAULT_ACTOR_ROLES = {
+    "demo.admin": ["SYSTEM_ADMIN"],
+    "demo.auditor": ["AUDITOR"],
+    "demo.employee": ["EMPLOYEE"],
+    "demo.outsider": ["EMPLOYEE"],
+}
 FIXTURE_DOCS = {
     "finance-policy.md": "评测专用财务制度：报销资料仅供 finance 评测主体使用。",
     "hr-policy.md": "评测专用 HR 制度：薪酬等级仅供 hr 评测主体使用。",
@@ -188,13 +194,21 @@ def find_or_create_users(
         username = str(credentials.get("username", ""))
         if not username or not credentials.get("password"):
             raise ValueError(f"actor {actor_id} requires username and password")
+        raw_roles = credentials.get("roleCodes")
+        if raw_roles is None:
+            raw_roles = DEFAULT_ACTOR_ROLES.get(actor_id, ["EMPLOYEE"])
+        if not isinstance(raw_roles, list):
+            raise ValueError(f"actor {actor_id} roleCodes must be a list")
+        desired_roles = [str(code).strip().upper() for code in raw_roles if str(code).strip()]
+        if not desired_roles:
+            raise ValueError(f"actor {actor_id} requires at least one roleCode")
         existing = by_username.get(username)
         if existing is None:
             payload = {
                 "username": username,
                 "password": credentials["password"],
                 "displayName": f"Golden Eval {actor_id}",
-                "roleCodes": credentials.get("roleCodes") or ["EMPLOYEE"],
+                "roleCodes": desired_roles,
             }
             status, envelope = request(base_url, "POST", "/api/admin/users", token=admin_token, payload=payload, timeout=timeout)
             if status == 409:
@@ -206,7 +220,26 @@ def find_or_create_users(
                 existing = data_of(status, envelope, f"create user {username}")
         if not isinstance(existing, dict) or not existing.get("id"):
             raise RuntimeError(f"could not resolve user {username}")
-        result[actor_id] = str(existing["id"])
+        user_id = str(existing["id"])
+        existing_roles = {
+            str(code).strip().upper()
+            for code in existing.get("roleCodes", [])
+            if str(code).strip()
+        }
+        for role_code in desired_roles:
+            if role_code in existing_roles:
+                continue
+            status, envelope = request(
+                base_url,
+                "POST",
+                f"/api/admin/users/{user_id}/roles",
+                token=admin_token,
+                payload={"roleCode": role_code},
+                timeout=timeout,
+            )
+            data_of(status, envelope, f"assign role {role_code} to {username}")
+            existing_roles.add(role_code)
+        result[actor_id] = user_id
     return result
 
 

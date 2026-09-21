@@ -122,7 +122,7 @@
 - 应用自身默认不记录文档正文和 Prompt，但本地真实联调确认 LM Studio Developer Logs 会显示 Embedding 输入、Prompt 和模型输出；客户敏感资料上线前必须单独配置或替换 Provider 日志策略，不能把应用日志边界误认为全链路日志边界。
 - 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针、反馈率/ACL 拒绝/Token/估算成本指标及首版告警 guardrail；尚未用真实 7 天基线调优阈值。
 - 已有 `golden-v1`（20 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；评测 fixture 现在会幂等补齐 actor roles；云端成本对照和独立的模型评分仍未完成。
-- 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
+- 没有 BM25/全文 Hybrid Search 或 Reranker；PostgreSQL 默认 simple FTS 的中文切词预实验不足，`pg_trgm` 仅完成 disposable 查询验证，尚未加入迁移、ACL 检索或运行时链路。
 - 应用内只读 Agent Tool Registry 已实现并完成单元测试和真实 HTTP 复核；尚无 MCP adapter、模型驱动 Agent loop 或写工具。
 - 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。Top-K=8 可找回 RAG-014 但整体质量低于 Top-K=5，默认继续保持 5。
 - 没有公开 Demo、架构图、部署 Runbook、Case Study 和英文说明。
@@ -132,7 +132,7 @@
 RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经具备实现与真实 HTTP 证据；本地评测仍暴露召回排序和 Provider 吞吐问题，下一阶段先收敛证据，再决定是否进入 MCP：
 
 1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
-2. 基于修复 fixture 后的诊断结果，先针对 RAG-014 做轻量 keyword/full-text 补召回实验，再决定是否需要 BM25/Hybrid Search；不直接把 Top-K 或 Reranker 切到默认。
+2. 建立不依赖人工答案词的离线 keyword candidate benchmark，覆盖短语归一化、召回、ACL、延迟和上下文干扰；不直接把 Top-K 或 Reranker 切到默认。
 3. 保持 2400 默认，优先修复召回缺口和本地模型稳定性；未通过质量、P95 和成本门槛前不打开 `AI_COMPLEX_ROUTING_ENABLED`。
 4. 评测与 Docker-backed 集成门槛稳定后，再增加只读 MCP adapter；写操作继续不开放。
 

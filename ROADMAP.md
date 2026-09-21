@@ -170,6 +170,8 @@ Provider follow-up (2026-09-21): timeout classification is now shared across Cha
 
 Evaluation fixture follow-up (2026-09-21): an existing `candidate-admin` account had been reused without reconciling its `SYSTEM_ADMIN` role, which made RAG-014/RAG-020 look like retrieval failures after ACL trimming. The fixture preparer now idempotently assigns requested/default actor roles. With corrected roles, Top-K=5/2400 achieved 16/20 and exposed one real Top-5 miss (RAG-014); Top-K=8 recovered that source but fell to 15/20 because of context interference and higher token usage. The default remains Top-K=5; a bounded keyword/full-text experiment is the next retrieval step.
 
+Keyword follow-up (2026-09-21): PostgreSQL `simple` FTS does not provide reliable Chinese phrase matching for this fixture. A disposable `pg_trgm`/`word_similarity` experiment can rank the target Chunk when query phrases are normalized, but raw-question similarity is noisy. The next retrieval task is an offline keyword-candidate benchmark with ACL-preserving candidate recall and context-interference measurement; no database extension or runtime hybrid path is enabled yet.
+
 Each evaluation case records:
 
 - question and answerability;

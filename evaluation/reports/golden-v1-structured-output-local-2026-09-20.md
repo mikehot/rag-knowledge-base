@@ -83,6 +83,17 @@ LM Studio 服务日志显示，失败请求的 `reasoning_tokens` 接近整个 c
 
 结论：Top-K=8 能覆盖唯一检索缺口，但全局质量低于修复后的 Top-K=5，且 Token 成本更高；默认继续保持 Top-K=5。RAG-014 说明后续可以评估轻量 keyword/full-text 补召回，但当前证据还不足以直接引入复杂 Hybrid Search 或 Reranker。
 
+## 2026-09-21 PostgreSQL keyword/full-text 预实验
+
+针对 RAG-014 在向量 Top-5 中漏掉 `sample_faq.md#chunk2` 的情况，先在本地 disposable PostgreSQL 做只读候选排序实验：
+
+- 默认 `simple` text search 对中文长短语的切词不满足当前需求；`to_tsvector('simple', ...)` 会把整段中文短语保留为较大的 token，无法稳定匹配“远程开门”这种业务词组。
+- `pg_trgm` 在当前 `pgvector/pg16` 镜像中可用，但数据库默认未安装。本次仅临时启用后查询，再立即移除，没有加入 Flyway 或生产配置。
+- 对经过短语归一化的查询（例如保留“远程开门、型号、安全条件”等短语），`word_similarity` 可以把 `sample_faq.md#chunk2` 排到候选首位；直接使用原始整句时，`support-sla.md` 等包含部分词语的文档会排在前面。
+- 精确业务关键词重叠也能把目标 Chunk 排到第一，但依赖查询短语抽取，不能把评测答案词直接当成生产逻辑。
+
+结论：暂不加入普通 PostgreSQL FTS，也不直接落地 `pg_trgm` Hybrid Search。下一步先建立不依赖人工答案词的离线 keyword candidate benchmark，比较短语归一化、候选召回、ACL 过滤、延迟和上下文干扰；只有 benchmark 在相同 Golden/Stress 数据集上证明收益，才增加可配置的 keyword candidate stage。
+
 ## Agent Tool 真实 HTTP 结果
 
 `GET /api/agent/tools` 只暴露以下三项：

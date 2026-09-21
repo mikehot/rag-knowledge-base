@@ -64,6 +64,8 @@ All secrets and runtime choices are environment variables.
 | `AI_MODEL_ID` | `google/gemma-4-26b-a4b-qat` | Chat model; verify the identifier in `GET http://localhost:1234/v1/models` |
 | `AI_API_KEY` | empty | Optional for local providers |
 | `AI_MAX_TOKENS` | `2400` | Completion budget; reasoning models may consume part of it before returning answer content |
+| `AI_COMPLEX_MAX_TOKENS` | `3200` | Experimental budget for explicit multi-part questions |
+| `AI_COMPLEX_ROUTING_ENABLED` | `false` | Enable deterministic complex-question budget routing; keep off until a quality/latency gate passes |
 | `AI_TIMEOUT_SECONDS` | `120` | Local model can be slow |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |

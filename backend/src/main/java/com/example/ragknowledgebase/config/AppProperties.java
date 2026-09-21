@@ -49,6 +49,8 @@ public record AppProperties(
         String apiKey,
         String modelId,
         long maxTokens,
+        long complexMaxTokens,
+        boolean complexRoutingEnabled,
         long timeoutSeconds,
         int maxRetries,
         int dailyLimit

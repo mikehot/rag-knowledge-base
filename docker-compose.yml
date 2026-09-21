@@ -43,6 +43,8 @@ services:
       AI_API_KEY: ""
       AI_MODEL_ID: google/gemma-4-26b-a4b-qat
       AI_MAX_TOKENS: 2400
+      AI_COMPLEX_MAX_TOKENS: 3200
+      AI_COMPLEX_ROUTING_ENABLED: "false"
       AI_ESTIMATED_COST_PER_1K_TOKENS: 0
       AI_TIMEOUT_SECONDS: 120
       AI_MAX_RETRIES: 2

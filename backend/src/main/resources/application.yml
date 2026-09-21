@@ -97,6 +97,8 @@ app:
     api-key: ${AI_API_KEY:}
     model-id: ${AI_MODEL_ID:google/gemma-4-26b-a4b-qat}
     max-tokens: ${AI_MAX_TOKENS:2400}
+    complex-max-tokens: ${AI_COMPLEX_MAX_TOKENS:3200}
+    complex-routing-enabled: ${AI_COMPLEX_ROUTING_ENABLED:false}
     estimated-cost-per-1k-tokens: ${AI_ESTIMATED_COST_PER_1K_TOKENS:0}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:120}
     max-retries: ${AI_MAX_RETRIES:2}

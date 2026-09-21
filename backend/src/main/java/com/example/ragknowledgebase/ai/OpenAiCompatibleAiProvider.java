@@ -29,11 +29,16 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
 
     @Override
     public AiProviderResponse generate(String prompt) {
+        return generate(prompt, properties.ai().maxTokens());
+    }
+
+    @Override
+    public AiProviderResponse generate(String prompt, long maxTokens) {
         Exception last = null;
         int attempts = Math.max(1, properties.ai().maxRetries() + 1);
         for (int i = 0; i < attempts; i++) {
             try {
-                return request(prompt);
+                return request(prompt, maxTokens);
             } catch (Exception ex) {
                 last = ex;
             }
@@ -44,12 +49,12 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         throw new AiCallException("AI 生成失败，请稍后重试", last);
     }
 
-    private AiProviderResponse request(String prompt) throws Exception {
+    private AiProviderResponse request(String prompt, long maxTokens) throws Exception {
         String requestBody = objectMapper.writeValueAsString(Map.of(
             "model", properties.ai().modelId(),
             "messages", List.of(Map.of("role", "user", "content", prompt)),
             "response_format", structuredResponseFormat(),
-            "max_tokens", properties.ai().maxTokens(),
+            "max_tokens", maxTokens > 0 ? maxTokens : properties.ai().maxTokens(),
             "stream", false
         ));
         HttpRequest.Builder builder = HttpRequest.newBuilder(chatCompletionsUri())

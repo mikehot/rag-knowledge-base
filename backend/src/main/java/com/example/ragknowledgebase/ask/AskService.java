@@ -34,6 +34,7 @@ public class AskService {
     private final AskLogRepository askLogRepository;
     private final AskRetrievalHitRepository retrievalHitRepository;
     private final OperationalMetrics operationalMetrics;
+    private final QuestionComplexityClassifier questionComplexityClassifier;
 
     public AskService(
         AppProperties properties,
@@ -51,6 +52,7 @@ public class AskService {
         this.askLogRepository = askLogRepository;
         this.retrievalHitRepository = retrievalHitRepository;
         this.operationalMetrics = operationalMetrics;
+        this.questionComplexityClassifier = new QuestionComplexityClassifier();
     }
 
     @Transactional
@@ -103,7 +105,7 @@ public class AskService {
                 String prompt = buildPrompt(question, hits);
                 stage = Stage.GENERATION;
                 stageStarted = System.nanoTime();
-                AiProviderResponse providerResponse = aiProvider.generate(prompt);
+                AiProviderResponse providerResponse = generate(prompt, question);
                 generationMs = elapsedMs(stageStarted);
                 StructuredAnswer structuredAnswer;
                 try {
@@ -126,6 +128,21 @@ public class AskService {
                     return record(user, question, response, resultStatus, retrievalHits);
                 }
                 if (!structuredAnswer.found()) {
+                    response = response(
+                        requestId,
+                        totalStarted,
+                        HANDOFF,
+                        false,
+                        false,
+                        List.of(),
+                        providerResponse.tokenUsage(),
+                        AskFailureReason.INSUFFICIENT_CONTEXT,
+                        embeddingMs,
+                        retrievalMs,
+                        generationMs
+                    );
+                    resultStatus = AskResultStatus.NOT_FOUND;
+                } else if (!hasUsableAnswer(structuredAnswer)) {
                     response = response(
                         requestId,
                         totalStarted,
@@ -208,6 +225,18 @@ public class AskService {
             resultStatus = AskResultStatus.FAILED;
         }
         return record(user, question, response, resultStatus, retrievalHits);
+    }
+
+    private AiProviderResponse generate(String prompt, String question) {
+        if (!properties.ai().complexRoutingEnabled()
+            || !questionComplexityClassifier.isComplex(question)) {
+            return aiProvider.generate(prompt);
+        }
+        long complexMaxTokens = Math.max(
+            properties.ai().maxTokens(),
+            properties.ai().complexMaxTokens()
+        );
+        return aiProvider.generate(prompt, complexMaxTokens);
     }
 
     private void enforceDailyLimit(UUID userId) {
@@ -319,6 +348,15 @@ public class AskService {
         return answer.grounded()
             && !answer.sourceIndexes().isEmpty()
             && answer.sourceIndexes().stream().allMatch(index -> index >= 1 && index <= hits.size());
+    }
+
+    private boolean hasUsableAnswer(StructuredAnswer answer) {
+        String normalized = answer.answer() == null ? "" : answer.answer().trim();
+        return !normalized.isBlank()
+            && !normalized.equals(HANDOFF)
+            && !normalized.equals(TEMPORARY_UNAVAILABLE)
+            && !normalized.equals(STRUCTURED_OUTPUT_FALLBACK)
+            && !normalized.equals(CITATION_FALLBACK);
     }
 
     private List<AskSourceResponse> sourcesOf(List<ChunkSearchResult> hits, List<Integer> indexes) {

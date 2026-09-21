@@ -72,6 +72,19 @@ class OpenAiCompatibleAiProviderTests {
         assertThat(body.path("max_tokens").asInt()).isEqualTo(2400);
     }
 
+    @Test
+    void sendsExplicitBudgetForComplexQuestionRoute() throws Exception {
+        OpenAiCompatibleAiProvider provider = new OpenAiCompatibleAiProvider(
+            properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1"),
+            objectMapper
+        );
+
+        provider.generate("复杂问题", 3200);
+
+        JsonNode body = objectMapper.readTree(requestBody.get());
+        assertThat(body.path("max_tokens").asInt()).isEqualTo(3200);
+    }
+
     private AppProperties properties(String baseUrl) {
         return new AppProperties(
             new AppProperties.Auth("demo", "demo123456", "test-secret", 86400),
@@ -82,7 +95,7 @@ class OpenAiCompatibleAiProviderTests {
                 UUID.fromString("00000000-0000-0000-0000-000000000101"),
                 true
             ),
-            new AppProperties.Ai("openai-compatible", baseUrl, "", "test-model", 2400, 5, 0, 50),
+            new AppProperties.Ai("openai-compatible", baseUrl, "", "test-model", 2400, 3200, false, 5, 0, 50),
             new AppProperties.Embedding("openai-compatible", baseUrl, "", "embedding-model", 16, 5, 0)
         );
     }

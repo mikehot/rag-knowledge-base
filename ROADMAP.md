@@ -2,7 +2,7 @@
 
 > Version: v2.0
 >
-> Last verified: 2026-09-20
+> Last verified: 2026-09-21
 > Target: evolve the existing RAG MVP into an enterprise knowledge-base V0.1, then extend it into a bounded Agent/FDE delivery case.
 
 ## 1. Product Goal
@@ -164,9 +164,9 @@ Acceptance gate:
 
 Goal: replace subjective demos with reproducible evidence.
 
-Current status (2026-09-20): `golden-v1` is checked in at `evaluation/datasets/golden_v1.jsonl`, and the separate `retrieval-stress-v1` set is checked in at `evaluation/datasets/retrieval_stress_v1.jsonl`. Two authenticated local API runs passed 20/20 golden cases; the historical stress run passed 8/8, and the latest full run passed 8/8 after increasing the local Gemma completion budget from 1200 to 2400. The latest stress run has 100% answer-point coverage, citation coverage/correctness, refusal correctness, and zero ACL leakage. Protected candidate-rank/similarity snapshots show Recall@1/3/5=75%/91.67%/100% with all expected documents present at Top-K; larger-corpus ranking evidence, cloud cost comparison, and independent model judging remain open.
+Current status (2026-09-21): `golden-v1` is checked in at `evaluation/datasets/golden_v1.jsonl`, and the separate `retrieval-stress-v1` set is checked in at `evaluation/datasets/retrieval_stress_v1.jsonl`. Two historical authenticated local API runs passed 20/20 golden cases; the 2400-token structured-output baseline recorded 16/20, while the isolated 4000-token/Top-K=8 candidate recorded 15/20 and four fail-closed `STRUCTURED_OUTPUT_INVALID` responses. The historical stress run passed 8/8, and the 4000-token candidate also passed 8/8 with 100% answer-point/citation/refusal metrics and zero ACL leakage, but with materially higher latency. Protected candidate-rank/similarity snapshots show Recall@1/3/5=75%/91.67%/100%; larger-corpus ranking evidence, cloud cost comparison, and independent model judging remain open. The checked-in default remains Top-K=5 and 2400 tokens.
 
-Provider follow-up (2026-09-20): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; default `AI_MAX_TOKENS=2400` remains the checked-in baseline, while native JSON Schema reduced malformed/truncated responses in a 5-case A/B. A 4000-token single-combination experiment passed but still needs full cost/latency regression before becoming the default.
+Provider follow-up (2026-09-21): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; native JSON Schema remains enabled and the checked-in `AI_MAX_TOKENS=2400` baseline is retained. The full 4000-token/Top-K=8 candidate and the 3200-token complex-question route both failed to beat the 2400 Golden baseline, so neither is enabled globally. The backend now also rejects contradictory `found=true` plus handoff-text responses; retrieval and provider stability remain ahead of MCP.
 
 Each evaluation case records:
 

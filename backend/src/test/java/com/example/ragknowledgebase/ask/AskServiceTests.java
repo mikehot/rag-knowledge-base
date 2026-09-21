@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.example.ragknowledgebase.ai.AiCallException;
 import com.example.ragknowledgebase.ai.AiProvider;
@@ -127,6 +128,41 @@ class AskServiceTests {
     }
 
     @Test
+    void routesExplicitMultiPartQuestionToConfiguredComplexBudgetWhenEnabled() {
+        askService = new AskService(
+            properties(0, true),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        String question = "请同时说明配网步骤以及远程开门条件。";
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "配网和远程开门条件",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of(question))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString(), eq(3200L))).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"已处理\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            128
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest(question));
+
+        assertThat(response.found()).isTrue();
+        verify(aiProvider).generate(anyString(), eq(3200L));
+        verify(aiProvider, never()).generate(anyString());
+    }
+
+    @Test
     void returnsHandoffWithoutCallingModelWhenSimilarityIsTooLow() {
         float[] embedding = new float[] {0.3f, 0.4f};
         ChunkSearchResult hit = new ChunkSearchResult(
@@ -179,6 +215,33 @@ class AskServiceTests {
         assertThat(response.tokenUsage()).isEqualTo(96);
         assertThat(response.failureReason()).isEqualTo(AskFailureReason.INSUFFICIENT_CONTEXT);
         verify(askLogRepository).save(any(AskLog.class));
+    }
+
+    @Test
+    void failsClosedWhenModelMarksHandoffTextAsGroundedAnswer() {
+        float[] embedding = new float[] {0.5f, 0.6f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#2",
+            "智能门锁常见问题",
+            0.72
+        );
+        when(embeddingProvider.embed(List.of("权限问题？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"未找到相关信息，建议转人工。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            96
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest("权限问题？"));
+
+        assertThat(response.found()).isFalse();
+        assertThat(response.grounded()).isFalse();
+        assertThat(response.answer()).isEqualTo("未找到相关信息，建议转人工。");
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.INSUFFICIENT_CONTEXT);
     }
 
     @Test
@@ -373,12 +436,18 @@ class AskServiceTests {
     }
 
     private AppProperties properties(int dailyLimit) {
+        return properties(dailyLimit, false);
+    }
+
+    private AppProperties properties(int dailyLimit, boolean complexRoutingEnabled) {
         return new AppProperties(
             null,
             null,
             new AppProperties.Rag(700, 100, 5, 0.35, 768),
             null,
-            new AppProperties.Ai("openai-compatible", "", "", "", 1200, 120, 1, dailyLimit),
+            new AppProperties.Ai(
+                "openai-compatible", "", "", "", 1200, 3200, complexRoutingEnabled, 120, 1, dailyLimit
+            ),
             null
         );
     }

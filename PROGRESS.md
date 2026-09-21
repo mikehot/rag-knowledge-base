@@ -1,6 +1,6 @@
 # PROGRESS
 
-> Last evidence review: 2026-09-20
+> Last evidence review: 2026-09-21
 > Source of truth for implemented and verified status. Planned capabilities live in `REQUIREMENTS.md` and `ROADMAP.md`.
 
 ## 状态定义
@@ -79,14 +79,14 @@
 - 根目录、后端和 Flutter 启动说明。
 - `sample_faq.md` 端到端联调样例。
 
-## 当前验证证据（2026-09-20）
+## 当前验证证据（2026-09-21）
 
 | 检查 | 结果 | 证据边界 |
 |---|---|---|
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | 2026-09-20 本地 JDK 25.0.3；85 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因 Testcontainers Docker API 探测失败而 skipped；Structured Output Provider、AskService 与 Agent Tool 回归通过 |
+| `./mvnw test` | PASS | 2026-09-21 本地 JDK 25.0.3；91 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因 Testcontainers Docker API 探测失败而 skipped；Structured Output、预算路由、AskService 与 Agent Tool 回归通过 |
 | GitHub Actions CI | PASS | Run `35319672140`（CI #26）；backend-tests 实际执行 61 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
@@ -104,17 +104,17 @@
 | 用户反馈 V8 | PASS | PostgreSQL 16.15 从 V7 升至 V8；真实 API 验证创建、修改、单问答唯一反馈、原因清理、非法 rating 400 和不存在/无权 requestId 404；GitHub Actions run `35300087644` 完成 V1-V8 空库迁移及相关回归测试 |
 | 健康检查与运营指标 | PASS | 公开 health/liveness/readiness 只返回状态；匿名和普通已登录用户均不能读取 metrics/prometheus，仅 SYSTEM_ADMIN/AUDITOR 可读取；GitHub Actions run `35321425249` 验证问答/索引/反馈/ACL/估算成本指标、Prometheus histogram 和低基数标签边界 |
 | 20 题 Golden Dataset 与离线 Runner | PASS（数据契约） | `python3 evaluation/run_eval.py`；`golden-v1` 共 20 题，`dataset_valid=true`，行为分布为 ANSWER 16、ACL_FILTERED_REFUSAL 2、REFUSE 2；尚未代表真实模型质量结果 |
-| 20 题真实 API 评测 | 历史基线 PASS；结构化契约复核进行中 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；历史两次均 20/20 通过，答案点/引用/拒答/ACL 均 100%，ACL leakage=0；本轮已完成诊断和 5 题 native JSON Schema A/B，schema failure=0，剩余问题集中在召回排序与 reasoning budget；详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
-| 检索压力集真实 API 评测 | PASS 8/8 | 2026-09-20 修正 LM Studio 模型 ID，并将 Gemma 本地默认 `AI_MAX_TOKENS` 从 1200 调整为 2400 后，最新完整运行 8/8；答案点/引用/拒答均 100%、ACL leakage=0；V10 Recall@1/3/5=75%/91.67%/100%；报告见 `evaluation/reports/retrieval-stress-v1-local-2026-09-20.md` |
+| 20 题真实 API 评测 | 有证据；默认保持 2400 | PostgreSQL 16.15 + LM Studio Gemma 4 26B/Nomic Embedding；历史 2400 基线为 16/20，4000 全局候选为 15/20，3200 复杂路由实测为 13/20；预算路由未达质量门槛，默认不切换；详见 `evaluation/reports/golden-v1-structured-output-local-2026-09-20.md` |
+| 检索压力集真实 API 评测 | 基线 PASS；路由候选否决 | 默认历史压力集为 8/8；4000 候选为 8/8；3200 复杂路由本轮为 7/8，出现 1 个模型拒答字段不一致但 ACL leakage=0；V10 Recall@1/3/5=75%/91.67%/100% |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
-2026-09-20 真实联调发现默认 LM Studio 模型 ID 已过期：`text-embedding-nomic-embed-text` 会导致全部请求在 Embedding 阶段失败；已根据 `/v1/models` 核实并同步为 `text-embedding-nomic-embed-text-v1.5`，Chat 模型同步为 `google/gemma-4-26b-a4b-qat`。随后发现 Gemma 在 `AI_MAX_TOKENS=1200` 时会把预算消耗在 reasoning，导致可见答案为空或截断；默认配置已同步为 2400。最新完整压力集恢复为 8/8，STRESS-003 的两个目标文档仍完整命中，说明问题属于生成预算而不是召回。
+2026-09-20 真实联调发现默认 LM Studio 模型 ID 已过期：`text-embedding-nomic-embed-text` 会导致全部请求在 Embedding 阶段失败；已根据 `/v1/models` 核实并同步为 `text-embedding-nomic-embed-text-v1.5`，Chat 模型同步为 `google/gemma-4-26b-a4b-qat`。随后发现 Gemma 在 `AI_MAX_TOKENS=1200` 时会把预算消耗在 reasoning，导致可见答案为空或截断；默认配置已同步为 2400。最新完整压力集恢复为 8/8，STRESS-003 的两个目标文档仍完整命中，说明问题属于生成预算而不是召回。2026-09-21 的完整 4000 候选回归显示 Stress 仍为 8/8，但 Golden 为 15/20 且有 4 次结构化输出失败，暂不切换默认值。
 
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前有 53 个稳定单元/上下文测试和 13 个 PostgreSQL/Testcontainers 集成测试；本轮本地为 53 passed + 13 skipped，GitHub Actions run `35321425249` 是文档 ACL API 之前的 62 tests / 0 skipped 远端证据；新增集成测试仍需下一次 CI 验证。
+- 后端当前本地回归为 78 个非 Docker 测试通过、13 个 PostgreSQL/Testcontainers 集成测试 skipped；GitHub Actions run `35321425249` 是文档 ACL API 之前的 62 tests / 0 skipped 远端证据；新增集成测试仍需下一次 CI 验证。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
@@ -124,6 +124,7 @@
 - 已有 `golden-v1`（20 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；云端成本对照和独立的模型评分仍未完成。
 - 没有 BM25/全文 Hybrid Search 或 Reranker；是否需要尚无评测依据。
 - 应用内只读 Agent Tool Registry 已实现并完成单元测试和真实 HTTP 复核；尚无 MCP adapter、模型驱动 Agent loop 或写工具。
+- 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。
 - 没有公开 Demo、架构图、部署 Runbook、Case Study 和英文说明。
 
 ## 下一步
@@ -131,9 +132,9 @@
 RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经具备实现与真实 HTTP 证据；本地评测仍暴露召回排序和 Provider 吞吐问题，下一阶段先收敛证据，再决定是否进入 MCP：
 
 1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
-2. 用隔离评测身份/数据库重跑更新后的 Golden/Stress 真实 API 评测，避免日限额污染。
-3. 读取受保护 retrieval diagnostics，按失败类别决定 Chunk/Metadata、BM25、Hybrid Search 或 Reranker 是否必要。
-4. 先完成 LM Studio structured output、最大输出和超时的完整回归，再增加只读 MCP adapter；写操作继续不开放。
+2. 读取受保护 retrieval diagnostics，按失败类别拆分 Chunk/Metadata、BM25、Hybrid Search、Reranker 与模型路由的必要性。
+3. 保持 2400 默认，优先修复召回缺口和本地模型稳定性；未通过质量、P95 和成本门槛前不打开 `AI_COMPLEX_ROUTING_ENABLED`。
+4. 评测与 Docker-backed 集成门槛稳定后，再增加只读 MCP adapter；写操作继续不开放。
 
 ## 文档维护规则
 

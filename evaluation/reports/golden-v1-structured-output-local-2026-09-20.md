@@ -35,6 +35,36 @@ Provider 已在 OpenAI-compatible Chat Completions 请求中增加 `response_for
 
 LM Studio 服务日志显示，失败请求的 `reasoning_tokens` 接近整个 completion budget，并以 `finish_reason=length` 结束；因此这部分属于模型推理预算/Provider 配置问题，不是后端结构化 parser 或 ACL 边界问题。
 
+## 2026-09-21 完整预算候选回归
+
+为验证 `AI_MAX_TOKENS=4000` 是否值得替换默认值，在本地恢复临时评测账号后重新采集完整 Golden 和 Stress。候选运行参数为 `RAG_TOP_K=8`、`AI_MAX_TOKENS=4000`、`AI_MAX_RETRIES=0`、`AI_TIMEOUT_SECONDS=180`、`AI_DAILY_LIMIT=200`；默认配置文件没有修改。
+
+| 集合 | 结果 | 关键指标 |
+|---|---:|---|
+| Golden v1（20 题） | 15/20 | 结构化 API envelope 完整；4 次 `STRUCTURED_OUTPUT_INVALID` fail-closed；拒答正确率 100%；ACL leakage=0；平均 API 15.9s，P95 69.2s，平均 Token 2117 |
+| Retrieval Stress v1（8 题） | 8/8 | 答案点、引用覆盖/正确性、拒答正确率均 100%；ACL leakage=0；结构化失败 0；平均 API 10.7s，P95 11.9s，平均 Token 1927 |
+
+本轮 Stress 的受保护 retrieval diagnostics 为 Recall@1/3/5=`75%/91.67%/100%`，期望来源首个排名均值为 `1.1667`，平均 Top-1 similarity=`0.7098`，平均 Top-1 margin=`0.0307`，候选数均值为 `6.375`，ACL leakage=0。也就是说，Stress 的主要目标资料在 Top-5 内，4000 预算的收益主要来自生成完成度，而不是把资料从检索层“找回来”。
+
+本轮不能支持把 4000 直接升为默认：Stress 受益明显，但 Golden 低于此前 `Top-K=5 / 2400` 的 16/20 基线，而且出现 4 次模型 JSON 未完成。由于本轮同时改变了 Top-K、预算和评测时间，结果属于候选配置证据而非严格的单变量 A/B；下一步应优先按失败类别改进召回和模型路由，不继续盲目放大输出预算。
+
+## 预算路由实现状态（2026-09-21）
+
+已在后端加入确定性的 `QuestionComplexityClassifier` 和 Provider `max_tokens` 重载：识别“同时、分别、综合、以及”等明确多部分表达，或多个疑问点后，才允许选择 `AI_COMPLEX_MAX_TOKENS`。`AI_COMPLEX_ROUTING_ENABLED` 默认关闭，当前默认问答路径仍使用 2400；所有 Provider 实现必须显式支持预算参数，避免路由开关打开后静默忽略预算。
+
+已补充普通问题、复杂问题、Provider 请求体和回归测试。完整 Maven 回归通过；Testcontainers 因本机 Docker API metadata 探测问题保持 13 个集成测试 skipped，未将其误报为通过。
+
+## 3200 复杂问题路由真实回归
+
+在 `RAG_TOP_K=5`、普通问题 `AI_MAX_TOKENS=2400`、复杂问题 `AI_COMPLEX_MAX_TOKENS=3200` 且 `AI_COMPLEX_ROUTING_ENABLED=true` 下完成了一次完整 HTTP 回归：
+
+| 集合 | 结果 | 关键指标 |
+|---|---:|---|
+| Golden v1（20 题） | 13/20 | 2 次 `STRUCTURED_OUTPUT_INVALID`、2 次 `RETRIEVAL_MISS`、5 次 `INSUFFICIENT_CONTEXT`；平均 API 11.1s，P95 11.9s，平均 Token 1468 |
+| Retrieval Stress v1（8 题） | 7/8 | 6 个可回答问题均通过；1 个 ACL 拒答出现模型 `found=true` 与拒答正文不一致；ACL leakage=0；平均 API 10.2s，P95 11.2s，平均 Token 1424 |
+
+这轮结果不支持打开路由：Golden 低于 2400 基线，Stress 也出现语义不一致。后端已增加一致性 fail-closed：当模型标记 `found=true` 但正文是系统拒答文案时，统一归一化为 `found=false`、`grounded=false`、无来源和 `INSUFFICIENT_CONTEXT`。预算路由继续保持默认关闭。
+
 ## Agent Tool 真实 HTTP 结果
 
 `GET /api/agent/tools` 只暴露以下三项：
@@ -71,7 +101,7 @@ LM Studio 服务日志显示，失败请求的 `reasoning_tokens` 接近整个 c
 
 暂不开放 MCP，也暂不加入写工具。下一步按失败类别处理：
 
-1. 用受控的新评测身份或隔离数据库重跑 Golden/Stress，避免日限额污染结果。
-2. 读取受保护 retrieval diagnostics，确认 Top-K 排序缺口，再决定 BM25、Hybrid Search 或 Reranker 是否值得加入。
-3. 单独收敛 LM Studio 的 structured output、最大输出和超时配置，补齐 generation timeout/invalid-response 的可重复测试。
+1. 保持默认 `RAG_TOP_K=5 / AI_MAX_TOKENS=2400`，将 4000 作为复杂问题的候选预算，不直接发布为全局默认。
+2. 读取受保护 retrieval diagnostics，拆分召回缺口、答案覆盖缺口和模型 JSON 截断，再决定 BM25、Hybrid Search、Reranker 或模型路由是否值得加入。
+3. 增加受控的复杂问题预算/模型路由实验，并补齐 generation timeout/invalid-response 的可重复质量与成本门槛。
 4. 只有安全边界和评测基线稳定后，再做只读 MCP adapter。

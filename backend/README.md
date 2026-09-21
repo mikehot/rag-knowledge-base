@@ -111,7 +111,7 @@ The configured model IDs must match the returned `id` values exactly. For the cu
 ./mvnw test
 ```
 
-The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers with `pgvector/pgvector:pg16`. Those tests run automatically when Docker is available to Testcontainers and are skipped when Docker is unavailable, so CI output should be checked for skipped integration tests before treating PostgreSQL coverage as proven.
+The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers 1.21.4 with `pgvector/pgvector:pg16`. With Docker Desktop 4.91.0, local `./mvnw test` executed all 91 tests, including 13 PostgreSQL/pgvector integration tests, with 0 skipped. In environments where Docker is unavailable to Testcontainers, those integration tests remain skipped, so CI output must still be checked before treating PostgreSQL coverage as proven.
 
 ## Cloud Provider Examples
 

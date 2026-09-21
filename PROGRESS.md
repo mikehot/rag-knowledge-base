@@ -16,7 +16,7 @@
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1-V10、ACL、最小管理 API、可回滚替换和持久化索引任务已落地；PostgreSQL CI、真实 Provider 重试和重启恢复已验证，管理 UI 等次要范围仍未完成 |
-| 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；全量回归 85 passed/13 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
+| 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；本地 Docker-backed 全量回归 91 passed/0 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
 | 4. 评测基线与检索压力集 | `verified` | `golden-v1` 两次 20/20、最新压力集 8/8 通过；答案点、引用、拒答均 100%，ACL leakage=0；V10 受保护诊断及 Recall@1/3/5 评分已落地 |
 | 5. Hybrid Search / Reranker | `planned` | 只在评测证明需要后启动 |
 | 6. Agent Tool / MCP | `in-progress` | 三个只读 Agent Tool、闭合参数 schema、ACL/租户继承、空结果/超时/未知工具/预算/审计测试已落地；MCP 适配器和真实 Agent loop 尚未开放 |
@@ -86,7 +86,7 @@
 | `flutter analyze --no-pub` | PASS | 静态分析通过 |
 | `flutter test --no-pub --concurrency=1` | PASS | 仅一个 Widget smoke test，不覆盖网络和文件选择 |
 | `docker compose config --quiet` | PASS | Compose 配置可解析，不代表容器已启动 |
-| `./mvnw test` | PASS | 2026-09-21 本地 JDK 25.0.3；91 个测试通过、13 个 PostgreSQL/Testcontainers 集成测试因 Testcontainers Docker API 探测失败而 skipped；Structured Output、预算路由、AskService 与 Agent Tool 回归通过 |
+| `./mvnw test` | PASS | 2026-09-21 本地 JDK 25.0.3 + Docker Desktop 4.91.0；Testcontainers 1.21.4 执行 91 个测试，0 failures/errors/skipped；Structured Output、预算路由、AskService、Agent Tool、PostgreSQL/pgvector ACL 集成回归通过 |
 | GitHub Actions CI | PASS | Run `35319672140`（CI #26）；backend-tests 实际执行 61 tests，0 failures/errors/skipped；compose-config 通过 |
 | PostgreSQL + pgvector 运行 | PASS | PostgreSQL 16.15、pgvector 0.8.6、4 张业务表、HNSW cosine 索引 |
 | LM Studio 模型 | PASS | Gemma 4 26B + Nomic Embedding，OpenAI-compatible server `1234` |
@@ -98,7 +98,7 @@
 | 空库迁移 | PASS | GitHub Actions run `35295919726` 顺序执行 V1-V5；PostgreSQL 16.15、`vector(768)`、默认授权、`audit_event` 和 `index_task` 建表通过 |
 | ACL 隔离 | PASS | 无授权用户列表为空；USER、DEPARTMENT、ROLE 授权范围均有确定性测试；READ 用户删除返回 404；双 tenant 文档列表/详情互不可见 |
 | 文档替换 | PASS | GitHub Actions run `35169350194` 验证版本化新文件、`contentVersion` 递增、旧文件保留和旧 Chunk 在新索引就绪前不被删除；单元测试覆盖同 checksum 幂等、越权拒绝、成功切换和解析失败回滚 |
-| PostgreSQL/Testcontainers 集成测试 | 待下一次 CI | 既有 GitHub Actions run `35319672140` 验证 V1-V8 和 12 个集成测试；本地 Docker CLI/Compose 与 Spring Boot JDBC 均正常，但 Testcontainers 1.21.3 本次仍因 Docker API server metadata 探测失败而 `13 skipped / 0 failures`，新增 V9/V10 schema 断言尚未在 Docker-backed CI 复跑 |
+| PostgreSQL/Testcontainers 集成测试 | 本地 PASS；CI 待复跑 | Testcontainers 1.21.4 已修复本机 Docker Engine 29 / Docker Desktop 4.91.0 探测兼容问题；本地 `./mvnw test` 已真实执行 13 个 PostgreSQL/pgvector 集成测试，全部通过且 0 skipped；GitHub Actions 仍需下一次运行验证同一依赖升级 |
 | 持久化索引任务真实联调 | PASS | 2026-09-18，PostgreSQL 16.15 + LM Studio；上传一次成功 `SUCCEEDED/attempt=1/23125ms`，Provider 中断后自动重试成功 `attempt=2/32542ms`，连续失败后 `FAILED/attempt=3/93526ms`，人工重试后第 4 次成功，遗留 RUNNING 经后端重启恢复后第 2 次成功 |
 | 问答观测 V6/V7 迁移 | PASS（本地） | PostgreSQL 16.15 从 V5 顺序升至 V7；12 个新增观测字段存在，历史记录 tenant/request/status 必填字段空值为 0，Hibernate schema validate 与应用启动通过；真实 HTTP 验证保留合法 `X-Request-Id` |
 | 用户反馈 V8 | PASS | PostgreSQL 16.15 从 V7 升至 V8；真实 API 验证创建、修改、单问答唯一反馈、原因清理、非法 rating 400 和不存在/无权 requestId 404；GitHub Actions run `35300087644` 完成 V1-V8 空库迁移及相关回归测试 |
@@ -114,7 +114,7 @@
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前本地回归为 78 个非 Docker 测试通过、13 个 PostgreSQL/Testcontainers 集成测试 skipped；GitHub Actions run `35321425249` 是文档 ACL API 之前的 62 tests / 0 skipped 远端证据；新增集成测试仍需下一次 CI 验证。
+- 后端当前本地回归为 78 个 H2/非 Docker 测试和 13 个 PostgreSQL/Testcontainers 集成测试通过，共 91 个测试、0 skipped；GitHub Actions run `35321425249` 是依赖升级之前的 62 tests / 0 skipped 远端证据，Testcontainers 1.21.4 仍需下一次 CI 验证。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。

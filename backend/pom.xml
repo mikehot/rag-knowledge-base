@@ -21,6 +21,7 @@
 		<poi.version>5.4.1</poi.version>
 		<springdoc.version>2.8.14</springdoc.version>
 		<mockito.version>5.17.0</mockito.version>
+		<testcontainers.version>1.21.4</testcontainers.version>
 	</properties>
 
 	<dependencies>

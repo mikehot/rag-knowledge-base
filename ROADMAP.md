@@ -62,7 +62,7 @@ Milestone 2 checkpoint on 2026-09-16:
 - JWT authentication carries the tenant boundary, and document/chunk SQL performs security trimming before content reaches generation.
 - Upload and delete require `MANAGE`; list, detail, and retrieval accept inherited `READ`/`MANAGE` grants from user, department, or role principals.
 - Both an existing non-empty database upgrade and a fresh V1+V2 database were verified. A temporary reader saw no document before a grant, saw it after `READ`, and still could not delete it.
-- This milestone remains `in-progress`: the minimum management APIs, document ACL grant/list/revoke boundary, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are implemented with coverage; the new document ACL integration test still needs the next Docker-backed CI run. Management UI and secondary identity lifecycle operations remain open.
+- This milestone remains `in-progress`: the minimum management APIs, document ACL grant/list/revoke boundary, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are implemented with coverage; the new document ACL integration test now passes locally against Docker Desktop 4.91.0 with Testcontainers 1.21.4, and still needs the next Docker-backed CI run. Management UI and secondary identity lifecycle operations remain open.
 
 ## 4. Delivery Principles
 

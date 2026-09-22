@@ -96,6 +96,34 @@ python3 evaluation/run_mcp_smoke.py \
 
 不要在共享环境中故意破坏 Provider。用已有失败任务或 disposable 环境演示：查看 index task 的状态、attempt、失败原因和耗时，然后调用人工 retry；恢复后确认文档回到 `ready`。若只展示文档替换，说明新版本在新索引成功前不会替换旧的可检索版本。
 
+## 8. Flutter 设备演示（已完成本地验收）
+
+这一步只使用 disposable 本地账号和 `sample_faq.md`，不连接真实客户数据。开始设备验收前先确认后端和 LM Studio API 已启动，再在另一个终端执行：
+
+```bash
+adb devices
+adb reverse tcp:8080 tcp:8080
+cd app
+flutter pub get
+dart run build_runner build
+flutter run -d <device-id> \
+  --dart-define=API_BASE_URL=http://localhost:8080 \
+  --dart-define=APP_USERNAME=demo
+```
+
+设备级最小验收顺序：
+
+1. 登录页显示，输入 disposable `demo` 账号后进入问答页。
+2. 上传 `sample_faq.md`，在知识库页看到 `processing` 到 `ready`。
+3. 提问“设备保修期是多久？”，看到引用来源、`grounded` 状态、耗时/Token 和反馈按钮。
+4. 提问资料外问题，确认回答显示拒答状态且没有来源卡片。
+5. 返回知识库页，确认就绪文档菜单包含停用和重建索引；失败文档只演示重建索引，不重复上传。
+6. 点击退出登录，确认回到登录页；再次启动应用时只验证会话恢复，不截图 token。
+
+本轮已在 Android 16/API 36 真实设备完成：登录态恢复、`sample_faq.md` 选择/上传后 `ready` 列表、带 `sample_faq.md · chunk#1` 的命中回答、耗时/Token、`HELPFUL` 反馈、资料外拒答、停用/重建索引/删除菜单、退出登录均已看到。带引用回答和拒答截图分别保存在 `/private/tmp/rag-ask-full-query-result.png`、`/private/tmp/rag-ask-outscope-result.png`；知识库菜单截图为 `/private/tmp/rag-sample-menu.png`，退出登录截图为 `/private/tmp/rag-logged-out.png`。这些是本地临时证据，不应直接当作公开 Demo 资产。
+
+截图或录屏不得包含 JWT、密码输入内容、LM Studio Developer Logs、真实客户文档正文或设备序列号；录屏和公开部署仍是独立门槛。
+
 ## Demo 结论
 
 这不是“模型回答了几个问题”的展示，而是一个带有入库、ACL、引用、拒答、审计、评测和恢复边界的企业知识库闭环。当前仍应称为 V0.1 建设中的可验证项目，不应描述为生产级 Agent 平台。

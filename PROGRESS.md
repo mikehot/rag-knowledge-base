@@ -124,6 +124,7 @@
 | FDE 交付材料 | PASS（文档边界） | 2026-09-22 新增 `docs/ARCHITECTURE.md`、`DISCOVERY_BRIEF.md`、`DEMO.md`、`DEPLOYMENT_RUNBOOK.md`、中文/英文 Case Study；内容与当前代码、评测和 MCP smoke 证据对齐，不把本地样例包装成生产或 ROI 结论 |
 | 隔离 API Demo | PASS（一次性本地证据） | 2026-09-22 在独立 PostgreSQL/pgvector + 当前源码服务上完成上传、V12 迁移、索引 `READY/SUCCEEDED`、2 Chunk、授权回答/引用、反馈、fail-closed 拒答、无权限员工拒绝和 MCP 只读边界；详见 `evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md`；尚不是 Flutter 设备或公开部署证据 |
 | Flutter 客户端会话、回答与文档生命周期 | PASS（客户端解析与本地测试） | 2026-09-22 Flutter 已消费 `requestId`、`grounded`、`latencyMs`、`tokenUsage`、`failureReason`、分段耗时和来源；回答卡展示状态/耗时/Token/失败分类，并接入 `HELPFUL`/`NOT_HELPFUL` 反馈；新增显式登录、平台安全 token 存储、启动恢复和退出登录；知识库页已对接已有文档停用/重建索引接口，并保留服务端权限边界；`flutter analyze` 与 6 个 Flutter tests 通过 |
+| Flutter Android 设备级演示 | PASS（本地 disposable 证据） | 2026-09-22 Android 16/API 36 真实设备：登录、会话恢复、`sample_faq.md` 文件选择/上传后 `ready` 列表、命中回答与 `sample_faq.md · chunk#1` 引用、耗时/Token、`HELPFUL` 反馈、资料外拒答、文档菜单边界和退出登录均通过；本地截图保存在 `/private/tmp/rag-*.png`，未写入仓库；不代表公开部署或生产设备证据 |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
@@ -138,7 +139,7 @@
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前本地回归为 95 个 H2/非 Docker 测试和 14 个 PostgreSQL/Testcontainers 集成测试通过，共 109 个测试、0 skipped；GitHub Actions run `35321425249` 是依赖升级之前的 62 tests / 0 skipped 远端证据，Testcontainers 1.21.4 仍需下一次 CI 验证。
+- 后端当前本地回归为 95 个 H2/非 Docker 测试和 14 个 PostgreSQL/Testcontainers 集成测试通过，共 109 个测试、0 skipped；GitHub Actions run `35698781377` 已对本次提交成功完成 `backend-tests`、`compose-config` 和 `flutter-tests`，但长期运行基线仍需持续积累。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
@@ -148,10 +149,10 @@
 - 已有 `golden-v1`（20 题）、`answer-quality-v1`（12 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；答案质量扩展集已完成 VECTOR/KEYWORD_RRF 后端 A/B，结果支持区分召回缺口与生成稳定性问题；新增 Structured Output 有界重试，但本地模型非确定性仍使答案完整性未达稳定门槛；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；评测 fixture 现在会幂等补齐 actor roles；云端成本对照和独立的模型评分仍未完成。
 - 没有生产级 BM25/全文 Hybrid Search 或 Reranker；PostgreSQL 默认 simple FTS 的中文切词预实验不足，`pg_trgm` 仅完成 disposable 查询验证。离线 keyword candidate、文档级 RRF 模拟、ACL-aware 线上候选 A/B、默认关闭的后端 keyword-RRF 端到端 A/B 和默认关闭的 vector-diversity 端到端 A/B 已完成；当前结果不批准默认启用，也没有成本结论。
 - 应用内只读 Agent Tool Registry 和最小无状态 MCP adapter 已实现并完成单元回归；`evaluation/run_mcp_smoke.py` 已提供可重复的本地 HTTP 边界检查；尚无完整 MCP transport/auth conformance、第三方 SDK/client 互操作证据、模型驱动 Agent loop 或写工具。
-- Flutter 问答客户端现在解析并展示后端回答契约、来源、失败分类、耗时/Token，并可提交单次反馈；当前已有独立登录页、平台安全 token 存储、启动恢复和退出登录；知识库页已覆盖可见文档的停用、失败/就绪重建索引和删除入口，但尚无 ACL 管理、已停用文档恢复列表和批量任务管理页面。Flutter CI 已加入仓库，但尚未等待新的 GitHub run 作为远端证据。
+- Flutter 问答客户端现在解析并展示后端回答契约、来源、失败分类、耗时/Token，并可提交单次反馈；当前已有独立登录页、平台安全 token 存储、启动恢复和退出登录；知识库页已覆盖可见文档的停用、失败/就绪重建索引和删除入口，但尚无 ACL 管理、已停用文档恢复列表和批量任务管理页面。Flutter CI 已由 run `35698781377` 远端验证通过；Android 设备级截图已完成，尚无录屏、公开可访问 Demo 或生产设备证据。
 - 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。Top-K=8 可找回 RAG-014 但整体质量低于 Top-K=5，默认继续保持 5。
 - 当前本地模型尚未通过独立 Structured Output 能力门禁；不要对截断 JSON 做宽松解析，也不要未经契约设计把 `reasoning_content` 当作 `message.content` 的替代。模型切换必须先通过重复探针、答案质量、压力集、ACL、延迟和 Token 复核。
-- 第一版架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；已有一次隔离 API Demo 记录；尚无公开可访问 Demo、Flutter 设备截图/录屏、真实客户生产部署和长期运营基线。
+- 第一版架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；已有一次隔离 API Demo 记录和 Android 设备截图；尚无录屏、公开可访问 Demo、真实客户生产部署和长期运营基线。
 
 ## 下一步
 
@@ -160,7 +161,7 @@ RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经�
 1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
 2. `QUALITY-002` 已确认是向量 Top-5 边界排序缺口，但离线和端到端多样性重排都没有产生净质量收益；`QUALITY-006` 的目标资料已在 Top-5 第 3 位且高于阈值，剩余问题是模型结构化输出/答案判定。保持 Top-K、Hybrid Search、Reranker 和 vector-diversity 默认关闭，先完成 V12 的 Docker-backed/CI 集成回归和评测稳定性复核。
 3. 保持 2400 默认，优先修复召回缺口和本地模型稳定性；未通过质量、P95 和成本门槛前不打开 `AI_COMPLEX_ROUTING_ENABLED`。
-4. Flutter 客户端会话、回答契约、单文档生命周期和 CI 门禁已对齐；下一步补设备级演示证据，再评估 ACL 管理和批量任务页面；第三方 SDK/client conformance 作为独立后续门槛，Agent 写操作继续不开放。
+4. Flutter 客户端会话、回答契约、单文档生命周期、CI 门禁和 Android 设备级演示证据已对齐；下一步评估是否需要 ACL 管理和批量任务页面，再决定公开部署；第三方 SDK/client conformance 作为独立后续门槛，Agent 写操作继续不开放。
 
 ## 文档维护规则
 

@@ -10,20 +10,20 @@ dart run build_runner build
 flutter run --dart-define=API_BASE_URL=http://localhost:8080
 ```
 
-Default login is handled by the repository:
+The app shows an explicit login page and stores only the returned token in
+platform secure storage. The default demo account can be entered manually:
 
 ```text
-APP_USERNAME=demo
-APP_PASSWORD=demo123456
+用户名：demo
+密码：demo123456
 ```
 
-Override if needed:
+The username field can be prefilled at build time if needed:
 
 ```bash
 flutter run \
   --dart-define=API_BASE_URL=http://localhost:8080 \
-  --dart-define=APP_USERNAME=demo \
-  --dart-define=APP_PASSWORD=demo123456
+  --dart-define=APP_USERNAME=demo
 ```
 
 ## Android Physical Device
@@ -45,8 +45,8 @@ Debug Android enables cleartext HTTP. Release deployments should use HTTPS.
 
 ## Screens
 
-- `问答`: chat bubbles, loading answer, source chips with snippet bottom sheet, handoff state.
-- `知识库`: upload PDF/TXT/MD/DOCX, list status, poll processing, delete document.
+- `问答`: chat bubbles, loading answer, source chips with snippet bottom sheet, grounded/refusal state, latency/token/failure metadata, and helpful/not-helpful feedback.
+- `知识库`: upload PDF/TXT/MD/DOCX, poll processing, delete, disable, and reindex visible documents; backend permissions remain the security boundary.
 
 ## Toolchain Pins
 

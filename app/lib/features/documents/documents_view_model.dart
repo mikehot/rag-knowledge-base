@@ -18,18 +18,22 @@ class DocumentsState {
     this.items = const [],
     this.loading = false,
     this.uploading = false,
+    this.operatingDocumentId,
     this.error,
   });
 
   final List<DocumentItem> items;
   final bool loading;
   final bool uploading;
+  final String? operatingDocumentId;
   final String? error;
 
   DocumentsState copyWith({
     List<DocumentItem>? items,
     bool? loading,
     bool? uploading,
+    String? operatingDocumentId,
+    bool clearOperatingDocumentId = false,
     String? error,
     bool clearError = false,
   }) {
@@ -37,6 +41,9 @@ class DocumentsState {
       items: items ?? this.items,
       loading: loading ?? this.loading,
       uploading: uploading ?? this.uploading,
+      operatingDocumentId: clearOperatingDocumentId
+          ? null
+          : operatingDocumentId ?? this.operatingDocumentId,
       error: clearError ? null : error ?? this.error,
     );
   }
@@ -84,6 +91,38 @@ class DocumentsViewModel extends StateNotifier<DocumentsState> {
       await load();
     } catch (error) {
       state = state.copyWith(error: _message(error));
+    }
+  }
+
+  Future<void> disable(String documentId) async {
+    await _runLifecycle(
+      documentId,
+      () => _repository.disableDocument(documentId),
+    );
+  }
+
+  Future<void> reindex(String documentId) async {
+    await _runLifecycle(
+      documentId,
+      () => _repository.reindexDocument(documentId),
+    );
+  }
+
+  Future<void> _runLifecycle(
+    String documentId,
+    Future<DocumentLifecycleResponse> Function() action,
+  ) async {
+    if (state.operatingDocumentId != null) {
+      return;
+    }
+    state = state.copyWith(operatingDocumentId: documentId, clearError: true);
+    try {
+      await action();
+      await load();
+    } catch (error) {
+      state = state.copyWith(error: _message(error));
+    } finally {
+      state = state.copyWith(clearOperatingDocumentId: true);
     }
   }
 

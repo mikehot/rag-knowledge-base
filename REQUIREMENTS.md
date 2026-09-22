@@ -219,6 +219,8 @@ Tool 必须满足：
 
 MCP 只暴露已验证的只读 Tool。任何写操作都必须先具备人工审批、幂等、审计、回滚和最小权限设计。
 
+当前只实现一个最小无状态适配层：`POST /mcp` 面向 MCP `2026-07-28`，支持 `server/discover`、`tools/list` 和 `tools/call`，并要求 JWT、`MCP-Protocol-Version`、`Mcp-Method` 以及工具调用的 `Mcp-Name`。它复用应用内 Tool Registry，不声称已经完成完整 MCP transport/auth conformance；Sessions、Tasks、Resources、Prompts、模型驱动循环和写工具继续关闭。
+
 ## 5. 技术栈
 
 | 层 | V0.1 选择 | 说明 |

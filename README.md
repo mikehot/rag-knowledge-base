@@ -8,7 +8,7 @@
 
 仓库已具备 JWT、PDF/DOCX/TXT/Markdown 入库、pgvector 向量检索、相似度拒答、引用、Token 记录、Flutter 问答与文档管理等 MVP 代码。Milestone 2 已进入后半程：Flyway migration、tenant/department/role/knowledge-base/document ACL schema、SQL 查询阶段权限过滤、最小管理 API、文档生命周期、拒绝审计和只读审计查询 API 已经落地。
 
-持久化索引任务、批量重建、自动/人工失败重试、幂等入队、任务状态观测和进程重启恢复已经通过 PostgreSQL CI 与本地真实 Provider 验证。问答现已具备请求关联 ID、总/分段耗时、稳定失败分类、数据库观测字段，以及绑定原提问用户和 tenant 的反馈 API；Actuator 存活/就绪探针、问答反馈、ACL 拒绝、Token/估算成本和第一组低基数 RAG/索引指标已通过本地测试与 GitHub CI。20 题 `golden-v1` 数据集、8 题 `retrieval-stress-v1`、离线 Runner、真实 API 采集入口、文档 ACL 管理 API 和仅管理员/审计员可读的检索诊断 API 已建立；历史本地 Golden 两次 20/20、压力集最新 8/8 通过；STRESS-003 的 Gemma 生成预算问题已通过默认 `AI_MAX_TOKENS=2400` 修复并由完整套件验证。另有不依赖人工答案词的 `keyword-candidates-v1` 离线候选 benchmark，当前仅用于评估是否值得引入 Hybrid Search。现在 `/api/ask` 已执行 Structured Output Contract，应用内只读 Agent Tool Registry 已提供 `search_knowledge`、`list_documents`、`get_document_status`，但 MCP 和写操作尚未开放。聚合报告见 [evaluation/reports](evaluation/reports/)。指标与首版告警边界见 [OBSERVABILITY.md](OBSERVABILITY.md)。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
+持久化索引任务、批量重建、自动/人工失败重试、幂等入队、任务状态观测和进程重启恢复已经通过 PostgreSQL CI 与本地真实 Provider 验证。问答现已具备请求关联 ID、总/分段耗时、稳定失败分类、数据库观测字段，以及绑定原提问用户和 tenant 的反馈 API；Actuator 存活/就绪探针、问答反馈、ACL 拒绝、Token/估算成本和第一组低基数 RAG/索引指标已通过本地测试与 GitHub CI。20 题 `golden-v1` 数据集、8 题 `retrieval-stress-v1`、离线 Runner、真实 API 采集入口、文档 ACL 管理 API 和仅管理员/审计员可读的检索诊断 API 已建立；历史本地 Golden 两次 20/20、压力集最新 8/8 通过；STRESS-003 的 Gemma 生成预算问题已通过默认 `AI_MAX_TOKENS=2400` 修复并由完整套件验证。另有不依赖人工答案词的 `keyword-candidates-v1` 离线候选 benchmark，当前仅用于评估是否值得引入 Hybrid Search。现在 `/api/ask` 已执行 Structured Output Contract，应用内只读 Agent Tool Registry 已提供 `search_knowledge`、`list_documents`、`get_document_status`，并已增加需要 JWT、复用同一 ACL 边界的最小无状态 MCP 适配层 `POST /mcp`；写操作、模型循环、Tasks、Resources 和 Prompts 尚未开放。聚合报告见 [evaluation/reports](evaluation/reports/)。指标与首版告警边界见 [OBSERVABILITY.md](OBSERVABILITY.md)。真实 RAG 基线、旧库升级、空库迁移、可回滚替换上传，以及 USER/DEPARTMENT/ROLE/tenant 权限边界均已有验证证据，但这不代表企业知识库 V0.1 已完成。
 
 当前验证状态与已知限制见 [PROGRESS.md](PROGRESS.md)。
 
@@ -17,10 +17,17 @@
 - [REQUIREMENTS.md](REQUIREMENTS.md)：企业知识库 V0.1 需求、边界与验收标准。
 - [ROADMAP.md](ROADMAP.md)：从真实 RAG 基线到 ACL、评测、Agent/MCP 和 FDE 交付包的推进顺序。
 - [PROGRESS.md](PROGRESS.md)：代码已实现范围、当前验证证据与下一步。
-- [evaluation/README.md](evaluation/README.md)：Golden Dataset、检索压力集、keyword candidate benchmark、线上候选 A/B、后端端到端 A/B、离线 Runner 和真实响应评测边界。
+- [evaluation/README.md](evaluation/README.md)：Golden Dataset、检索压力集、keyword candidate benchmark、结构化输出 Provider 探针、线上候选 A/B、后端端到端 A/B、离线 Runner 和真实响应评测边界。
 - [PORTFOLIO.md](PORTFOLIO.md)：对外展示口径；只能使用已经验证的证据。
 - [backend/README.md](backend/README.md)：后端配置、Provider 和 API。
 - [app/README.md](app/README.md)：Flutter 运行方式和客户端说明。
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：系统上下文、数据流、权限信任边界和技术决策。
+- [docs/DISCOVERY_BRIEF.md](docs/DISCOVERY_BRIEF.md)：用户、工作流、约束、指标和非目标。
+- [docs/DEMO.md](docs/DEMO.md)：5–10 分钟演示讲稿和可执行步骤。
+- [docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md)：启动、迁移、备份、恢复、回滚和故障排查。
+- [docs/CASE_STUDY.md](docs/CASE_STUDY.md)：中文 Case Study 与证据边界。
+- [docs/CASE_STUDY_EN.md](docs/CASE_STUDY_EN.md)：英文项目说明和 Demo talk track。
+- [evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md](evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md)：隔离环境 API Demo 聚合记录。
 
 ## Modules
 
@@ -64,7 +71,7 @@ cd backend
   → 文档生命周期、结构化回答、审计、观测和反馈
   → 20 题评测基线
   → 评测驱动的 Hybrid Search / Reranker 决策
-  → 只读 Agent Tool 和 MCP
+  → 只读 Agent Tool 和最小 MCP 适配层
   → 审批式写操作
 ```
 

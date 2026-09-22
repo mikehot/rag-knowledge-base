@@ -95,7 +95,7 @@ class OpenAiCompatibleAiProviderTests {
                 UUID.fromString("00000000-0000-0000-0000-000000000101"),
                 true
             ),
-            new AppProperties.Ai("openai-compatible", baseUrl, "", "test-model", 2400, 3200, false, 5, 0, 50),
+            new AppProperties.Ai("openai-compatible", baseUrl, "", "test-model", 2400, 3200, false, 5, 0, 0, 50),
             new AppProperties.Embedding("openai-compatible", baseUrl, "", "embedding-model", 16, 5, 0)
         );
     }

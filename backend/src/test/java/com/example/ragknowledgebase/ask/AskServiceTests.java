@@ -116,6 +116,7 @@ class AskServiceTests {
             .contains("如果问题包含多个部分")
             .contains("不能用‘确认’、‘注意检查’等空泛短语代替具体检查项")
             .contains("双方责任必须完整保留")
+            .contains("answer 必须使用 1.、2.、3. 编号逐项回答")
             .contains("sourceIndexes")
             .contains("必须只输出一个 JSON 对象");
         ArgumentCaptor<AskLog> log = ArgumentCaptor.forClass(AskLog.class);
@@ -171,6 +172,57 @@ class AskServiceTests {
 
         verify(embeddingProvider, never()).embed(any());
         verify(chunkRepository, never()).search(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void rejectsVectorDiversityWhenTheExperimentIsDisabled() {
+        assertThatThrownBy(() -> askService.ask(USER, new AskRequest("保修期限是多少？"), RetrievalMode.VECTOR_DIVERSITY))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(400);
+
+        verify(embeddingProvider, never()).embed(any());
+        verify(chunkRepository, never()).search(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void runsVectorDiversityThroughTheSameStructuredAnswerPathWhenEnabled() {
+        askService = new AskService(
+            properties(0, false, true),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        String question = "保修期限是多少？";
+        float[] embedding = new float[] {0.1f, 0.2f};
+        UUID secondDocumentId = UUID.fromString("20000000-0000-0000-0000-000000000002");
+        ChunkSearchResult firstDocumentChunk1 = new ChunkSearchResult(
+            UUID.randomUUID(), DOCUMENT_ID, "operations.md", "chunk#1", "设备重启说明", 0.92
+        );
+        ChunkSearchResult firstDocumentChunk2 = new ChunkSearchResult(
+            UUID.randomUUID(), DOCUMENT_ID, "operations.md", "chunk#2", "网络检查说明", 0.91
+        );
+        ChunkSearchResult secondDocumentChunk = new ChunkSearchResult(
+            UUID.randomUUID(), secondDocumentId, "sample_faq.md", "chunk#1", "保修期限为一年", 0.90
+        );
+        when(embeddingProvider.embed(List.of(question))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 50))
+            .thenReturn(List.of(firstDocumentChunk1, firstDocumentChunk2, secondDocumentChunk));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"保修期为一年。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[2]}",
+            128
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest(question), RetrievalMode.VECTOR_DIVERSITY);
+
+        assertThat(response.found()).isTrue();
+        assertThat(response.sources()).singleElement().satisfies(source ->
+            assertThat(source.filename()).isEqualTo("sample_faq.md")
+        );
+        verify(chunkRepository).search(TENANT_ID, USER_ID, embedding, 50);
     }
 
     @Test
@@ -306,6 +358,33 @@ class AskServiceTests {
     }
 
     @Test
+    void failsClosedWhenFoundAnswerAdmitsMissingSourceFacts() {
+        float[] embedding = new float[] {0.5f, 0.6f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#2",
+            "智能门锁常见问题",
+            0.72
+        );
+        when(embeddingProvider.embed(List.of("安装收费并能否预约上门？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"1. 资料中未提及安装收费。\\n2. 资料中未提及能否预约上门。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            96
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest("安装收费并能否预约上门？"));
+
+        assertThat(response.found()).isFalse();
+        assertThat(response.grounded()).isFalse();
+        assertThat(response.answer()).isEqualTo("未找到相关信息，建议转人工。");
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.INSUFFICIENT_CONTEXT);
+    }
+
+    @Test
     void returnsSafeFallbackWhenModelReturnsInvalidJson() {
         float[] embedding = new float[] {0.1f, 0.2f};
         ChunkSearchResult hit = new ChunkSearchResult(
@@ -329,6 +408,44 @@ class AskServiceTests {
         assertThat(response.failureReason()).isEqualTo(AskFailureReason.STRUCTURED_OUTPUT_INVALID);
         assertThat(response.tokenUsage()).isEqualTo(24);
         verify(askLogRepository).save(any(AskLog.class));
+    }
+
+    @Test
+    void retriesOnceWhenStructuredOutputIsInvalid() {
+        askService = new AskService(
+            properties(0, false, false, 1),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "有效资料",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of("结构化输出重试？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenReturn(
+            new AiProviderResponse("不是 JSON", 24),
+            new AiProviderResponse(
+                "{\"answer\":\"资料回答\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+                30
+            )
+        );
+
+        AskResponse response = askService.ask(USER, new AskRequest("结构化输出重试？"));
+
+        assertThat(response.found()).isTrue();
+        assertThat(response.answer()).isEqualTo("资料回答");
+        assertThat(response.tokenUsage()).isEqualTo(54);
+        verify(aiProvider, times(2)).generate(anyString());
     }
 
     @Test
@@ -505,13 +622,23 @@ class AskServiceTests {
     }
 
     private AppProperties properties(int dailyLimit, boolean complexRoutingEnabled, boolean hybridExperimentEnabled) {
+        return properties(dailyLimit, complexRoutingEnabled, hybridExperimentEnabled, 0);
+    }
+
+    private AppProperties properties(
+        int dailyLimit,
+        boolean complexRoutingEnabled,
+        boolean hybridExperimentEnabled,
+        int structuredOutputRetries
+    ) {
         return new AppProperties(
             null,
             null,
             new AppProperties.Rag(700, 100, 5, 0.35, 768, hybridExperimentEnabled, 50, 2.0, 60),
             null,
             new AppProperties.Ai(
-                "openai-compatible", "", "", "", 1200, 3200, complexRoutingEnabled, 120, 1, dailyLimit
+                "openai-compatible", "", "", "", 1200, 3200, complexRoutingEnabled, 120, 1,
+                structuredOutputRetries, dailyLimit
             ),
             null
         );

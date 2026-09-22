@@ -28,6 +28,7 @@ DocumentItem _$DocumentItemFromJson(Map<String, dynamic> json) => DocumentItem(
   createdAt: json['createdAt'] == null
       ? null
       : DateTime.parse(json['createdAt'] as String),
+  disabled: json['disabled'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$DocumentItemToJson(DocumentItem instance) =>
@@ -39,6 +40,7 @@ Map<String, dynamic> _$DocumentItemToJson(DocumentItem instance) =>
       'chunkCount': instance.chunkCount,
       'errorMsg': instance.errorMsg,
       'createdAt': instance.createdAt?.toIso8601String(),
+      'disabled': instance.disabled,
     };
 
 DocumentUploadResponse _$DocumentUploadResponseFromJson(
@@ -62,3 +64,27 @@ DeleteDocumentResponse _$DeleteDocumentResponseFromJson(
 Map<String, dynamic> _$DeleteDocumentResponseToJson(
   DeleteDocumentResponse instance,
 ) => <String, dynamic>{'deleted': instance.deleted};
+
+DocumentLifecycleResponse _$DocumentLifecycleResponseFromJson(
+  Map<String, dynamic> json,
+) => DocumentLifecycleResponse(
+  documentId: json['documentId'] as String,
+  status: json['status'] as String,
+  contentVersion: (json['contentVersion'] as num).toInt(),
+  permissionVersion: (json['permissionVersion'] as num).toInt(),
+  disabled: json['disabled'] as bool,
+  deleted: json['deleted'] as bool,
+  taskId: json['taskId'] as String?,
+);
+
+Map<String, dynamic> _$DocumentLifecycleResponseToJson(
+  DocumentLifecycleResponse instance,
+) => <String, dynamic>{
+  'documentId': instance.documentId,
+  'status': instance.status,
+  'contentVersion': instance.contentVersion,
+  'permissionVersion': instance.permissionVersion,
+  'disabled': instance.disabled,
+  'deleted': instance.deleted,
+  'taskId': instance.taskId,
+};

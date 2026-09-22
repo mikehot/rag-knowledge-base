@@ -133,7 +133,7 @@ def main() -> int:
     parser.add_argument("--credentials", type=Path, required=True, help="External JSON map keyed by acting_user.id")
     parser.add_argument("--output", type=Path, required=True, help="JSONL response capture path")
     parser.add_argument("--timeout", type=float, default=180.0)
-    parser.add_argument("--retrieval-mode", choices=("vector", "keyword-rrf"), default="vector")
+    parser.add_argument("--retrieval-mode", choices=("vector", "vector-diversity", "keyword-rrf"), default="vector")
     args = parser.parse_args()
     try:
         cases = load_jsonl(args.dataset)

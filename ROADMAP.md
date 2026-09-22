@@ -166,13 +166,17 @@ Goal: replace subjective demos with reproducible evidence.
 
 Current status (2026-09-21): `golden-v1` is checked in at `evaluation/datasets/golden_v1.jsonl`, and the separate `retrieval-stress-v1` set is checked in at `evaluation/datasets/retrieval_stress_v1.jsonl`. Two historical authenticated local API runs passed 20/20 golden cases; the 2400-token structured-output baseline recorded 16/20, while the isolated 4000-token/Top-K=8 candidate recorded 15/20 and four fail-closed `STRUCTURED_OUTPUT_INVALID` responses. The historical stress run passed 8/8, and the 4000-token candidate also passed 8/8 with 100% answer-point/citation/refusal metrics and zero ACL leakage, but with materially higher latency. Protected candidate-rank/similarity snapshots show Recall@1/3/5=75%/91.67%/100%; larger-corpus ranking evidence, cloud cost comparison, and independent model judging remain open. The checked-in default remains Top-K=5 and 2400 tokens.
 
-Provider follow-up (2026-09-21): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; native JSON Schema remains enabled and the checked-in `AI_MAX_TOKENS=2400` baseline is retained. The full 4000-token/Top-K=8 candidate and the 3200-token complex-question route both failed to beat the 2400 Golden baseline, so neither is enabled globally. The backend now also rejects contradictory `found=true` plus handoff-text responses; retrieval and provider stability remain ahead of MCP.
+Provider follow-up (2026-09-21): timeout classification is now shared across Chat, Embedding, and AskService and recognizes nested HTTP/socket timeout causes. LM Studio server logs showed Gemma reasoning exhausted the old 1200-token completion budget; native JSON Schema remains enabled and the checked-in `AI_MAX_TOKENS=2400` baseline is retained. The full 4000-token/Top-K=8 candidate and the 3200-token complex-question route both failed to beat the 2400 Golden baseline, so neither is enabled globally. The backend now also rejects contradictory `found=true` plus handoff-text or explicit source-missing responses; retrieval and provider stability remain ahead of MCP.
 
 Evaluation fixture follow-up (2026-09-21): an existing `candidate-admin` account had been reused without reconciling its `SYSTEM_ADMIN` role, which made RAG-014/RAG-020 look like retrieval failures after ACL trimming. The fixture preparer now idempotently assigns requested/default actor roles. With corrected roles, Top-K=5/2400 achieved 16/20 and exposed one real Top-5 miss (RAG-014); Top-K=8 recovered that source but fell to 15/20 because of context interference and higher token usage. The default remains Top-K=5; a bounded keyword/full-text experiment is the next retrieval step.
 
 Answer-quality extension follow-up (2026-09-21): `answer-quality-v1` adds 12 focused cases without changing the frozen `golden-v1` contract. The deterministic runner now accepts optional `quality_rules` for minimum answer-point coverage, grounded output, unexpected citation limits, and fail-closed refusal. Dataset validation and positive answer/refusal quality-gate checks pass locally; the 12-case real API capture remains the next evidence step.
 
-Answer-quality A/B follow-up (2026-09-21): the 12-case backend-owned VECTOR/KEYWORD_RRF comparison completed with HTTP 12/12 and ACL leakage 0 for both modes. Keyword-RRF improved answerable retrieval Recall@5 from 87.5% to 100% and citation coverage from 75% to 87.5%, but both modes remained at 9/12 quality-gate pass; keyword-RRF also increased average Token usage from 1522.58 to 1805.50 and produced two `STRUCTURED_OUTPUT_INVALID` failures. The next work is to fix the identified retrieval and generation failure categories, not to enable Hybrid Search by default.
+Answer-quality A/B follow-up (2026-09-21): the 12-case backend-owned VECTOR/KEYWORD_RRF comparison completed with HTTP 12/12 and ACL leakage 0 for both modes. After correcting the `QUALITY-001` matcher and adding legitimate natural-language variants for Q002/Q005, the initial VECTOR/KEYWORD_RRF quality-gate pass was 10/12 versus 10/12; Keyword-RRF improved answerable retrieval Recall@5 from 87.5% to 100% and citation coverage from 75% to 87.5%, but increased average Token usage from 1522.58 to 1805.50 and produced two `STRUCTURED_OUTPUT_INVALID` failures. A later prompt-hardening capture scored 10/12 versus 11/12, but remains a small local-model sample. The next work is to fix the identified retrieval and generation failure categories, not to enable Hybrid Search by default.
+
+Structured Output retry follow-up (2026-09-21): the backend now supports one configurable retry after invalid model JSON through `AI_STRUCTURED_OUTPUT_RETRIES` (default `1`), merges retry Token/latency accounting, and preserves the existing fail-closed fallback when retries are exhausted. It also rejects `found=true` answers that explicitly admit source facts are missing. Targeted and full backend tests pass with 100 tests and 0 skipped. A clean-limit local smoke capture recovered one previously invalid multi-part answer, but model output variance prevented a stable overall quality gain; the next evidence gate remains a repeatable answer-completeness baseline.
+
+Multi-part answer follow-up (2026-09-21): database inspection confirmed `QUALITY-006` has all relevant return/exchange rules in one ACL-visible Chunk. The AskService prompt now explicitly requires numbered one-condition-per-item answers for questions containing `是否/能否/吗`, `多久/多少`, or `由谁`; the Prompt regression test passes. The fresh 12-case capture after this change kept VECTOR at 10/12 with Q002/Q006 still `INSUFFICIENT_CONTEXT`; KEYWORD_RRF reached 11/12 after the scorer accepted natural expressions, but Q006 still omitted the non-quality shipping responsibility. This is useful diagnosis, not stable quality improvement, so repeated captures remain required.
 
 Keyword follow-up (2026-09-21): PostgreSQL `simple` FTS does not provide reliable Chinese phrase matching for this fixture. A disposable `pg_trgm`/`word_similarity` experiment can rank the target Chunk when query phrases are normalized, but raw-question similarity is noisy. The next retrieval task is an offline keyword-candidate benchmark with ACL-preserving candidate recall and context-interference measurement; no database extension or runtime hybrid path is enabled yet.
 
@@ -185,6 +189,8 @@ Online candidate A/B follow-up (2026-09-21): the real authenticated `/api/ask` v
 Backend-owned A/B follow-up (2026-09-21): `X-RAG-Retrieval-Mode: keyword-rrf` now routes through the same `AskService` generation, citation validation, failure classification, feedback ownership, and protected retrieval diagnostics as the default VECTOR path, but only when `RAG_HYBRID_EXPERIMENT_ENABLED=true`. V11 persists `VECTOR` or `KEYWORD_RRF` in `ask_log`; the default remains disabled. The keyword side reuses server-side ACL filtering and a bounded in-memory scorer aligned with the versioned candidate benchmark, so this is an evaluation switch, not a production full-text index. The next gate is a full 8-case paired capture and end-to-end comparison.
 
 Backend-owned paired capture follow-up (2026-09-21): the full eight-case VECTOR/KEYWORD_RRF capture completed with HTTP 8/8, behavior/citation contract failures 0/0 for both modes, and ACL leakage 0/0. Keyword-RRF improved Recall@1 from 75% to 91.67%, Recall@3 from 91.67% to 100%, and kept Recall@5 at 100%; answerable context interference stayed 60% and both refusal cases still had candidates. The local API P95 was 16103 ms for VECTOR and 13815 ms for KEYWORD_RRF, with average tokens 1423.375 and 1429.25. These are small-sample LM Studio results, not production SLO or cost evidence; keep the flag disabled and expand answer-quality evaluation before choosing an indexed production implementation.
+
+Stability capture follow-up (2026-09-21): `evaluation/run_stability_eval.py` provides a bounded repeat collector and `evaluation/summarize_stability_eval.py` provides a redacted aggregate for selected answer-quality cases. A local disposable `demo.employee` credential was prepared with the fixture ACL, `SUPPORT` department, and `EMPLOYEE` role; Q002/Q006 were each captured three times in VECTOR and KEYWORD_RRF. All 12 targeted requests were HTTP 200/API code 0: VECTOR stably returned `INSUFFICIENT_CONTEXT` for both cases, while KEYWORD_RRF stably returned `STRUCTURED_OUTPUT_INVALID` for both. This is targeted employee-scoped evidence, not a full 12-case quality score or a reason to enable Hybrid Search. The tools omit answers and request IDs from the summary and keep credentials/raw captures outside Git. After the run, the default Hybrid flag was restored to false.
 
 Each evaluation case records:
 
@@ -243,7 +249,7 @@ Acceptance gate:
 
 Goal: extend a secure, measured knowledge system into a bounded Agent delivery.
 
-Current status (2026-09-20): the application-owned read-only Tool Registry is implemented at `GET /api/agent/tools` and `POST /api/agent/tools/execute`. It exposes only `search_knowledge`, `list_documents`, and `get_document_status`; calls inherit the authenticated tenant/user context, reject unknown arguments, cap each batch at three calls, and write allow/deny/error outcomes to the existing audit table. Unit coverage includes ACL denial, empty result, timeout, unknown tool, invalid arguments, document filtering, status reads, and budget exhaustion. Real HTTP verification against PostgreSQL/LM Studio confirmed the three definitions, successful list/search/status calls, authentication, unknown-tool rejection, identity-override rejection, and batch-limit rejection. MCP exposure and a model-driven loop remain deliberately deferred until the evaluation and Docker-backed integration gates are stable.
+Current status (2026-09-22): the application-owned read-only Tool Registry is implemented at `GET /api/agent/tools` and `POST /api/agent/tools/execute`. It exposes only `search_knowledge`, `list_documents`, and `get_document_status`; calls inherit the authenticated tenant/user context, reject unknown arguments, cap each batch at three calls, and write allow/deny/error outcomes to the existing audit table. Unit coverage includes ACL denial, empty result, timeout, unknown tool, invalid arguments, document filtering, status reads, and budget exhaustion. Real HTTP verification against PostgreSQL/LM Studio confirmed the three definitions, successful list/search/status calls, authentication, unknown-tool rejection, identity-override rejection, and batch-limit rejection. A minimal stateless MCP `2026-07-28` adapter is now available at `POST /mcp`; it exposes only `server/discover`, `tools/list`, and `tools/call`, requires the protocol/routing headers, and delegates tool execution to the existing registry. Full MCP transport/auth conformance, a model-driven loop, sessions, Tasks, Resources, Prompts, and writes remain deliberately deferred.
 
 Initial read-only tools:
 
@@ -259,6 +265,7 @@ Work:
 - Bound tool calls, loop iterations, wall-clock time, tokens, and result size.
 - Add timeout, partial-failure, unknown-tool, invalid-argument, and budget-exhaustion tests.
 - Expose only approved read-only capabilities through MCP after the internal tool boundary is stable.
+- Target the current stateless MCP transport with explicit protocol/routing headers and private cache hints for ACL-dependent tool catalogs.
 - Keep write operations disabled until explicit approval, audit, idempotency, and rollback exist.
 
 Acceptance gate:
@@ -267,10 +274,17 @@ Acceptance gate:
 - Unauthorized access is rejected before tool execution.
 - The Agent terminates deterministically on success, failure, timeout, or budget exhaustion.
 - MCP clients can discover only the approved read-only surface.
+- MCP requests cannot bypass JWT authentication, tenant/user context, closed schemas, ACL checks, the three-call budget, or existing audit records.
 
 ### Milestone 7 — Delivery Package and FDE Evidence
 
 Goal: demonstrate both engineering quality and customer delivery ability.
+
+Current status (2026-09-22): the first evidence-bounded delivery package is now
+checked in under `docs/`: architecture/data-flow diagrams, discovery brief,
+demo script, deployment/operations runbook, and Chinese/English case-study
+material. A clean disposable demo run, public deployment, screenshots, and
+real customer operating baseline remain separate evidence gates.
 
 Deliverables:
 

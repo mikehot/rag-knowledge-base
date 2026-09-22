@@ -47,7 +47,15 @@ class ChatMessage {
     required this.fromUser,
     this.loading = false,
     this.found = true,
+    this.grounded = false,
     this.sources = const [],
+    this.requestId,
+    this.latencyMs,
+    this.tokenUsage,
+    this.failureReason,
+    this.timings,
+    this.feedbackRating,
+    this.feedbackSending = false,
   });
 
   final String id;
@@ -55,7 +63,34 @@ class ChatMessage {
   final bool fromUser;
   final bool loading;
   final bool found;
+  final bool grounded;
   final List<ChunkSource> sources;
+  final String? requestId;
+  final int? latencyMs;
+  final int? tokenUsage;
+  final String? failureReason;
+  final AskTimings? timings;
+  final String? feedbackRating;
+  final bool feedbackSending;
+
+  ChatMessage copyWith({String? feedbackRating, bool? feedbackSending}) {
+    return ChatMessage(
+      id: id,
+      text: text,
+      fromUser: fromUser,
+      loading: loading,
+      found: found,
+      grounded: grounded,
+      sources: sources,
+      requestId: requestId,
+      latencyMs: latencyMs,
+      tokenUsage: tokenUsage,
+      failureReason: failureReason,
+      timings: timings,
+      feedbackRating: feedbackRating ?? this.feedbackRating,
+      feedbackSending: feedbackSending ?? this.feedbackSending,
+    );
+  }
 }
 
 class AskViewModel extends StateNotifier<AskState> {
@@ -95,7 +130,13 @@ class AskViewModel extends StateNotifier<AskState> {
           text: answer.answer,
           fromUser: false,
           found: answer.found,
+          grounded: answer.grounded,
           sources: answer.sources,
+          requestId: answer.requestId,
+          latencyMs: answer.latencyMs,
+          tokenUsage: answer.tokenUsage,
+          failureReason: answer.failureReason,
+          timings: answer.timings,
         ),
       );
       state = state.copyWith(messages: messages, sending: false);
@@ -116,6 +157,36 @@ class AskViewModel extends StateNotifier<AskState> {
     final question = state.lastQuestion;
     if (question != null) {
       await send(question);
+    }
+  }
+
+  Future<void> rate(String messageId, String rating) async {
+    final index = state.messages.indexWhere(
+      (message) => message.id == messageId,
+    );
+    if (index < 0) {
+      return;
+    }
+    final message = state.messages[index];
+    final requestId = message.requestId;
+    if (requestId == null || message.feedbackSending) {
+      return;
+    }
+    final sendingMessages = [...state.messages];
+    sendingMessages[index] = message.copyWith(feedbackSending: true);
+    state = state.copyWith(messages: sendingMessages, clearError: true);
+    try {
+      await _repository.submitFeedback(requestId, rating);
+      final updatedMessages = [...state.messages];
+      updatedMessages[index] = message.copyWith(
+        feedbackRating: rating,
+        feedbackSending: false,
+      );
+      state = state.copyWith(messages: updatedMessages);
+    } catch (error) {
+      final updatedMessages = [...state.messages];
+      updatedMessages[index] = message.copyWith(feedbackSending: false);
+      state = state.copyWith(messages: updatedMessages, error: _message(error));
     }
   }
 

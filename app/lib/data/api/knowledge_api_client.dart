@@ -34,6 +34,22 @@ abstract class KnowledgeApiClient {
     @Path('id') String id,
   );
 
+  @POST('/api/documents/{id}/disable')
+  Future<ApiEnvelope<DocumentLifecycleResponse>> disableDocument(
+    @Path('id') String id,
+  );
+
+  @POST('/api/documents/{id}/reindex')
+  Future<ApiEnvelope<DocumentLifecycleResponse>> reindexDocument(
+    @Path('id') String id,
+  );
+
   @POST('/api/ask')
   Future<ApiEnvelope<AskAnswer>> ask(@Body() AskRequest request);
+
+  @PUT('/api/ask/{requestId}/feedback')
+  Future<ApiEnvelope<AskFeedbackResponse>> submitFeedback(
+    @Path('requestId') String requestId,
+    @Body() AskFeedbackRequest request,
+  );
 }

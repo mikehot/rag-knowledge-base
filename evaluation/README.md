@@ -112,6 +112,74 @@ The optional `quality_rules` are a deterministic rubric separate from the HTTP/S
 
 The first real backend-owned VECTOR/KEYWORD_RRF comparison for this set is recorded in [reports/answer-quality-v1-backend-ab-local-2026-09-21.md](reports/answer-quality-v1-backend-ab-local-2026-09-21.md). It is a small local-provider sample: use it to separate retrieval misses from generation/Structured Output failures, not as a production SLO.
 
+For a repeatability check on targeted cases, use the separate stability collector. It keeps duplicate case IDs plus a `repeat` field and must not be passed to `run_eval.py`, whose contract requires one response per case:
+
+```bash
+python3 evaluation/run_stability_eval.py \
+  --dataset evaluation/datasets/answer_quality_v1.jsonl \
+  --credentials /private/tmp/rag-online-ab-credentials.json \
+  --case-id QUALITY-002 \
+  --case-id QUALITY-006 \
+  --repeats 3 \
+  --retrieval-mode vector \
+  --output /private/tmp/rag-quality-targeted-vector-stability.jsonl
+```
+
+Run the same command with `--retrieval-mode keyword-rrf` and a separate output path. Summarize `found`, `grounded`, `failureReason`, source filenames, latency, and token usage by case/mode/repeat; keep the raw JSONL and credentials outside Git. Use an employee-scoped credential map matching the fixture ACL, not a full-access administrator, for a formal quality conclusion.
+
+Summarize one or more capture files without printing answer text or request IDs:
+
+```bash
+python3 evaluation/summarize_stability_eval.py \
+  --input /private/tmp/rag-quality-targeted-vector-stability.jsonl \
+  --input /private/tmp/rag-quality-targeted-keyword-stability.jsonl \
+  --output /tmp/rag-quality-targeted-stability-summary.json
+```
+
+The summary reports per-mode and per-case outcome variants, failure reasons, source filenames, P50/P95/max latency, and token usage. `outcome_stable=true` only means the captured contract outcome and cited filenames did not vary; it does not prove answer correctness.
+
+The collector was added as an evidence-gathering tool, not as a new quality score. A valid formal run requires the same actor identities and permissions used by the dataset, the backend-owned experiment flag enabled only for the keyword side, and separate output files for each retrieval mode. If the credential map is unavailable, record the gate as pending rather than recreating users or inferring passwords.
+
+## Run the read-only MCP smoke check
+
+`run_mcp_smoke.py` is a standard-library-only HTTP client for the bounded
+`POST /mcp` adapter. It logs in with one disposable administrator credential,
+then checks `server/discover`, `tools/list`, a successful `list_documents`
+call, identity-argument rejection, protocol/header mismatch handling, and
+unauthenticated access. It validates the exact allowlist
+`search_knowledge`, `list_documents`, and `get_document_status`, plus the
+private/no-cache catalog hints. The credential file and aggregate JSON output
+must remain outside Git:
+
+```bash
+python3 evaluation/run_mcp_smoke.py \
+  --base-url http://localhost:8081 \
+  --credentials /private/tmp/rag-eval-admin.json \
+  --output /private/tmp/mcp-readonly-smoke-local.json
+```
+
+This is a repeatable local HTTP smoke check for the repository's adapter
+boundary, not an official MCP SDK certification or a full transport/auth
+conformance suite. The adapter targets the stateless MCP `2026-07-28` revision;
+see the [official release notes](https://blog.modelcontextprotocol.io/posts/2026-07-28/).
+The checked-in result is [reports/mcp-readonly-smoke-local-2026-09-22.md](reports/mcp-readonly-smoke-local-2026-09-22.md).
+
+## Run the structured-output provider probe
+
+Before changing `AI_MODEL_ID`, run the provider probe against synthetic questions. It sends the same strict JSON Schema used by the Java provider, but it does not send project documents and never writes model content to the report. The report records only contract validity, finish reason, token usage, response size, and latency:
+
+```bash
+python3 evaluation/probe_structured_output.py \
+  --model google/gemma-4-26b-a4b-qat \
+  --model qwen/qwen3.8-27b \
+  --repeats 1 \
+  --output /tmp/structured-output-probe-v1-local.json
+```
+
+Treat `contractValid=true` for every probe as the minimum capability signal. A `finishReason=length`, invalid content JSON, or a missing contract field is a provider/model failure and must remain fail-closed. One local run is not enough to change the default model; repeat the probe and then rerun the same answer-quality and stress gates with the candidate model. Do not commit the JSON output when it contains environment-specific results.
+
+The latest local comparison is recorded in [reports/structured-output-probe-v1-local-2026-09-22.md](reports/structured-output-probe-v1-local-2026-09-22.md). It does not change the default model or retrieval path.
+
 The separate retrieval stress set is `datasets/retrieval_stress_v1.jsonl`. It has 8 cases for cross-document answers, similar terminology, a firmware version document, a multi-chunk operations document, out-of-scope refusal, and ACL-filtered refusal. The historical 8/8 run is recorded in [reports/retrieval-stress-v1-local-2026-09-18.md](reports/retrieval-stress-v1-local-2026-09-18.md); the current V10 diagnostics run, including the corrected LM Studio model IDs and the single cross-document generation miss, is recorded in [reports/retrieval-stress-v1-local-2026-09-20.md](reports/retrieval-stress-v1-local-2026-09-20.md).
 
 To validate or score it, pass its expected case count explicitly:
@@ -167,6 +235,32 @@ python3 evaluation/run_keyword_candidate_benchmark.py \
 
 The benchmark compares raw CJK character n-grams/ASCII terms with generic-question-word normalization. It reports document Recall@1/3/5, expected-source rank, ACL leakage, refusal candidates, candidate latency, and Top-K context interference. The current local result is recorded in [reports/keyword-candidates-v1-local-2026-09-21.md](reports/keyword-candidates-v1-local-2026-09-21.md). It is a candidate-stage signal only; it does not modify PostgreSQL, the online retrieval path, Top-K=5, or the Reranker decision.
 
+## Inspect vector candidates beyond production Top-K
+
+When a protected Top-K snapshot shows a suspected miss, use the evaluation-only vector diagnostic to inspect a larger ACL-filtered candidate pool. It reuses the employee fixture's tenant, knowledge-base, department, role, and document ACL predicates, calls only the local embedding endpoint, and returns metadata/similarity—not chunk content:
+
+```bash
+python3 evaluation/run_vector_candidate_diagnostic.py \
+  --manifest /private/tmp/rag-quality-fixture-support-20260922.json \
+  --case-id QUALITY-002 \
+  --candidate-k 50 \
+  --output /private/tmp/vector-candidate-quality-002-20260922.json
+```
+
+This diagnostic answers whether the expected document is ranked just beyond the production boundary. It must not be used to change `AskService`, Top-K, ACL predicates, or the default retrieval mode. The current Q002 result is recorded in [reports/vector-candidate-diagnostic-quality-002-2026-09-22.md](reports/vector-candidate-diagnostic-quality-002-2026-09-22.md).
+
+To compare a bounded document-diversity selector without calling a model:
+
+```bash
+python3 evaluation/run_vector_rerank_benchmark.py \
+  --dataset evaluation/datasets/retrieval_stress_v1.jsonl \
+  --diagnostic /private/tmp/vector-candidate-retrieval-stress-v1-20260922.json \
+  --context-k 5 \
+  --output /private/tmp/vector-rerank-retrieval-stress-v1-20260922.json
+```
+
+The benchmark compares current Vector order, diversity-first selection, and a one-chunk-per-document cap. It is candidate-level evidence only: it does not evaluate generated answer quality and must not enable a runtime reranker by itself.
+
 ## Run the matched-case fusion benchmark
 
 After a protected diagnostics capture and the keyword benchmark are available, compare document-level vector candidates with normalized keyword candidates and RRF variants:
@@ -217,6 +311,20 @@ python3 evaluation/run_api_eval.py \
   --retrieval-mode keyword-rrf \
   --output /private/tmp/rag-online-ab-keyword-rrf-api.jsonl
 ```
+
+For the bounded vector-diversity experiment, use the same command with
+`--retrieval-mode vector-diversity` and a separate output path. The mode uses
+the backend's ACL-filtered vector candidate pool and is still disabled by
+default; it must be scored as a separate candidate strategy, not merged into
+the keyword-RRF report.
+
+For the `answer-quality-v1` end-to-end gate, run both modes against the same
+12-case dataset and then use `run_eval.py` for each response file. Keep the
+response and protected-diagnostic captures outside the repository. The local
+2026-09-22 result is recorded in
+[reports/vector-diversity-answer-quality-ab-local-2026-09-22.md](reports/vector-diversity-answer-quality-ab-local-2026-09-22.md);
+the experiment remains gated because it did not improve the quality gate and
+reduced citation/answer-point coverage.
 
 Collect protected diagnostics separately for both response files, then run the paired scorer:
 

@@ -20,6 +20,12 @@ AskAnswer _$AskAnswerFromJson(Map<String, dynamic> json) => AskAnswer(
       .toList(),
   tokenUsage: (json['tokenUsage'] as num).toInt(),
   grounded: json['grounded'] as bool? ?? false,
+  requestId: json['requestId'] as String?,
+  latencyMs: (json['latencyMs'] as num?)?.toInt() ?? 0,
+  failureReason: json['failureReason'] as String?,
+  timings: json['timings'] == null
+      ? null
+      : AskTimings.fromJson(json['timings'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$AskAnswerToJson(AskAnswer instance) => <String, dynamic>{
@@ -28,6 +34,49 @@ Map<String, dynamic> _$AskAnswerToJson(AskAnswer instance) => <String, dynamic>{
   'grounded': instance.grounded,
   'sources': instance.sources,
   'tokenUsage': instance.tokenUsage,
+  'requestId': instance.requestId,
+  'latencyMs': instance.latencyMs,
+  'failureReason': instance.failureReason,
+  'timings': instance.timings,
+};
+
+AskTimings _$AskTimingsFromJson(Map<String, dynamic> json) => AskTimings(
+  embeddingMs: (json['embeddingMs'] as num).toInt(),
+  retrievalMs: (json['retrievalMs'] as num).toInt(),
+  generationMs: (json['generationMs'] as num).toInt(),
+);
+
+Map<String, dynamic> _$AskTimingsToJson(AskTimings instance) =>
+    <String, dynamic>{
+      'embeddingMs': instance.embeddingMs,
+      'retrievalMs': instance.retrievalMs,
+      'generationMs': instance.generationMs,
+    };
+
+AskFeedbackRequest _$AskFeedbackRequestFromJson(Map<String, dynamic> json) =>
+    AskFeedbackRequest(
+      rating: json['rating'] as String,
+      reason: json['reason'] as String?,
+    );
+
+Map<String, dynamic> _$AskFeedbackRequestToJson(AskFeedbackRequest instance) =>
+    <String, dynamic>{'rating': instance.rating, 'reason': instance.reason};
+
+AskFeedbackResponse _$AskFeedbackResponseFromJson(Map<String, dynamic> json) =>
+    AskFeedbackResponse(
+      requestId: json['requestId'] as String,
+      rating: json['rating'] as String,
+      reason: json['reason'] as String?,
+      updatedAt: json['updatedAt'] as String?,
+    );
+
+Map<String, dynamic> _$AskFeedbackResponseToJson(
+  AskFeedbackResponse instance,
+) => <String, dynamic>{
+  'requestId': instance.requestId,
+  'rating': instance.rating,
+  'reason': instance.reason,
+  'updatedAt': instance.updatedAt,
 };
 
 ChunkSource _$ChunkSourceFromJson(Map<String, dynamic> json) => ChunkSource(

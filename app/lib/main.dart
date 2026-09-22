@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
 import 'features/ask/ask_page.dart';
+import 'features/auth/auth_view_model.dart';
+import 'features/auth/login_page.dart';
 import 'features/documents/documents_page.dart';
 
 void main() {
@@ -18,8 +20,32 @@ class RagKnowledgeBaseApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'RAG 知识库',
       theme: AppTheme.light(),
-      home: const HomeShell(),
+      home: const AuthGate(),
     );
+  }
+}
+
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(authViewModelProvider);
+    return switch (state.status) {
+      AuthStatus.checking => const _SessionLoadingView(),
+      AuthStatus.authenticated => const HomeShell(),
+      AuthStatus.unauthenticated ||
+      AuthStatus.authenticating => const LoginPage(),
+    };
+  }
+}
+
+class _SessionLoadingView extends StatelessWidget {
+  const _SessionLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -38,10 +64,7 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: const [
-          AskPage(),
-          DocumentsPage(),
-        ],
+        children: const [AskPage(), DocumentsPage()],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

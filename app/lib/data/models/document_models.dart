@@ -22,6 +22,7 @@ class DocumentItem {
     required this.chunkCount,
     this.errorMsg,
     this.createdAt,
+    this.disabled = false,
   });
 
   final String documentId;
@@ -31,8 +32,10 @@ class DocumentItem {
   final int chunkCount;
   final String? errorMsg;
   final DateTime? createdAt;
+  final bool disabled;
 
   DocumentStatus get statusEnum => switch (status) {
+    _ when disabled => DocumentStatus.disabled,
     'ready' => DocumentStatus.ready,
     'failed' => DocumentStatus.failed,
     _ => DocumentStatus.processing,
@@ -42,7 +45,7 @@ class DocumentItem {
       _$DocumentItemFromJson(json);
 }
 
-enum DocumentStatus { processing, ready, failed }
+enum DocumentStatus { processing, ready, failed, disabled }
 
 @JsonSerializable()
 class DocumentUploadResponse {
@@ -66,4 +69,28 @@ class DeleteDocumentResponse {
 
   factory DeleteDocumentResponse.fromJson(Map<String, dynamic> json) =>
       _$DeleteDocumentResponseFromJson(json);
+}
+
+@JsonSerializable()
+class DocumentLifecycleResponse {
+  const DocumentLifecycleResponse({
+    required this.documentId,
+    required this.status,
+    required this.contentVersion,
+    required this.permissionVersion,
+    required this.disabled,
+    required this.deleted,
+    this.taskId,
+  });
+
+  final String documentId;
+  final String status;
+  final int contentVersion;
+  final int permissionVersion;
+  final bool disabled;
+  final bool deleted;
+  final String? taskId;
+
+  factory DocumentLifecycleResponse.fromJson(Map<String, dynamic> json) =>
+      _$DocumentLifecycleResponseFromJson(json);
 }

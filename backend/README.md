@@ -71,6 +71,8 @@ All secrets and runtime choices are environment variables.
 | `AI_COMPLEX_MAX_TOKENS` | `3200` | Experimental budget for explicit multi-part questions |
 | `AI_COMPLEX_ROUTING_ENABLED` | `false` | Enable deterministic complex-question budget routing; keep off until a quality/latency gate passes |
 | `AI_TIMEOUT_SECONDS` | `120` | Local model can be slow |
+| `AI_MAX_RETRIES` | `2` | Provider/network retry count |
+| `AI_STRUCTURED_OUTPUT_RETRIES` | `1` | Bounded retry after invalid model JSON; still fails closed when exhausted |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
 | `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text-v1.5` | Default local embedding model; must return 768 dimensions |
@@ -115,7 +117,7 @@ The configured model IDs must match the returned `id` values exactly. For the cu
 ./mvnw test
 ```
 
-The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers 1.21.4 with `pgvector/pgvector:pg16`. With Docker Desktop 4.91.0, local `./mvnw test` executed all 98 tests, including 13 PostgreSQL/pgvector integration tests, with 0 skipped. In environments where Docker is unavailable to Testcontainers, those integration tests remain skipped, so CI output must still be checked before treating PostgreSQL coverage as proven.
+The regular unit and Spring context tests run against H2. PostgreSQL-specific migration and ACL coverage lives in `PostgresEnterpriseIntegrationTests`, which uses Testcontainers 1.21.4 with `pgvector/pgvector:pg16`. With Docker Desktop 4.91.0, local `./mvnw test` executed all 100 tests, including 13 PostgreSQL/pgvector integration tests, with 0 skipped. In environments where Docker is unavailable to Testcontainers, those integration tests remain skipped, so CI output must still be checked before treating PostgreSQL coverage as proven.
 
 ## Cloud Provider Examples
 
@@ -164,6 +166,7 @@ Main endpoints:
 - `PUT /api/ask/{requestId}/feedback`
 - `GET /api/agent/tools`
 - `POST /api/agent/tools/execute`
+- `POST /mcp`
 - `GET /api/admin/roles`
 - `GET /api/admin/users`
 - `POST /api/admin/users`
@@ -184,19 +187,25 @@ Main endpoints:
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks`
 
 For the local, explicitly enabled retrieval experiment only, send
-`X-RAG-Retrieval-Mode: keyword-rrf`. The header is rejected while
+`X-RAG-Retrieval-Mode: keyword-rrf` or `X-RAG-Retrieval-Mode: vector-diversity`.
+The headers are rejected while
 `RAG_HYBRID_EXPERIMENT_ENABLED=false`; omitting it always uses `VECTOR`.
-The experiment reuses server-side tenant/knowledge-base/document ACLs and
-records `retrievalMode` in protected diagnostics. It reads a bounded set of
-ACL-visible chunks in memory and is not a production full-text index.
+Both experiments reuse server-side tenant/knowledge-base/document ACLs and
+record `retrievalMode` in protected diagnostics. `keyword-rrf` reads a bounded
+set of ACL-visible chunks in memory; `vector-diversity` retrieves a bounded
+vector candidate pool and selects at most one Chunk per document before filling
+the configured context size. Neither mode is a production default or a
+production full-text/reranker implementation.
 - `GET /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}`
 - `POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}/retry`
 
 `POST /api/ask` returns `found=false` and `sources=[]` for low-similarity or model/retrieval failure. Low-similarity questions do not call the LLM. Every HTTP response includes `X-Request-Id`; a valid caller-supplied UUID is preserved and an invalid value is replaced.
 
-The answer body includes `requestId`, `found`, backend-validated `grounded`, ACL-derived `sources`, total `latencyMs`, `tokenUsage`, a nullable typed `failureReason`, and `timings` for `embeddingMs`, `retrievalMs`, and `generationMs`. The model must return only `answer`, `found`, `grounded`, and `sourceIndexes`; the OpenAI-compatible provider sends the same contract as a strict `response_format=json_schema` request, while the backend validates it again and maps source indexes to retrieved ACL-filtered metadata. Invalid JSON, missing grounding, or invalid citations fail closed to a stable handoff response. Stable failure reasons are `RETRIEVAL_MISS`, `INSUFFICIENT_CONTEXT`, `EMBEDDING_TIMEOUT`, `EMBEDDING_ERROR`, `RETRIEVAL_ERROR`, `GENERATION_TIMEOUT`, `GENERATION_ERROR`, `STRUCTURED_OUTPUT_INVALID`, and `CITATION_MISSING`. Flyway V6/V7 stores the same correlation and timing fields with provider, model, and retrieval configuration in `ask_log`; raw exception messages, prompts, and document text are not stored there.
+The answer body includes `requestId`, `found`, backend-validated `grounded`, ACL-derived `sources`, total `latencyMs`, `tokenUsage`, a nullable typed `failureReason`, and `timings` for `embeddingMs`, `retrievalMs`, and `generationMs`. The model must return only `answer`, `found`, `grounded`, and `sourceIndexes`; the OpenAI-compatible provider sends the same contract as a strict `response_format=json_schema` request, while the backend validates it again and maps source indexes to retrieved ACL-filtered metadata. Invalid JSON, missing grounding, invalid citations, or a `found=true` answer that explicitly admits source facts are missing fail closed to a stable handoff response. Stable failure reasons are `RETRIEVAL_MISS`, `INSUFFICIENT_CONTEXT`, `EMBEDDING_TIMEOUT`, `EMBEDDING_ERROR`, `RETRIEVAL_ERROR`, `GENERATION_TIMEOUT`, `GENERATION_ERROR`, `STRUCTURED_OUTPUT_INVALID`, and `CITATION_MISSING`. Flyway V6/V7 stores the same correlation and timing fields with provider, model, and retrieval configuration in `ask_log`; raw exception messages, prompts, and document text are not stored there.
 
-The read-only Agent Tool boundary exposes exactly three tools through `POST /api/agent/tools/execute`: `search_knowledge`, `list_documents`, and `get_document_status`. Calls inherit the authenticated user and tenant; `tenantId`, `userId`, arbitrary SQL, write operations, and raw file content are not accepted. Tool arguments use closed schemas, results are capped by the existing Top-K, a batch is limited to three calls, and every allow/deny/error outcome is written to the existing audit event table. Empty search/list results are successful no-result responses; unknown tools, invalid arguments, permission failures, provider errors, and timeouts return stable per-call failure reasons. This is the application-owned boundary for a future MCP adapter; no write tool is enabled.
+The read-only Agent Tool boundary exposes exactly three tools through `POST /api/agent/tools/execute`: `search_knowledge`, `list_documents`, and `get_document_status`. Calls inherit the authenticated user and tenant; `tenantId`, `userId`, arbitrary SQL, write operations, and raw file content are not accepted. Tool arguments use closed schemas, results are capped by the existing Top-K, a batch is limited to three calls, and every allow/deny/error outcome is written to the existing audit event table. Empty search/list results are successful no-result responses; unknown tools, invalid arguments, permission failures, provider errors, and timeouts return stable per-call failure reasons.
+
+The minimal MCP adapter is a stateless JSON-RPC surface targeting MCP `2026-07-28`: authenticated `POST /mcp` accepts `server/discover`, `tools/list`, and `tools/call`, requires `MCP-Protocol-Version` and `Mcp-Method` headers, and requires `Mcp-Name` for tool calls. `tools/list` returns only the same three registered read-only tools with private/no-cache hints; `tools/call` delegates to `AgentToolService`, so tenant/user context, closed argument schemas, ACL checks, call budget, and audit behavior are not duplicated or bypassed. This is a bounded adapter, not a full MCP server: sessions, model-driven loops, Tasks, Resources, Prompts, OAuth metadata, notifications, and all write tools remain disabled. See the [official MCP 2026-07-28 release notes](https://blog.modelcontextprotocol.io/posts/2026-07-28/) for the protocol revision targeted here.
 
 `PUT /api/ask/{requestId}/feedback` accepts `{"rating":"HELPFUL|NOT_HELPFUL","reason":"optional"}`. Only the authenticated user who created that ask record in the same tenant can submit feedback; missing, cross-user, and cross-tenant request IDs all return `404`. Repeating the request updates the single feedback row for that answer. `reason` is optional, limited to 500 characters, normalized for whitespace/control characters, and never written to application logs.
 

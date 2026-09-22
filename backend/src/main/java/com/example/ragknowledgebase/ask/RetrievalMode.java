@@ -5,6 +5,7 @@ import java.util.Locale;
 
 public enum RetrievalMode {
     VECTOR,
+    VECTOR_DIVERSITY,
     KEYWORD_RRF;
 
     public static RetrievalMode fromHeader(String value) {
@@ -14,6 +15,8 @@ public enum RetrievalMode {
         try {
             return value.trim().toUpperCase(Locale.ROOT).equals("KEYWORD-RRF")
                 ? KEYWORD_RRF
+                : value.trim().toUpperCase(Locale.ROOT).equals("VECTOR-DIVERSITY")
+                    ? VECTOR_DIVERSITY
                 : value.trim().toUpperCase(Locale.ROOT).equals("VECTOR")
                     ? VECTOR
                     : throwUnsupported();

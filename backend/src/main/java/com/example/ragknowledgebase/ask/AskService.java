@@ -26,6 +26,14 @@ public class AskService {
     private static final String TEMPORARY_UNAVAILABLE = "暂时无法检索资料，建议转人工。";
     private static final String STRUCTURED_OUTPUT_FALLBACK = "暂时无法生成可验证的回答，建议转人工。";
     private static final String CITATION_FALLBACK = "回答缺少可验证引用，建议转人工。";
+    private static final List<String> INCOMPLETE_ANSWER_MARKERS = List.of(
+        "资料中未提及",
+        "资料未提及",
+        "资料中没有说明",
+        "无法确认",
+        "无法判断",
+        "无法确定"
+    );
 
     private final AppProperties properties;
     private final EmbeddingProvider embeddingProvider;
@@ -36,6 +44,7 @@ public class AskService {
     private final OperationalMetrics operationalMetrics;
     private final QuestionComplexityClassifier questionComplexityClassifier;
     private final KeywordRrfRetriever keywordRrfRetriever;
+    private final DocumentDiversityRetriever documentDiversityRetriever;
 
     public AskService(
         AppProperties properties,
@@ -55,6 +64,7 @@ public class AskService {
         this.operationalMetrics = operationalMetrics;
         this.questionComplexityClassifier = new QuestionComplexityClassifier();
         this.keywordRrfRetriever = new KeywordRrfRetriever();
+        this.documentDiversityRetriever = new DocumentDiversityRetriever();
     }
 
     @Transactional
@@ -64,7 +74,8 @@ public class AskService {
 
     @Transactional
     public AskResponse ask(AuthenticatedUser user, AskRequest request, RetrievalMode retrievalMode) {
-        if (retrievalMode == RetrievalMode.KEYWORD_RRF && !properties.rag().hybridExperimentEnabled()) {
+        if ((retrievalMode == RetrievalMode.KEYWORD_RRF || retrievalMode == RetrievalMode.VECTOR_DIVERSITY)
+            && !properties.rag().hybridExperimentEnabled()) {
             throw new BusinessException(400, "检索实验未启用");
         }
         String question = request.question().trim();
@@ -88,16 +99,20 @@ public class AskService {
 
             stage = Stage.RETRIEVAL;
             stageStarted = System.nanoTime();
+            int vectorCandidateK = retrievalMode == RetrievalMode.VECTOR_DIVERSITY
+                ? Math.max(properties.rag().topK(), properties.rag().hybridCandidateK())
+                : properties.rag().topK();
             List<ChunkSearchResult> vectorHits = chunkRepository.search(
                 user.tenantId(),
                 user.userId(),
                 questionEmbeddings.get(0),
-                properties.rag().topK()
+                vectorCandidateK
             );
             int hybridCandidateK = Math.max(properties.rag().topK(), properties.rag().hybridCandidateK());
-            List<ChunkSearchResult> hits = retrievalMode == RetrievalMode.VECTOR
-                ? vectorHits
-                : keywordRrfRetriever.retrieve(
+            List<ChunkSearchResult> hits = switch (retrievalMode) {
+                case VECTOR -> vectorHits;
+                case VECTOR_DIVERSITY -> documentDiversityRetriever.select(vectorHits, properties.rag().topK());
+                case KEYWORD_RRF -> keywordRrfRetriever.retrieve(
                     question,
                     vectorHits,
                     chunkRepository.findVisibleReadyChunks(user.tenantId(), user.userId(), hybridCandidateK),
@@ -106,10 +121,11 @@ public class AskService {
                     properties.rag().hybridKeywordWeight(),
                     properties.rag().hybridRrfK()
                 );
+            };
             retrievalHits = hits;
             retrievalMs = elapsedMs(stageStarted);
             boolean retrievalMiss = hits.isEmpty()
-                || (retrievalMode == RetrievalMode.VECTOR
+                || (retrievalMode != RetrievalMode.KEYWORD_RRF
                     && hits.get(0).similarity() < properties.rag().similarityThreshold());
             if (retrievalMiss) {
                 response = response(
@@ -132,25 +148,37 @@ public class AskService {
                 stageStarted = System.nanoTime();
                 AiProviderResponse providerResponse = generate(prompt, question);
                 generationMs = elapsedMs(stageStarted);
+                int tokenUsage = providerResponse.tokenUsage();
                 StructuredAnswer structuredAnswer;
                 try {
                     structuredAnswer = new StructuredOutputParser().parse(providerResponse.text());
                 } catch (StructuredOutputException ex) {
-                    response = response(
-                        requestId,
-                        totalStarted,
-                        STRUCTURED_OUTPUT_FALLBACK,
-                        false,
-                        false,
-                        List.of(),
-                        providerResponse.tokenUsage(),
-                        AskFailureReason.STRUCTURED_OUTPUT_INVALID,
-                        embeddingMs,
-                        retrievalMs,
+                    StructuredOutputRetryResult retryResult = retryStructuredOutput(
+                        prompt,
+                        question,
+                        providerResponse,
                         generationMs
                     );
-                    resultStatus = AskResultStatus.FAILED;
-                    return record(user, question, response, resultStatus, retrievalHits, retrievalMode);
+                    generationMs = retryResult.generationMs();
+                    tokenUsage = retryResult.tokenUsage();
+                    structuredAnswer = retryResult.answer();
+                    if (structuredAnswer == null) {
+                        response = response(
+                            requestId,
+                            totalStarted,
+                            STRUCTURED_OUTPUT_FALLBACK,
+                            false,
+                            false,
+                            List.of(),
+                            tokenUsage,
+                            AskFailureReason.STRUCTURED_OUTPUT_INVALID,
+                            embeddingMs,
+                            retrievalMs,
+                            generationMs
+                        );
+                        resultStatus = AskResultStatus.FAILED;
+                        return record(user, question, response, resultStatus, retrievalHits, retrievalMode);
+                    }
                 }
                 if (!structuredAnswer.found()) {
                     response = response(
@@ -160,7 +188,7 @@ public class AskService {
                         false,
                         false,
                         List.of(),
-                        providerResponse.tokenUsage(),
+                        tokenUsage,
                         AskFailureReason.INSUFFICIENT_CONTEXT,
                         embeddingMs,
                         retrievalMs,
@@ -175,7 +203,7 @@ public class AskService {
                         false,
                         false,
                         List.of(),
-                        providerResponse.tokenUsage(),
+                        tokenUsage,
                         AskFailureReason.INSUFFICIENT_CONTEXT,
                         embeddingMs,
                         retrievalMs,
@@ -190,7 +218,7 @@ public class AskService {
                         false,
                         false,
                         List.of(),
-                        providerResponse.tokenUsage(),
+                        tokenUsage,
                         AskFailureReason.CITATION_MISSING,
                         embeddingMs,
                         retrievalMs,
@@ -205,7 +233,7 @@ public class AskService {
                         true,
                         structuredAnswer.grounded(),
                         sourcesOf(hits, structuredAnswer.sourceIndexes()),
-                        providerResponse.tokenUsage(),
+                        tokenUsage,
                         null,
                         embeddingMs,
                         retrievalMs,
@@ -262,6 +290,33 @@ public class AskService {
             properties.ai().complexMaxTokens()
         );
         return aiProvider.generate(prompt, complexMaxTokens);
+    }
+
+    private StructuredOutputRetryResult retryStructuredOutput(
+        String prompt,
+        String question,
+        AiProviderResponse firstResponse,
+        long initialGenerationMs
+    ) {
+        int tokenUsage = firstResponse.tokenUsage();
+        long generationMs = initialGenerationMs;
+        int retries = Math.max(0, properties.ai().structuredOutputRetries());
+        StructuredOutputParser parser = new StructuredOutputParser();
+        for (int retry = 0; retry < retries; retry++) {
+            long retryStarted = System.nanoTime();
+            AiProviderResponse retryResponse = generate(
+                prompt + "\n\n上一次输出未通过 JSON 校验。请重新输出同一个问题的答案，必须只包含一个严格 JSON 对象，字段只能是 answer、found、grounded、sourceIndexes；不要输出 Markdown、解释或代码围栏。回答必须覆盖用户问题中的每个子问题。",
+                question
+            );
+            tokenUsage += retryResponse.tokenUsage();
+            generationMs += elapsedMs(retryStarted);
+            try {
+                return new StructuredOutputRetryResult(parser.parse(retryResponse.text()), tokenUsage, generationMs);
+            } catch (StructuredOutputException ignored) {
+                // Keep the bounded retry fail-closed; the caller returns a stable fallback.
+            }
+        }
+        return new StructuredOutputRetryResult(null, tokenUsage, generationMs);
     }
 
     private void enforceDailyLimit(UUID userId) {
@@ -364,6 +419,7 @@ public class AskService {
         builder.append("【用户问题】\n")
             .append(question)
             .append("\n\n请用中文简洁回答，并在末尾不要重复来源（来源由系统单独展示）。")
+            .append("如果问题同时询问‘是否/能否/吗’、‘多久/多少’、‘由谁’等多个条件，answer 必须使用 1.、2.、3. 编号逐项回答；每个编号只负责一个条件，不能只给出其中一个结论。")
             .append("\n\n必须只输出一个 JSON 对象，不要输出 Markdown、解释文字或代码围栏。JSON 字段必须是：")
             .append("answer（字符串）、found（布尔值）、grounded（布尔值）、sourceIndexes（正整数数组）。")
             .append("sourceIndexes 只能引用上面资料片段的编号；found=false 时 answer 必须为未找到相关信息，grounded=false 且 sourceIndexes=[]。")
@@ -383,7 +439,8 @@ public class AskService {
             && !normalized.equals(HANDOFF)
             && !normalized.equals(TEMPORARY_UNAVAILABLE)
             && !normalized.equals(STRUCTURED_OUTPUT_FALLBACK)
-            && !normalized.equals(CITATION_FALLBACK);
+            && !normalized.equals(CITATION_FALLBACK)
+            && INCOMPLETE_ANSWER_MARKERS.stream().noneMatch(normalized::contains);
     }
 
     private List<AskSourceResponse> sourcesOf(List<ChunkSearchResult> hits, List<Integer> indexes) {
@@ -414,5 +471,12 @@ public class AskService {
         EMBEDDING,
         RETRIEVAL,
         GENERATION
+    }
+
+    private record StructuredOutputRetryResult(
+        StructuredAnswer answer,
+        int tokenUsage,
+        long generationMs
+    ) {
     }
 }

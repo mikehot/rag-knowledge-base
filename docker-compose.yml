@@ -52,6 +52,7 @@ services:
       AI_ESTIMATED_COST_PER_1K_TOKENS: 0
       AI_TIMEOUT_SECONDS: 120
       AI_MAX_RETRIES: 2
+      AI_STRUCTURED_OUTPUT_RETRIES: 1
       AI_DAILY_LIMIT: 50
       AI_EMBEDDING_PROVIDER: openai-compatible
       AI_EMBEDDING_BASE_URL: http://host.docker.internal:1234/v1

@@ -185,6 +185,72 @@ class _KnowledgeApiClient implements KnowledgeApiClient {
   }
 
   @override
+  Future<ApiEnvelope<DocumentLifecycleResponse>> disableDocument(
+    String id,
+  ) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    const Map<String, dynamic>? _data = null;
+    final _options = _setStreamType<ApiEnvelope<DocumentLifecycleResponse>>(
+      Options(method: 'POST', headers: _headers, extra: _extra)
+          .compose(
+            _dio.options,
+            '/api/documents/${id}/disable',
+            queryParameters: queryParameters,
+            data: _data,
+          )
+          .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
+    );
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    late ApiEnvelope<DocumentLifecycleResponse> _value;
+    try {
+      _value = ApiEnvelope<DocumentLifecycleResponse>.fromJson(
+        _result.data!,
+        (json) =>
+            DocumentLifecycleResponse.fromJson(json as Map<String, dynamic>),
+      );
+    } on Object catch (e, s) {
+      errorLogger?.logError(e, s, _options, response: _result);
+      rethrow;
+    }
+    return _value;
+  }
+
+  @override
+  Future<ApiEnvelope<DocumentLifecycleResponse>> reindexDocument(
+    String id,
+  ) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    const Map<String, dynamic>? _data = null;
+    final _options = _setStreamType<ApiEnvelope<DocumentLifecycleResponse>>(
+      Options(method: 'POST', headers: _headers, extra: _extra)
+          .compose(
+            _dio.options,
+            '/api/documents/${id}/reindex',
+            queryParameters: queryParameters,
+            data: _data,
+          )
+          .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
+    );
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    late ApiEnvelope<DocumentLifecycleResponse> _value;
+    try {
+      _value = ApiEnvelope<DocumentLifecycleResponse>.fromJson(
+        _result.data!,
+        (json) =>
+            DocumentLifecycleResponse.fromJson(json as Map<String, dynamic>),
+      );
+    } on Object catch (e, s) {
+      errorLogger?.logError(e, s, _options, response: _result);
+      rethrow;
+    }
+    return _value;
+  }
+
+  @override
   Future<ApiEnvelope<AskAnswer>> ask(AskRequest request) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
@@ -207,6 +273,40 @@ class _KnowledgeApiClient implements KnowledgeApiClient {
       _value = ApiEnvelope<AskAnswer>.fromJson(
         _result.data!,
         (json) => AskAnswer.fromJson(json as Map<String, dynamic>),
+      );
+    } on Object catch (e, s) {
+      errorLogger?.logError(e, s, _options, response: _result);
+      rethrow;
+    }
+    return _value;
+  }
+
+  @override
+  Future<ApiEnvelope<AskFeedbackResponse>> submitFeedback(
+    String requestId,
+    AskFeedbackRequest request,
+  ) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    final _data = <String, dynamic>{};
+    _data.addAll(request.toJson());
+    final _options = _setStreamType<ApiEnvelope<AskFeedbackResponse>>(
+      Options(method: 'PUT', headers: _headers, extra: _extra)
+          .compose(
+            _dio.options,
+            '/api/ask/${requestId}/feedback',
+            queryParameters: queryParameters,
+            data: _data,
+          )
+          .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
+    );
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    late ApiEnvelope<AskFeedbackResponse> _value;
+    try {
+      _value = ApiEnvelope<AskFeedbackResponse>.fromJson(
+        _result.data!,
+        (json) => AskFeedbackResponse.fromJson(json as Map<String, dynamic>),
       );
     } on Object catch (e, s) {
       errorLogger?.logError(e, s, _options, response: _result);

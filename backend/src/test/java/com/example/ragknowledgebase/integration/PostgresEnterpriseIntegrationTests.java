@@ -196,7 +196,7 @@ class PostgresEnterpriseIntegrationTests {
             String.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(11);
+        assertThat(successfulMigrations).isEqualTo(12);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
@@ -209,6 +209,33 @@ class PostgresEnterpriseIntegrationTests {
         );
         assertThat(appUserCreatedAtDefault).containsIgnoringCase("now()");
         assertThat(retrievalDiagnosticsTableCount).isEqualTo(1);
+    }
+
+    @Test
+    void retrievalModeConstraintAcceptsGatedVectorDiversityMode() {
+        insertUser(READER_ID, "retrieval-mode-it");
+        jdbcTemplate.update(
+            """
+                INSERT INTO ask_log (
+                    id, user_id, tenant_id, request_id, question, found, token_usage,
+                    result_status, latency_ms, embedding_latency_ms, retrieval_latency_ms,
+                    generation_latency_ms, retrieval_mode, top_k, similarity_threshold, created_at
+                ) VALUES (?, ?, ?, ?, ?, false, 0, 'NOT_FOUND', 0, 0, 0, 0,
+                    'VECTOR_DIVERSITY', 5, 0.35, now())
+                """,
+            ASK_LOG_ID,
+            READER_ID,
+            TENANT_ID,
+            ASK_REQUEST_ID,
+            "检索模式迁移测试"
+        );
+
+        String retrievalMode = jdbcTemplate.queryForObject(
+            "SELECT retrieval_mode FROM ask_log WHERE id = ?",
+            String.class,
+            ASK_LOG_ID
+        );
+        assertThat(retrievalMode).isEqualTo("VECTOR_DIVERSITY");
     }
 
     @Test

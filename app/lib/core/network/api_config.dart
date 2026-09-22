@@ -8,9 +8,4 @@ class ApiConfig {
     'APP_USERNAME',
     defaultValue: 'demo',
   );
-
-  static const password = String.fromEnvironment(
-    'APP_PASSWORD',
-    defaultValue: 'demo123456',
-  );
 }

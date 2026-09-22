@@ -34,3 +34,37 @@ jobs:
 
       - name: Validate Docker Compose
         run: docker compose config --quiet
+
+  flutter-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.2'
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Regenerate API and model code
+        run: dart run build_runner build
+
+      - name: Check generated code is committed
+        run: git diff --exit-code -- lib/data/api/knowledge_api_client.g.dart lib/data/models/ask_models.g.dart lib/data/models/document_models.g.dart
+
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed lib test/ask_models_test.dart test/document_models_test.dart test/session_store_test.dart
+
+      - name: Analyze Flutter app
+        run: flutter analyze --no-pub
+
+      - name: Run Flutter tests
+        run: flutter test --no-pub --concurrency=1

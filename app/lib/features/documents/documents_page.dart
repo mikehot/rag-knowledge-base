@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/widgets/state_views.dart';
 import '../../data/models/document_models.dart';
+import '../auth/auth_view_model.dart';
 import 'documents_view_model.dart';
 
 class DocumentsPage extends ConsumerStatefulWidget {
@@ -17,7 +18,9 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(documentsViewModelProvider.notifier).load());
+    Future.microtask(
+      () => ref.read(documentsViewModelProvider.notifier).load(),
+    );
   }
 
   @override
@@ -42,6 +45,11 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
                 : const Icon(Icons.upload_file),
             label: const Text('上传文档'),
           ),
+          IconButton(
+            onPressed: () => ref.read(authViewModelProvider.notifier).logout(),
+            icon: const Icon(Icons.logout),
+            tooltip: '退出登录',
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -61,9 +69,8 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
             return EmptyActionView(
               message: '还没有文档，点右上角上传',
               actionLabel: '上传文档',
-              onAction: () => ref
-                  .read(documentsViewModelProvider.notifier)
-                  .pickAndUpload(),
+              onAction: () =>
+                  ref.read(documentsViewModelProvider.notifier).pickAndUpload(),
             );
           }
           return RefreshIndicator(
@@ -73,9 +80,15 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
               padding: const EdgeInsets.all(16),
               itemBuilder: (context, index) => _DocumentCard(
                 item: state.items[index],
+                busy:
+                    state.operatingDocumentId == state.items[index].documentId,
                 onDelete: () => ref
                     .read(documentsViewModelProvider.notifier)
                     .delete(state.items[index].documentId),
+                onDisable: () => _confirmDisable(state.items[index]),
+                onReindex: () => ref
+                    .read(documentsViewModelProvider.notifier)
+                    .reindex(state.items[index].documentId),
               ),
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemCount: state.items.length,
@@ -85,13 +98,47 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
       ),
     );
   }
+
+  Future<void> _confirmDisable(DocumentItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('停用文档？'),
+        content: Text('停用后“${item.filename}”不会继续参与检索。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('停用'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await ref
+          .read(documentsViewModelProvider.notifier)
+          .disable(item.documentId);
+    }
+  }
 }
 
 class _DocumentCard extends StatelessWidget {
-  const _DocumentCard({required this.item, required this.onDelete});
+  const _DocumentCard({
+    required this.item,
+    required this.busy,
+    required this.onDelete,
+    required this.onDisable,
+    required this.onReindex,
+  });
 
   final DocumentItem item;
+  final bool busy;
   final VoidCallback onDelete;
+  final VoidCallback onDisable;
+  final VoidCallback onReindex;
 
   @override
   Widget build(BuildContext context) {
@@ -136,11 +183,45 @@ class _DocumentCard extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             _StatusPill(status: item.statusEnum),
-            IconButton(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-              tooltip: '删除',
-            ),
+            if (busy)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              PopupMenuButton<_DocumentAction>(
+                onSelected: (action) {
+                  switch (action) {
+                    case _DocumentAction.disable:
+                      onDisable();
+                    case _DocumentAction.reindex:
+                      onReindex();
+                    case _DocumentAction.delete:
+                      onDelete();
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (item.statusEnum == DocumentStatus.ready)
+                    const PopupMenuItem(
+                      value: _DocumentAction.disable,
+                      child: Text('停用文档'),
+                    ),
+                  if (item.statusEnum == DocumentStatus.ready ||
+                      item.statusEnum == DocumentStatus.failed)
+                    const PopupMenuItem(
+                      value: _DocumentAction.reindex,
+                      child: Text('重建索引'),
+                    ),
+                  const PopupMenuItem(
+                    value: _DocumentAction.delete,
+                    child: Text('删除文档'),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -151,6 +232,7 @@ class _DocumentCard extends StatelessWidget {
     DocumentStatus.ready => '就绪',
     DocumentStatus.failed => '失败',
     DocumentStatus.processing => '入库中',
+    DocumentStatus.disabled => '已停用',
   };
 
   String _dateSuffix(DateTime? date) {
@@ -197,6 +279,7 @@ class _StatusPill extends StatelessWidget {
       DocumentStatus.ready => ('就绪', const Color(0xff16a34a)),
       DocumentStatus.failed => ('失败', const Color(0xffdc2626)),
       DocumentStatus.processing => ('入库中', const Color(0xfff59e0b)),
+      DocumentStatus.disabled => ('已停用', const Color(0xff64748b)),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
@@ -215,3 +298,5 @@ class _StatusPill extends StatelessWidget {
     );
   }
 }
+
+enum _DocumentAction { disable, reindex, delete }

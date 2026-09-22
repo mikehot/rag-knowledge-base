@@ -57,6 +57,7 @@ public record AppProperties(
         boolean complexRoutingEnabled,
         long timeoutSeconds,
         int maxRetries,
+        int structuredOutputRetries,
         int dailyLimit
     ) {
     }

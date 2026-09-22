@@ -19,6 +19,10 @@ class AskAnswer {
     required this.sources,
     required this.tokenUsage,
     this.grounded = false,
+    this.requestId,
+    this.latencyMs = 0,
+    this.failureReason,
+    this.timings,
   });
 
   final String answer;
@@ -26,9 +30,57 @@ class AskAnswer {
   final bool grounded;
   final List<ChunkSource> sources;
   final int tokenUsage;
+  final String? requestId;
+  final int latencyMs;
+  final String? failureReason;
+  final AskTimings? timings;
 
   factory AskAnswer.fromJson(Map<String, dynamic> json) =>
       _$AskAnswerFromJson(json);
+}
+
+@JsonSerializable()
+class AskTimings {
+  const AskTimings({
+    required this.embeddingMs,
+    required this.retrievalMs,
+    required this.generationMs,
+  });
+
+  final int embeddingMs;
+  final int retrievalMs;
+  final int generationMs;
+
+  factory AskTimings.fromJson(Map<String, dynamic> json) =>
+      _$AskTimingsFromJson(json);
+}
+
+@JsonSerializable()
+class AskFeedbackRequest {
+  const AskFeedbackRequest({required this.rating, this.reason});
+
+  final String rating;
+  final String? reason;
+
+  Map<String, dynamic> toJson() => _$AskFeedbackRequestToJson(this);
+}
+
+@JsonSerializable()
+class AskFeedbackResponse {
+  const AskFeedbackResponse({
+    required this.requestId,
+    required this.rating,
+    this.reason,
+    this.updatedAt,
+  });
+
+  final String requestId;
+  final String rating;
+  final String? reason;
+  final String? updatedAt;
+
+  factory AskFeedbackResponse.fromJson(Map<String, dynamic> json) =>
+      _$AskFeedbackResponseFromJson(json);
 }
 
 @JsonSerializable()

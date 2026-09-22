@@ -2,20 +2,53 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
-import '../../core/network/api_config.dart';
 import '../../core/network/api_exception.dart';
 import '../api/knowledge_api_client.dart';
+import '../auth/session_store.dart';
 import '../models/api_envelope.dart';
 import '../models/ask_models.dart';
 import '../models/auth_models.dart';
 import '../models/document_models.dart';
 
 class KnowledgeRepository {
-  KnowledgeRepository(this._dio, this._api);
+  KnowledgeRepository(this._dio, this._api, this._sessionStore);
 
   final Dio _dio;
   final KnowledgeApiClient _api;
+  final SessionStore _sessionStore;
   String? _token;
+
+  Future<void> login(String username, String password) async {
+    try {
+      final response = await _api.login(
+        LoginRequest(username: username, password: password),
+      );
+      final login = _unwrap(response);
+      if (login.token.trim().isEmpty) {
+        throw const ApiException('登录成功但服务器未返回会话凭证');
+      }
+      await _saveToken(login.token);
+    } on ApiException {
+      rethrow;
+    } on DioException catch (error) {
+      throw ApiException(_messageFromDio(error));
+    }
+  }
+
+  Future<bool> restoreSession() async {
+    final token = await _sessionStore.readToken();
+    if (token == null || token.trim().isEmpty) {
+      return false;
+    }
+    _setToken(token);
+    return true;
+  }
+
+  Future<void> logout() async {
+    _token = null;
+    _dio.options.headers.remove('Authorization');
+    await _sessionStore.clearToken();
+  }
 
   Future<DocumentListResponse> listDocuments() async {
     return _request(() async {
@@ -45,6 +78,20 @@ class KnowledgeRepository {
     });
   }
 
+  Future<DocumentLifecycleResponse> disableDocument(String documentId) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(await _api.disableDocument(documentId));
+    });
+  }
+
+  Future<DocumentLifecycleResponse> reindexDocument(String documentId) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(await _api.reindexDocument(documentId));
+    });
+  }
+
   Future<AskAnswer> ask(String question) async {
     return _request(() async {
       await _ensureLogin();
@@ -52,23 +99,40 @@ class KnowledgeRepository {
     });
   }
 
+  Future<AskFeedbackResponse> submitFeedback(
+    String requestId,
+    String rating, {
+    String? reason,
+  }) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(
+        await _api.submitFeedback(
+          requestId,
+          AskFeedbackRequest(rating: rating, reason: reason),
+        ),
+      );
+    });
+  }
+
   Future<void> _ensureLogin() async {
     if (_token != null) {
       return;
     }
-    try {
-      final response = await _api.login(
-        const LoginRequest(
-          username: ApiConfig.username,
-          password: ApiConfig.password,
-        ),
-      );
-      final login = _unwrap(response);
-      _token = login.token;
-      _dio.options.headers['Authorization'] = 'Bearer ${login.token}';
-    } on DioException catch (error) {
-      throw ApiException(_messageFromDio(error));
+    if (await restoreSession()) {
+      return;
     }
+    throw const ApiException('请先登录');
+  }
+
+  Future<void> _saveToken(String token) async {
+    await _sessionStore.saveToken(token);
+    _setToken(token);
+  }
+
+  void _setToken(String token) {
+    _token = token;
+    _dio.options.headers['Authorization'] = 'Bearer $token';
   }
 
   T _unwrap<T>(ApiEnvelope<T> response) {

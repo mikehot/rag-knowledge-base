@@ -15,12 +15,12 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | 已提交基线包含 Flyway V1-V12；本地 V13 仅为默认关闭的检索实验审计值。ACL API、可回滚替换和持久化索引任务有 PostgreSQL 集成证据；Flutter ACL 列表/授权/撤权及任务状态/失败原因/安全重试 UI 已在本地接入，静态检查和模型测试通过，尚需设备/API 验收撤权后检索与引用即时失效 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | 已提交基线包含 Flyway V1-V12；V13 为默认关闭的检索实验审计值。Flutter ACL/索引任务 UI 已接入并通过静态/模型测试；2026-09-23 新 disposable API 实测证明授权后可检索/引用、撤权后搜索和列表均不再返回文档，leakage=0；失败任务从 attempt 3 安全重试并于 attempt 4 成功。Flutter 管理界面真机验收仍受 Android 安装限制未完成 |
 | 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；本地 Docker-backed 全量回归 109 passed/0 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
 | 4. 评测基线与检索压力集 | `verified` | **评测工具/数据集门槛通过，不等于质量门通过**。golden-v1 有历史 20/20，当前记录的默认 Top-K=5 为 16/20；修订 rubric 的 answer-quality VECTOR 在最近配对两轮均 10/12；Thinking-off 的 stress 记录为 7/8。跨数据集/模型设置分开报告；ACL leakage 和 Schema 失败在最近相邻策略 API A/B 中均为 0 |
 | 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出整体重复质量门槛；默认继续 VECTOR/Top-K=5。新的 source-preserving 离线邻块候选无可用替换、答案点覆盖不变，暂停继续加组件 |
 | 6. Agent Tool / MCP | `in-progress` | 三个只读 Agent Tool、闭合参数 schema、ACL/租户继承、空结果/超时/未知工具/预算/审计测试已落地；最小无状态 MCP 适配层和可重复的本地 HTTP smoke 已通过，完整 MCP transport/auth、第三方 SDK/client conformance 和 Agent loop 尚未完成 |
-| 7. 交付包 / FDE Case Study | `in-progress` | 架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；2026-09-22 有空 disposable API 演示、2026-09-23 有 Android 上传设备证据；含 ACL 运营界面的干净全链路演示、备份/恢复演练、脱敏录屏、公开部署和真实客户运营基线仍未完成 |
+| 7. 交付包 / FDE Case Study | `in-progress` | 架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；2026-09-22 有 disposable API 演示、2026-09-23 有 Android 上传设备证据及一次独立数据库+上传目录备份恢复演练；含 ACL 运营 UI 的干净全链路演示、Provider 日志治理复核、脱敏录屏、公开部署和真实客户运营基线仍未完成 |
 
 ## 已实现（代码静态核对）
 
@@ -135,6 +135,19 @@
 - `docker compose config --quiet` 和 `git diff --check` 通过。Flutter Android Debug APK 构建结果待本轮完成后补记。
 - 评测工具和回归门槛通过只证明可以执行和验证代码；当前质量数据仍不足以宣称 answer-quality release gate 通过。
 
+### 2026-09-23 Flutter 运营界面后端 API 验收
+
+- 使用新建 PostgreSQL 16.15/pgvector disposable 容器、隔离后端和 synthetic 管理员/员工：授权 employee 后，其只读 `search_knowledge` 返回 sample FAQ 来源；撤销 ACL 后，后续搜索及文档列表都不再包含该文档，观测 ACL leakage=0。
+- 在同一 disposable 环境将 Embedding URL 指向不可用端点，任务到 `FAILED`、attempt 3 且有失败原因；改回正确 LM Studio Embedding 服务后，SYSTEM_ADMIN retry API 将任务推进至 `SUCCEEDED`、attempt 4。
+- 后端/API acceptance PASS；Flutter Debug 构建通过，但独立 `.verify` 包安装被 Android 返回 `INSTALL_FAILED_USER_RESTRICTED`。未尝试绕过设备确认，也未覆盖原安装。故新 Flutter ACL/任务界面尚无真机验收证据。详见 `evaluation/reports/flutter-operations-acl-index-task-local-2026-09-23.md`。
+- 测试使用独立端口 55485/8088；5432 开发数据库未连接或修改。服务、容器、凭据、manifest、测试脚本、上传目录和 ADB reverse 已清理。
+
+### 2026-09-23 独立备份/恢复演练
+
+- 从新建的无持久卷 PostgreSQL 16.15/pgvector 源容器导出 custom-format 数据库备份，并单独归档上传文件目录；恢复到另一全新 PostgreSQL 容器和独立上传目录，应用连接恢复目标后正常启动，Flyway 识别 V13 schema 已存在且无重新迁移。
+- 恢复 API 核验：管理员可见 7 份合成文档；员工可见 5 份被授权文档，finance/HR 限制文档不可见，ACL leakage=0；7 条持久化索引任务均恢复为 `SUCCEEDED`。现有只读 MCP smoke 为 16/16。
+- PASS 仅指一次本地数据库 dump + 文件归档的人工恢复路径；不证明生产备份调度、加密、异地副本、PITR、保留轮换、恢复时间目标或灾难恢复 SLA。源/目标容器、临时备份、上传副本和合成凭据均已清理，5432 开发数据库未连接或更改。详见 `evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md`。
+
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
 2026-09-20 真实联调发现默认 LM Studio 模型 ID 已过期：`text-embedding-nomic-embed-text` 会导致全部请求在 Embedding 阶段失败；已根据 `/v1/models` 核实并同步为 `text-embedding-nomic-embed-text-v1.5`，Chat 模型同步为 `google/gemma-4-26b-a4b-qat`。随后发现 Gemma 在 `AI_MAX_TOKENS=1200` 时会把预算消耗在 reasoning，导致可见答案为空或截断；默认配置已同步为 2400。最新完整压力集恢复为 8/8，STRESS-003 的两个目标文档仍完整命中，说明问题属于生成预算而不是召回。2026-09-21 的完整 4000 候选回归显示 Stress 仍为 8/8，但 Golden 为 15/20 且有 4 次结构化输出失败，暂不切换默认值。
@@ -177,13 +190,13 @@
 
 截至 2026-09-23，V0.1 的实现主干已在，但质量通过、管理运营 UI 和新环境交付证据仍未闭环。优先顺序：
 
-1. **本轮状态收敛（已完成）**：计划开始时盘点的 24 个既有本地变更已核对用途；保留 answer-quality rubric/测试/报告；V13 与 `VECTOR_ADJACENT` 只作为默认关闭的实验，不推广默认检索策略。所有既有与本轮新增变更继续留在本地，未提交。
+1. **本轮状态收敛（已完成）**：计划开始时盘点的 24 个既有本地变更已核对用途；保留 answer-quality rubric/测试/报告；V13 与 `VECTOR_ADJACENT` 只作为默认关闭的实验，不推广默认检索策略。核心 37 文件已由 `a7d7568` 提交并推送；后续 API/备份恢复验收记录目前仅在本地待收敛。
 2. **检索候选窄诊断**：已新增“只替换同文档冗余 Chunk”的离线候选比较。当前 12 题里它没有做出任何替换，答案点覆盖仍为 75%（6/8），不值得做在线 API A/B；Q002/Q006 仍是已知缺口。除非有新的 source-preserving 候选假设，不继续堆 Hybrid/Reranker/重排。
-3. **Flutter 最小运营 UI（本地实现完成，验收未完成）**：已接入已有 ACL 查询/授权/撤权 API，以及索引任务状态、失败原因与安全重试；接下来必须用真实管理员/所有者账号做设备和 API 验收，证明撤权立即阻断检索/引用、失败任务可安全恢复、ACL leakage=0。
-4. **干净交付演练**：使用全新 disposable 环境按文档启动和演示上传、索引、授权回答、引用、拒答、越权拒绝、反馈和失败恢复；执行备份/恢复演练并检查 Provider 侧是否记录 Prompt/文档输入。
+3. **Flutter 最小运营 UI（API 通过、真机 UI 待验收）**：服务端 disposable 实测已证明撤权阻断搜索/列表且 leakage=0，失败任务可从 FAILED 安全 retry 到 SUCCEEDED。剩余只需 Android 设备允许安装独立 `.verify` 包后点验 ACL 对话框、任务列表和重试状态；当前设备拒绝安装，未绕过限制。
+4. **干净交付演练（部分通过）**：备份/恢复演练已通过一次本地人工恢复；还需在全新 disposable 环境按文档完成上传、索引、授权回答、引用、拒答、越权拒绝、反馈和失败恢复的一次连续演示，并检查 Provider 侧是否记录 Prompt/文档输入。
 5. **作品集收尾**：更新中英文 Case Study、Demo 讲稿和脱敏录屏；根据干净演练结果再独立决定是否公开部署，不宣称未测的 ROI 或生产 SLA。
 
-近期完整证据和离线 source-preserving 结果见 `evaluation/reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md`。当前 repo 内的代码/文档变更仍在本地工作区，尚未提交或推送。
+近期完整证据和离线 source-preserving 结果见 `evaluation/reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md`。核心功能已由 `a7d7568` 推送；本轮新增加的 API 验收、备份恢复报告及路线/案例状态修订尚待提交。
 
 ### 2026-09-23：QUALITY-002 / QUALITY-006 新鲜隔离复核
 

@@ -32,10 +32,10 @@
 | Retrieval Stress | 最近记录的 Thinking-off 运行 7/8；历史有 8/8；最近质量 A/B 的 ACL leakage=0 | 小样本、配置相关；不是生产安全保证 |
 | Answer Quality | 修订 rubric 的 VECTOR 12 题集两次记录 10/12；Q002/Q006 两次均失败。source-preserving 离线候选无替换、覆盖仍 75%（6/8） | 评测工具可复跑，但质量门未通过；不启用 Hybrid、Reranker 或相邻策略 |
 | Structured Output | LM Studio Gemma Thinking-off 合同探针 6/6；Thinking-on 重复探针曾发生 token 耗尽/无效 JSON | Provider 本地设置敏感；默认仍 fail-closed，不代表跨配置稳定 |
-| ACL / Flutter 运营 | 后端 tenant/ACL 集成测试和本地 A/B 泄漏为 0；Flutter ACL 授权/撤权、任务状态/重试界面已接入并通过静态/模型测试 | 新 UI 的实时撤权、检索阻断与设备验收尚未完成 |
-| MCP | 只读 HTTP smoke 16/16；四个 adapter 单元测试通过 | 不是完整 MCP SDK/client conformance |
+| ACL / Flutter 运营 | 2026-09-23 disposable API 实测：授权后员工搜索返回目标来源；撤权后搜索与文档列表均不再返回该文档，leakage=0。失败索引任务 attempt 3 后管理员 retry，attempt 4 成功。Flutter ACL/任务界面静态分析与模型测试通过 | 后端权限与任务恢复 API 已验收；Flutter 管理 UI 被 Android `INSTALL_FAILED_USER_RESTRICTED` 阻断，尚无真机交互证据 |
+| MCP | 只读 HTTP smoke 16/16；四个 adapter 单元测试通过；恢复后服务再次 16/16 | 不是完整 MCP SDK/client conformance |
 
-2026-09-22 的空 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈、拒答和员工无权限拒绝；2026-09-23 Android 设备证据覆盖新文件上传到 READY。失败任务恢复、Flutter ACL 管理 UI、备份/恢复演练和上述流程的一次性完整重演尚未通过，详见 [PROGRESS.md](../PROGRESS.md) 与 [DEMO.md](DEMO.md)。
+2026-09-22 的空 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈、拒答和员工无权限拒绝；2026-09-23 Android 设备证据覆盖新文件上传到 READY。随后在独立 disposable PostgreSQL 和上传目录中完成一次人工备份/恢复，恢复后 7 个任务状态、员工 ACL 隔离及 MCP smoke 均通过。该证据不包括生产备份调度、异地副本、加密或 PITR。Flutter ACL 管理 UI 仍未设备验收；以上完整业务流程仍待一次性连续重演，详见 [PROGRESS.md](../PROGRESS.md)、[备份恢复记录](../evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md) 与 [DEMO.md](DEMO.md)。
 
 ## 5. 业务价值假设
 

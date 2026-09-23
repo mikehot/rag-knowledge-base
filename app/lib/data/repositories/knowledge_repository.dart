@@ -17,6 +17,7 @@ class KnowledgeRepository {
   final KnowledgeApiClient _api;
   final SessionStore _sessionStore;
   String? _token;
+  static const defaultKnowledgeBaseId = '00000000-0000-0000-0000-000000000101';
 
   Future<void> login(String username, String password) async {
     try {
@@ -68,6 +69,57 @@ class KnowledgeRepository {
     return _request(() async {
       await _ensureLogin();
       return _unwrap(await _api.getDocument(documentId));
+    });
+  }
+
+  Future<List<DocumentAclItem>> listDocumentAcl(String documentId) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(await _api.listDocumentAcl(documentId));
+    });
+  }
+
+  Future<DocumentAclItem> grantDocumentAcl(
+    String documentId,
+    GrantDocumentAclRequest request,
+  ) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(await _api.grantDocumentAcl(documentId, request));
+    });
+  }
+
+  Future<void> revokeDocumentAcl(String documentId, String aclId) async {
+    return _request(() async {
+      await _ensureLogin();
+      _unwrap(await _api.revokeDocumentAcl(documentId, aclId));
+    });
+  }
+
+  Future<List<PrincipalOption>> listAclPrincipals(String principalType) async {
+    return _request(() async {
+      await _ensureLogin();
+      final response = switch (principalType) {
+        'USER' => await _api.listUsers(),
+        'DEPARTMENT' => await _api.listDepartments(),
+        'ROLE' => await _api.listRoles(),
+        _ => throw const ApiException('不支持的授权主体类型'),
+      };
+      return _unwrap(response);
+    });
+  }
+
+  Future<IndexTaskListResponse> listIndexTasks({int limit = 20}) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(await _api.listIndexTasks(defaultKnowledgeBaseId, limit));
+    });
+  }
+
+  Future<IndexTaskItem> retryIndexTask(String taskId) async {
+    return _request(() async {
+      await _ensureLogin();
+      return _unwrap(await _api.retryIndexTask(defaultKnowledgeBaseId, taskId));
     });
   }
 

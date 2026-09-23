@@ -310,7 +310,7 @@ class AgentToolServiceTests {
         return new AppProperties(
             null,
             null,
-            new AppProperties.Rag(700, 100, 5, 0.35, 768, false, 50, 2.0, 60),
+            new AppProperties.Rag(700, 100, 5, 0.35, 768, false, 50, 2.0, 60, false),
             null,
             null,
             null

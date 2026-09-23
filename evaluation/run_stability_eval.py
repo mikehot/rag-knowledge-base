@@ -29,7 +29,11 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--case-id", action="append", dest="case_ids")
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--retrieval-mode", choices=("vector", "vector-diversity", "keyword-rrf"), default="vector")
+    parser.add_argument(
+        "--retrieval-mode",
+        choices=("vector", "vector-diversity", "keyword-rrf", "vector-adjacent"),
+        default="vector",
+    )
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
 

@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/document_models.dart';
 import '../auth/auth_view_model.dart';
+import 'document_acl_dialog.dart';
 import 'documents_view_model.dart';
+import 'index_tasks_panel.dart';
 
 class DocumentsPage extends ConsumerStatefulWidget {
   const DocumentsPage({super.key});
@@ -30,6 +32,11 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
       appBar: AppBar(
         title: const Text('知识库'),
         actions: [
+          IconButton(
+            tooltip: '索引任务',
+            onPressed: () => showIndexTasksPanel(context),
+            icon: const Icon(Icons.work_history_outlined),
+          ),
           TextButton.icon(
             onPressed: state.uploading
                 ? null
@@ -89,6 +96,11 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
                 onReindex: () => ref
                     .read(documentsViewModelProvider.notifier)
                     .reindex(state.items[index].documentId),
+                onManageAcl: () => showDocumentAclDialog(
+                  context,
+                  documentId: state.items[index].documentId,
+                  filename: state.items[index].filename,
+                ),
               ),
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemCount: state.items.length,
@@ -132,6 +144,7 @@ class _DocumentCard extends StatelessWidget {
     required this.onDelete,
     required this.onDisable,
     required this.onReindex,
+    required this.onManageAcl,
   });
 
   final DocumentItem item;
@@ -139,6 +152,7 @@ class _DocumentCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onDisable;
   final VoidCallback onReindex;
+  final VoidCallback onManageAcl;
 
   @override
   Widget build(BuildContext context) {
@@ -200,11 +214,17 @@ class _DocumentCard extends StatelessWidget {
                       onDisable();
                     case _DocumentAction.reindex:
                       onReindex();
+                    case _DocumentAction.acl:
+                      onManageAcl();
                     case _DocumentAction.delete:
                       onDelete();
                   }
                 },
                 itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: _DocumentAction.acl,
+                    child: Text('管理文档权限'),
+                  ),
                   if (item.statusEnum == DocumentStatus.ready)
                     const PopupMenuItem(
                       value: _DocumentAction.disable,
@@ -299,4 +319,4 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-enum _DocumentAction { disable, reindex, delete }
+enum _DocumentAction { acl, disable, reindex, delete }

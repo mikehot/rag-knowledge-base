@@ -2,7 +2,7 @@
 
 > Version: v2.0
 >
-> Last verified: 2026-09-21
+> Last verified: 2026-09-23
 > Target: evolve the existing RAG MVP into an enterprise knowledge-base V0.1, then extend it into a bounded Agent/FDE delivery case.
 
 ## 1. Product Goal
@@ -227,6 +227,8 @@ behavior_counts: ANSWER=16, ACL_FILTERED_REFUSAL=2, REFUSE=2
 
 The checked-in aggregate report is the live local result; it does not represent a production SLO or independent semantic judge.
 
+Current quality status (2026-09-23): the evaluation datasets and deterministic scoring pipeline are implemented, but this means the **measurement baseline** is verified, not that answer quality passes a release gate. The latest corrected-rubric VECTOR answer-quality capture scored 10/12 in two paired-baseline repeats; ACL leakage and schema failures were zero in those captures. A local Thinking-off set reported Golden 16/20 and stress 7/8 under its recorded configuration. These runs use different datasets/configuration contexts and must remain separate; none is a production SLO or independent semantic judge.
+
 ### Milestone 5 — Evaluation-Driven Retrieval Improvements
 
 Goal: add retrieval complexity only when a measured failure justifies it.
@@ -244,6 +246,8 @@ Acceptance gate:
 - Before/after results use the same versioned dataset and configuration record.
 - Quality gain is reported together with latency, complexity, and cost impact.
 - Elasticsearch, a separate vector database, or GraphRAG is not introduced without evidence that PostgreSQL is insufficient.
+
+Current decision (2026-09-23): the backend-owned `VECTOR_ADJACENT` experiment completed two full 12-case API comparisons and scored 9/12 twice versus VECTOR 10/12 twice; it remains behind a dedicated default-off flag. A follow-up source-preserving offline selector made no substitutions on the current fixture and did not improve point coverage (75%, 6/8), so it did not proceed to API evaluation. No Hybrid Search, Reranker, diversity, or adjacent strategy is approved for the default path. `QUALITY-002` remains a Top-5 boundary miss; `QUALITY-006` remains unresolved end-to-end. Do not add another retrieval component until an offline candidate shows a measurable same-budget benefit without discarding unique document evidence.
 
 ### Milestone 6 — Read-Only Agent Tools and MCP
 
@@ -304,12 +308,14 @@ Acceptance gate:
 - No credentials, customer data, internal-only links, or unsupported metrics are published.
 - The project can be presented as an end-to-end customer deployment, not only as a framework demo.
 
-## 6. Immediate Four-Week Focus
+## 6. Immediate Four-Week Focus (updated 2026-09-23)
 
-- Week 1: complete Milestone 1 and freeze the reproducible baseline.
-- Week 2: implement the minimum identity, knowledge-base, document ACL, and lifecycle model from Milestone 2.
-- Week 3: implement Milestone 3 and establish the 20-question dataset and runner.
-- Week 4: publish the first evaluation report, decide whether Hybrid Search is justified, and complete the V0.1 delivery package.
+- Week 1: **implemented for this local worktree** — reconciled the pre-existing 24-file change set, preserved the user-owned experiment/test/report changes, kept V13 and retrieval experiments default-off, and made evaluator-verification vs. quality-gate status explicit. Changes remain uncommitted pending the later acceptance work.
+- Week 2: **UI code implemented; acceptance open** — Flutter now exposes document ACL list/grant/revoke and persistent index-task status/failure/retry using existing APIs. `flutter analyze` and model tests pass; still required: device/API check with real disposable roles, immediate revoke blocking retrieval/citations, task retry recovery, and zero ACL leakage.
+- Week 3: **partially evidenced** — an empty disposable API demo exists (2026-09-22) and Android upload-to-READY was verified on device (2026-09-23), but the new operator UI has not been demonstrated end-to-end. Full fresh re-run of denial/recovery flows, backup/restore rehearsal, and explicit Provider log review remain open.
+- Week 4: Chinese/English Case Studies now reflect the latest local tests and quality limitations. A sanitized recording and separate public-hosting go/no-go remain pending the UI and clean-delivery gates; public hosting is not required to claim local verification.
+
+The retrieval candidate experiment is complete for now and did not yield an acceptable runtime change. Reopen it only when a new offline hypothesis passes the same-budget source-preservation gate. Milestone 6 extensions beyond the existing read-only tools/MCP adapter remain deferred until the V0.1 security, quality, and delivery gates are stable.
 
 Milestone 6 (Agent/MCP) starts only after the V0.1 security and evaluation gates pass. It is not required to declare enterprise knowledge-base V0.1 complete.
 

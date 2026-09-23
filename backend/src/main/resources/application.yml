@@ -88,6 +88,7 @@ app:
     hybrid-candidate-k: ${RAG_HYBRID_CANDIDATE_K:50}
     hybrid-keyword-weight: ${RAG_HYBRID_KEYWORD_WEIGHT:2.0}
     hybrid-rrf-k: ${RAG_HYBRID_RRF_K:60}
+    context-selection-experiment-enabled: ${RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED:false}
   enterprise:
     default-tenant-id: 00000000-0000-0000-0000-000000000001
     default-knowledge-base-id: 00000000-0000-0000-0000-000000000101

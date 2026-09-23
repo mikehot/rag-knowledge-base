@@ -186,6 +186,17 @@ class AskServiceTests {
     }
 
     @Test
+    void rejectsAdjacentChunkSelectionWhenItsDedicatedExperimentIsDisabled() {
+        assertThatThrownBy(() -> askService.ask(USER, new AskRequest("保修期限是多少？"), RetrievalMode.VECTOR_ADJACENT))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(400);
+
+        verify(embeddingProvider, never()).embed(any());
+        verify(chunkRepository, never()).search(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
     void runsVectorDiversityThroughTheSameStructuredAnswerPathWhenEnabled() {
         askService = new AskService(
             properties(0, false, true),
@@ -223,6 +234,60 @@ class AskServiceTests {
             assertThat(source.filename()).isEqualTo("sample_faq.md")
         );
         verify(chunkRepository).search(TENANT_ID, USER_ID, embedding, 50);
+    }
+
+    @Test
+    void runsAdjacentChunkSelectionThroughTheSharedAskPathWithAClFilteredCandidateWindow() {
+        askService = new AskService(
+            properties(0, false, false, 0, true),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        String question = "保修期限是多少？";
+        float[] embedding = new float[] {0.1f, 0.2f};
+        UUID neighborDocumentId = UUID.fromString("20000000-0000-0000-0000-000000000002");
+        ChunkSearchResult faqChunk2 = new ChunkSearchResult(
+            UUID.randomUUID(), DOCUMENT_ID, "sample_faq.md", "chunk#2", "相邻 FAQ 证据", 0.92
+        );
+        ChunkSearchResult manualChunk = new ChunkSearchResult(
+            UUID.randomUUID(), neighborDocumentId, "manual.md", "chunk#1", "运维说明", 0.91
+        );
+        ChunkSearchResult slaChunk = new ChunkSearchResult(
+            UUID.randomUUID(), UUID.randomUUID(), "support-sla.md", "chunk#1", "SLA 说明", 0.90
+        );
+        ChunkSearchResult releaseChunk = new ChunkSearchResult(
+            UUID.randomUUID(), UUID.randomUUID(), "release.md", "chunk#1", "版本说明", 0.89
+        );
+        ChunkSearchResult lowestRankedChunk = new ChunkSearchResult(
+            UUID.randomUUID(), UUID.randomUUID(), "noise.md", "chunk#1", "最低排名干扰内容", 0.88
+        );
+        ChunkSearchResult faqChunk1 = new ChunkSearchResult(
+            UUID.randomUUID(), DOCUMENT_ID, "sample_faq.md", "chunk#1", "相邻 FAQ 保修期限为一年", 0.87
+        );
+        when(embeddingProvider.embed(List.of(question))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 7))
+            .thenReturn(List.of(faqChunk2, manualChunk, slaChunk, releaseChunk, lowestRankedChunk, faqChunk1));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"保修期为一年。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            128
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest(question), RetrievalMode.VECTOR_ADJACENT);
+
+        assertThat(response.found()).isTrue();
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(aiProvider).generate(prompt.capture());
+        assertThat(prompt.getValue()).contains("相邻 FAQ 保修期限为一年").doesNotContain("最低排名干扰内容");
+        ArgumentCaptor<AskLog> log = ArgumentCaptor.forClass(AskLog.class);
+        verify(askLogRepository).save(log.capture());
+        assertThat(log.getValue().getRetrievalMode()).isEqualTo(RetrievalMode.VECTOR_ADJACENT);
+        verify(chunkRepository).search(TENANT_ID, USER_ID, embedding, 7);
+        verify(retrievalHitRepository).saveAll(log.getValue().getId(), TENANT_ID,
+            List.of(faqChunk2, manualChunk, slaChunk, releaseChunk, faqChunk1));
     }
 
     @Test
@@ -631,10 +696,22 @@ class AskServiceTests {
         boolean hybridExperimentEnabled,
         int structuredOutputRetries
     ) {
+        return properties(dailyLimit, complexRoutingEnabled, hybridExperimentEnabled, structuredOutputRetries, false);
+    }
+
+    private AppProperties properties(
+        int dailyLimit,
+        boolean complexRoutingEnabled,
+        boolean hybridExperimentEnabled,
+        int structuredOutputRetries,
+        boolean contextSelectionExperimentEnabled
+    ) {
         return new AppProperties(
             null,
             null,
-            new AppProperties.Rag(700, 100, 5, 0.35, 768, hybridExperimentEnabled, 50, 2.0, 60),
+            new AppProperties.Rag(
+                700, 100, 5, 0.35, 768, hybridExperimentEnabled, 50, 2.0, 60, contextSelectionExperimentEnabled
+            ),
             null,
             new AppProperties.Ai(
                 "openai-compatible", "", "", "", 1200, 3200, complexRoutingEnabled, 120, 1,

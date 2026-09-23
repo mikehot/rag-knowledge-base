@@ -27,13 +27,15 @@
 
 | 维度 | 当前证据 | 结论边界 |
 |---|---|---|
-| 后端回归 | 本地 Docker-backed 109 tests，0 failures/errors/skipped | 代码和集成回归通过，不等于生产 SLA |
-| Golden Dataset | 20 题数据契约通过；历史真实本地运行有 20/20；当前默认 Top-K=5 的一次质量结果为 16/20 | 样例数据，不是客户准确率 |
-| Retrieval Stress | 8 题历史真实基线 8/8，ACL leakage=0 | 小规模压力集 |
-| Answer Quality | 12 题 VECTOR/VECTOR_DIVERSITY A/B 均质量门 8/12；默认不切换多样性检索 | 本地 Provider 稳定性仍是限制 |
-| Structured Output | Gemma/Qwen 当前独立探针未通过能力门禁 | 不切换模型、不宽松解析 |
-| ACL | 跨租户/未授权路径真实和集成测试，ACL leakage=0 | 尚未覆盖所有真实组织继承规则 |
+| 后端回归 | 2026-09-23 本地 Docker-backed 116 tests，0 failures/errors/skipped | 本地代码/集成回归通过，不等于 CI 新运行或生产 SLA |
+| Golden Dataset | 历史数据契约和本地运行有 20/20；最近记录的 Top-K=5/Thinking-off 为 16/20 | 合成样例，不是客户准确率或上线门槛通过 |
+| Retrieval Stress | 最近记录的 Thinking-off 运行 7/8；历史有 8/8；最近质量 A/B 的 ACL leakage=0 | 小样本、配置相关；不是生产安全保证 |
+| Answer Quality | 修订 rubric 的 VECTOR 12 题集两次记录 10/12；Q002/Q006 两次均失败。source-preserving 离线候选无替换、覆盖仍 75%（6/8） | 评测工具可复跑，但质量门未通过；不启用 Hybrid、Reranker 或相邻策略 |
+| Structured Output | LM Studio Gemma Thinking-off 合同探针 6/6；Thinking-on 重复探针曾发生 token 耗尽/无效 JSON | Provider 本地设置敏感；默认仍 fail-closed，不代表跨配置稳定 |
+| ACL / Flutter 运营 | 后端 tenant/ACL 集成测试和本地 A/B 泄漏为 0；Flutter ACL 授权/撤权、任务状态/重试界面已接入并通过静态/模型测试 | 新 UI 的实时撤权、检索阻断与设备验收尚未完成 |
 | MCP | 只读 HTTP smoke 16/16；四个 adapter 单元测试通过 | 不是完整 MCP SDK/client conformance |
+
+2026-09-22 的空 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈、拒答和员工无权限拒绝；2026-09-23 Android 设备证据覆盖新文件上传到 READY。失败任务恢复、Flutter ACL 管理 UI、备份/恢复演练和上述流程的一次性完整重演尚未通过，详见 [PROGRESS.md](../PROGRESS.md) 与 [DEMO.md](DEMO.md)。
 
 ## 5. 业务价值假设
 
@@ -57,7 +59,7 @@
 
 ## 7. 下一阶段
 
-- 用当前 [DEMO.md](DEMO.md) 完成一次干净 disposable 环境演示并保存非敏感截图/记录。
+- 用当前 [DEMO.md](DEMO.md) 完成一次干净 disposable 环境演示，增加 ACL 撤权后拒绝引用、失败任务安全重试及备份/恢复验收；只保留非敏感聚合记录。
 - 用真实业务文档补充评测集和反馈闭环。
 - 在第三方 MCP SDK/client 验证明确需求后，再决定是否做完整互操作支持。
 - 只有当评测、P95、成本和上下文干扰同时通过门槛，才考虑 Hybrid Search 或 Reranker。

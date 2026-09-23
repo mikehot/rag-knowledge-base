@@ -31,4 +31,57 @@ void main() {
     expect(lifecycle.taskId, 'task-1');
     expect(lifecycle.contentVersion, 2);
   });
+
+  test(
+    'parses ACL and index task operations including failure diagnostics',
+    () {
+      final acl = DocumentAclItem.fromJson({
+        'id': 'acl-1',
+        'documentId': 'doc-1',
+        'principalType': 'USER',
+        'principalId': 'user-1',
+        'permission': 'READ',
+      });
+      final task = IndexTaskItem.fromJson({
+        'id': 'task-1',
+        'knowledgeBaseId': 'kb-1',
+        'documentId': 'doc-1',
+        'operation': 'REINDEX',
+        'contentVersion': 2,
+        'status': 'FAILED',
+        'attemptCount': 3,
+        'maxAttempts': 3,
+        'errorMessage': 'provider timeout',
+        'nextAttemptAt': null,
+        'startedAt': null,
+        'finishedAt': null,
+        'durationMs': 1200,
+        'createdAt': '2026-09-23T08:00:00Z',
+      });
+
+      expect(acl.permission, 'READ');
+      expect(task.status, 'FAILED');
+      expect(task.errorMessage, 'provider timeout');
+      expect(task.durationMs, 1200);
+    },
+  );
+
+  test('chooses a display label from admin principal response shapes', () {
+    expect(
+      PrincipalOption.fromJson({
+        'id': 'u1',
+        'username': 'admin',
+        'displayName': '管理员',
+      }).label,
+      '管理员',
+    );
+    expect(
+      PrincipalOption.fromJson({
+        'id': 'r1',
+        'code': 'ADMIN',
+        'name': '系统管理员',
+      }).label,
+      '系统管理员',
+    );
+  });
 }

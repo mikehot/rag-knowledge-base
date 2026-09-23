@@ -20,9 +20,9 @@ Employees need answers across internal documents, but an enterprise system must 
 
 ## Evidence and limitations
 
-The local Docker-backed backend suite passed 109 tests with no failures, errors, or skips. The versioned stress set has an 8/8 historical local baseline with zero ACL leakage, and the read-only MCP smoke check passed 16/16 checks. These are repository and local-fixture results, not production SLA, customer accuracy, or ROI claims.
+On 2026-09-23, the local Docker-backed backend suite passed 116 tests with no failures, errors, or skips. The latest recorded synthetic Golden run was 16/20 and the eight-case retrieval stress run was 7/8 under its documented LM Studio Thinking-off condition. Two corrected-rubric 12-case VECTOR captures each scored 10/12, with QUALITY-002 and QUALITY-006 failing in both. ACL leakage and structured-output failures were zero in the adjacent-strategy API comparison, but that candidate scored 9/12 versus 10/12 for VECTOR and was not promoted. A conservative source-preserving offline selector made no substitutions and left lexical answer-point coverage at 75% (6/8).
 
-The current local models have not passed the independent structured-output capability gate. The default retrieval path therefore remains vector Top-K=5; Hybrid Search, reranking, complex model routing, autonomous writes, and a model-driven Agent loop remain disabled.
+These are distinct local fixtures and evaluation configurations, not one combined benchmark, independent semantic judging, CI evidence from this date, customer accuracy, production SLA, or ROI. The local Gemma structured-output probe passed 6/6 only with LM Studio Thinking disabled; Thinking-on runs have shown completion-budget exhaustion. The setting remains an operator-owned local condition, not a production guarantee. Flutter ACL grant/revoke and index-task status/retry UI is implemented locally and passes Flutter analysis/model tests, but live ACL revocation, retrieval denial, and device UI acceptance remain open. Default retrieval remains VECTOR Top-K=5; Hybrid Search, reranking, autonomous writes, and a model-driven Agent loop remain disabled.
 
 ## Five-to-ten-minute talk track
 
@@ -32,7 +32,7 @@ The current local models have not passed the independent structured-output capab
 4. Ask an out-of-scope question and show the fail-closed refusal with no sources.
 5. Submit feedback and explain that metrics and diagnostics are protected by role.
 6. Run the read-only MCP smoke check and show the exact three-tool allowlist, identity-override rejection, and unauthenticated 401.
-7. Explain the employee ACL fixture and the retry/recovery path without exposing credentials or customer data.
+7. Explain the employee ACL fixture and retry/recovery path without exposing credentials or customer data. The new Flutter ACL/task operations surfaces still need live-device acceptance before they can be presented as verified behavior.
 8. Close with the evidence boundary: this is a reproducible enterprise-AI project slice, not a claim of production scale or autonomous operations.
 
 ## Why the architecture matters

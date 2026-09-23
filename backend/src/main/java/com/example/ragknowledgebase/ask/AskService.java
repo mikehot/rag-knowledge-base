@@ -45,6 +45,7 @@ public class AskService {
     private final QuestionComplexityClassifier questionComplexityClassifier;
     private final KeywordRrfRetriever keywordRrfRetriever;
     private final DocumentDiversityRetriever documentDiversityRetriever;
+    private final AdjacentChunkRetriever adjacentChunkRetriever;
 
     public AskService(
         AppProperties properties,
@@ -65,6 +66,7 @@ public class AskService {
         this.questionComplexityClassifier = new QuestionComplexityClassifier();
         this.keywordRrfRetriever = new KeywordRrfRetriever();
         this.documentDiversityRetriever = new DocumentDiversityRetriever();
+        this.adjacentChunkRetriever = new AdjacentChunkRetriever();
     }
 
     @Transactional
@@ -77,6 +79,10 @@ public class AskService {
         if ((retrievalMode == RetrievalMode.KEYWORD_RRF || retrievalMode == RetrievalMode.VECTOR_DIVERSITY)
             && !properties.rag().hybridExperimentEnabled()) {
             throw new BusinessException(400, "检索实验未启用");
+        }
+        if (retrievalMode == RetrievalMode.VECTOR_ADJACENT
+            && !properties.rag().contextSelectionExperimentEnabled()) {
+            throw new BusinessException(400, "上下文选择实验未启用");
         }
         String question = request.question().trim();
         enforceDailyLimit(user.userId());
@@ -99,9 +105,11 @@ public class AskService {
 
             stage = Stage.RETRIEVAL;
             stageStarted = System.nanoTime();
-            int vectorCandidateK = retrievalMode == RetrievalMode.VECTOR_DIVERSITY
-                ? Math.max(properties.rag().topK(), properties.rag().hybridCandidateK())
-                : properties.rag().topK();
+            int vectorCandidateK = switch (retrievalMode) {
+                case VECTOR_DIVERSITY -> Math.max(properties.rag().topK(), properties.rag().hybridCandidateK());
+                case VECTOR_ADJACENT -> properties.rag().topK() + 2;
+                default -> properties.rag().topK();
+            };
             List<ChunkSearchResult> vectorHits = chunkRepository.search(
                 user.tenantId(),
                 user.userId(),
@@ -112,6 +120,7 @@ public class AskService {
             List<ChunkSearchResult> hits = switch (retrievalMode) {
                 case VECTOR -> vectorHits;
                 case VECTOR_DIVERSITY -> documentDiversityRetriever.select(vectorHits, properties.rag().topK());
+                case VECTOR_ADJACENT -> adjacentChunkRetriever.select(vectorHits, properties.rag().topK());
                 case KEYWORD_RRF -> keywordRrfRetriever.retrieve(
                     question,
                     vectorHits,

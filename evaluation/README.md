@@ -265,6 +265,8 @@ COMPOSE_FILE=/path/to/disposable-compose.yml python3 evaluation/run_chunk_eviden
 
 Chunk text is fetched into process memory only; output is restricted to chunk IDs, ranks, locators, expected-point IDs, and coverage metadata. Only lexical matches inside `expected_source_documents` count as evidence; off-source matches are reported separately. This is not a semantic relevance or answer-quality score. Run `python3 -m unittest discover -s evaluation -p 'test_*.py'` for its local unit checks. The disposable 2026-09-23 chunk-evidence and Top-K comparison is recorded in [reports/chunk-evidence-topk-ab-local-2026-09-23.md](reports/chunk-evidence-topk-ab-local-2026-09-23.md); its mixed repeat results do not justify changing the Top-K=5 default.
 
+For an answer-label-independent adjacent-chunk candidate experiment, add `--compare-adjacent-window`. The selector uses only the ACL-filtered vector candidate rank, filename, and `chunk#N` locator; answer-point labels are applied only after selection by the evidence scorer. It holds the context chunk budget constant and makes at most one adjacent-chunk substitution per case. This remains candidate-level evidence, not permission to change runtime retrieval. The 12-case local diagnostic and its limitations are recorded in [reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md](reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md).
+
 To compare a bounded document-diversity selector without calling a model:
 
 ```bash
@@ -333,6 +335,25 @@ For the bounded vector-diversity experiment, use the same command with
 the backend's ACL-filtered vector candidate pool and is still disabled by
 default; it must be scored as a separate candidate strategy, not merged into
 the keyword-RRF report.
+
+For the experimental adjacent-chunk candidate from the offline answer-quality
+diagnostic, enable its dedicated gate and capture a separate response file:
+
+```bash
+RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED=true docker compose up -d --build backend
+python3 evaluation/run_api_eval.py \
+  --dataset evaluation/datasets/answer_quality_v1.jsonl \
+  --credentials /private/tmp/rag-online-ab-credentials.json \
+  --retrieval-mode vector-adjacent \
+  --output /private/tmp/rag-online-ab-vector-adjacent-api.jsonl
+```
+
+Pair this with a `vector` capture against the same disposable fixture, repeat
+the full 12 cases, score each capture with `run_eval.py`, collect protected
+retrieval diagnostics, and turn the context-selection flag off afterward. The
+mode uses only ACL-filtered vector hits and preserves the configured Top-K
+context size; it is not enabled by default and must pass answer, citation,
+refusal, ACL, structured-output, token, and latency gates before any adoption.
 
 For the `answer-quality-v1` end-to-end gate, run both modes against the same
 12-case dataset and then use `run_eval.py` for each response file. Keep the

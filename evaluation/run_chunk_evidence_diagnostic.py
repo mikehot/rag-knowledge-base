@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import unicodedata
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
 DEFAULT_KNOWLEDGE_BASE_ID = "00000000-0000-0000-0000-000000000101"
 DEFAULT_CONTEXT_BUDGETS = (5, 8, 10)
+CHUNK_LOCATOR = re.compile(r"chunk#(\d+)")
 
 
 def fail(message: str) -> None:
@@ -71,6 +73,7 @@ def validate_vector_diagnostics(path: Path) -> dict[str, dict[str, Any]]:
             by_chunk[chunk_id] = {
                 "rank": expected_rank,
                 "chunkId": chunk_id,
+                "documentId": hit.get("documentId"),
                 "filename": hit.get("filename"),
                 "locator": hit.get("locator"),
                 "similarity": hit.get("similarity"),
@@ -89,6 +92,98 @@ def matched_point_ids(case: dict[str, Any], content: str) -> set[str]:
             if any((needle := compact_text(term)) and needle in haystack for term in terms if isinstance(term, str)):
                 matched.add(point_id)
     return matched
+
+
+def select_adjacent_chunk_window(
+    ranked_hits: list[dict[str, Any]], context_k: int, rank_window: int = 2
+) -> list[dict[str, Any]]:
+    """Replace up to one low-ranked chunk with a nearby chunk from a Top-K hit's document.
+
+    Selection uses only vector rank, filename, and chunk locator. Dataset answer
+    points are deliberately not an input, preventing label leakage.
+    """
+    selected = list(ranked_hits[:context_k])
+    selected_ids = {hit["chunkId"] for hit in selected}
+    added_documents: set[str] = set()
+    seeds = list(selected)
+    neighbors: list[dict[str, Any]] = []
+    for seed in seeds:
+        match = CHUNK_LOCATOR.fullmatch(str(seed.get("locator", "")))
+        if not match:
+            continue
+        sequence = int(match.group(1))
+        for candidate in ranked_hits:
+            if candidate["chunkId"] in selected_ids:
+                continue
+            if candidate.get("filename") != seed.get("filename"):
+                continue
+            if candidate["rank"] > context_k + rank_window:
+                continue
+            neighbor_match = CHUNK_LOCATOR.fullmatch(str(candidate.get("locator", "")))
+            if not neighbor_match or abs(int(neighbor_match.group(1)) - sequence) != 1:
+                continue
+            if str(candidate.get("filename")) in added_documents:
+                # Add no more than one neighboring chunk per document.
+                continue
+            neighbors.append(candidate)
+
+    for candidate in sorted(neighbors, key=lambda hit: hit["rank"]):
+        if candidate["chunkId"] in selected_ids:
+            continue
+        replaceable = [hit for hit in selected if hit.get("filename") != candidate.get("filename")]
+        if not replaceable:
+            continue
+        victim = max(replaceable, key=lambda hit: hit["rank"])
+        selected.remove(victim)
+        selected_ids.remove(victim["chunkId"])
+        selected.append(candidate)
+        selected_ids.add(candidate["chunkId"])
+        added_documents.add(str(candidate.get("filename")))
+        break  # One neighbor substitution per query keeps the test bounded.
+    return sorted(selected, key=lambda hit: hit["rank"])
+
+
+def select_adjacent_preserving_documents(
+    ranked_hits: list[dict[str, Any]], context_k: int, rank_window: int = 2
+) -> list[dict[str, Any]]:
+    """Use an adjacent chunk only to replace a redundant hit from that same document.
+
+    This preserves the set of documents represented in Top-K. Selection depends
+    only on document identity, rank, and chunk locator; answer labels/content are
+    not available to the selector.
+    """
+    selected = list(ranked_hits[:context_k])
+    if context_k < 1:
+        raise ValueError("context_k must be positive")
+    if len(selected) < 2 or len(ranked_hits) <= len(selected):
+        return selected
+
+    candidate_limit = min(len(ranked_hits), context_k + rank_window)
+    for seed in selected:
+        document_id = seed.get("documentId")
+        sequence_match = CHUNK_LOCATOR.fullmatch(str(seed.get("locator", "")))
+        if not isinstance(document_id, str) or not document_id or sequence_match is None:
+            continue
+        sequence = int(sequence_match.group(1))
+        same_document_hits = [hit for hit in selected if hit.get("documentId") == document_id]
+        if len(same_document_hits) < 2:
+            continue
+        for candidate in ranked_hits[len(selected):candidate_limit]:
+            if candidate.get("documentId") != document_id or candidate.get("chunkId") in {
+                hit.get("chunkId") for hit in selected
+            }:
+                continue
+            candidate_match = CHUNK_LOCATOR.fullmatch(str(candidate.get("locator", "")))
+            if candidate_match is None or abs(int(candidate_match.group(1)) - sequence) != 1:
+                continue
+            replaceable = [hit for hit in same_document_hits if hit.get("chunkId") != seed.get("chunkId")]
+            if not replaceable:
+                continue
+            victim = max(replaceable, key=lambda hit: hit["rank"])
+            selected.remove(victim)
+            selected.append(candidate)
+            return sorted(selected, key=lambda hit: hit["rank"])
+    return selected
 
 
 def score_context_budgets(
@@ -150,6 +245,16 @@ def main() -> int:
     parser.add_argument("--db-name", default="rag_knowledge_base")
     parser.add_argument("--db-timeout", type=float, default=30.0)
     parser.add_argument("--context-budgets", type=int, nargs="+", default=list(DEFAULT_CONTEXT_BUDGETS))
+    parser.add_argument(
+        "--compare-adjacent-window",
+        action="store_true",
+        help="compare an offline adjacent-chunk substitution using rank/locator only (no answer labels)",
+    )
+    parser.add_argument(
+        "--compare-adjacent-preserving-documents",
+        action="store_true",
+        help="replace only a redundant Top-K chunk from the same document, preserving document coverage",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if any(value < 1 for value in args.context_budgets) or len(set(args.context_budgets)) != len(args.context_budgets):
@@ -197,7 +302,9 @@ def main() -> int:
             )
             chunk_by_id = {str(chunk.get("chunkId")): chunk for chunk in chunks}
             candidate_hits = sorted(diag["hits"].values(), key=lambda item: item["rank"])
-            ranked_hits = candidate_hits[:budget_max]
+            compare_adjacent = args.compare_adjacent_window or args.compare_adjacent_preserving_documents
+            inspected_k = budget_max + (2 if compare_adjacent else 0)
+            ranked_hits = candidate_hits[:inspected_k]
             missing_chunks = [hit["chunkId"] for hit in ranked_hits if hit["chunkId"] not in chunk_by_id]
             if missing_chunks:
                 fail(f"{case_id} vector candidates are not present in this actor's ACL-visible chunks")
@@ -225,7 +332,7 @@ def main() -> int:
             score = score_context_budgets(
                 case, ranked_hits, point_by_chunk, off_source_point_by_chunk, tuple(args.context_budgets)
             )
-            case_results.append({
+            case_result = {
                 "id": case_id,
                 "actorId": actor_id,
                 "candidateCount": len(candidate_hits),
@@ -244,7 +351,54 @@ def main() -> int:
                     for hit in ranked_hits
                 ],
                 **score,
-            })
+            }
+            if args.compare_adjacent_window:
+                adjacent_results: list[dict[str, Any]] = []
+                for budget in args.context_budgets:
+                    selected = select_adjacent_chunk_window(ranked_hits, budget)
+                    scored = score_context_budgets(
+                        case,
+                        selected,
+                        point_by_chunk,
+                        off_source_point_by_chunk,
+                        (budget,),
+                    )["contextBudgets"][0]
+                    adjacent_results.append({
+                        **scored,
+                        "selectedRanks": [hit["rank"] for hit in selected],
+                        "addedRanks": sorted(hit["rank"] for hit in selected if hit["rank"] > budget),
+                        "droppedRanks": sorted(
+                            hit["rank"] for hit in ranked_hits[:budget]
+                            if hit["chunkId"] not in {picked["chunkId"] for picked in selected}
+                        ),
+                    })
+                case_result["adjacentWindowByContextK"] = adjacent_results
+            if args.compare_adjacent_preserving_documents:
+                preserving_results: list[dict[str, Any]] = []
+                for budget in args.context_budgets:
+                    baseline = ranked_hits[:budget]
+                    selected = select_adjacent_preserving_documents(ranked_hits, budget)
+                    scored = score_context_budgets(
+                        case,
+                        selected,
+                        point_by_chunk,
+                        off_source_point_by_chunk,
+                        (budget,),
+                    )["contextBudgets"][0]
+                    baseline_documents = {hit.get("documentId") for hit in baseline}
+                    selected_documents = {hit.get("documentId") for hit in selected}
+                    preserving_results.append({
+                        **scored,
+                        "selectedRanks": [hit["rank"] for hit in selected],
+                        "addedRanks": sorted(hit["rank"] for hit in selected if hit["rank"] > budget),
+                        "droppedRanks": sorted(
+                            hit["rank"] for hit in baseline
+                            if hit["chunkId"] not in {picked["chunkId"] for picked in selected}
+                        ),
+                        "preservedDocumentSet": baseline_documents == selected_documents,
+                    })
+                case_result["adjacentPreservingDocumentsByContextK"] = preserving_results
+            case_results.append(case_result)
 
         all_answerable = [case for case in cases if case.get("expected_behavior") == "ANSWER"]
         aggregate: dict[str, Any] = {}
@@ -263,6 +417,41 @@ def main() -> int:
                 "meanNonEvidenceDocumentCount": round(sum(row["nonEvidenceDocumentCount"] for row in rows) / len(rows), 4) if rows else None,
                 "aclLeakageCount": sum(row["aclLeakage"] for row in case_results),
             }
+        adjacent_aggregate: dict[str, Any] = {}
+        if args.compare_adjacent_window:
+            for budget in args.context_budgets:
+                rows = [
+                    next(item for item in row["adjacentWindowByContextK"] if item["contextK"] == budget)
+                    for case, row in zip(cases, case_results)
+                    if case.get("expected_behavior") == "ANSWER"
+                ]
+                adjacent_aggregate[str(budget)] = {
+                    "answerableCaseCount": len(rows),
+                    "meanExactEvidencePointCoverage": round(sum(row["pointCoverage"] or 0 for row in rows) / len(rows), 4) if rows else None,
+                    "casesWithAllExpectedPoints": sum(row["allExpectedPointsCovered"] for row in rows),
+                    "casesWithOffSourceLexicalMatches": sum(bool(row["offSourceMatchedPointIds"]) for row in rows),
+                    "meanNonEvidenceChunkCount": round(sum(row["nonEvidenceChunkCount"] for row in rows) / len(rows), 4) if rows else None,
+                    "meanNonEvidenceDocumentCount": round(sum(row["nonEvidenceDocumentCount"] for row in rows) / len(rows), 4) if rows else None,
+                    "aclLeakageCount": sum(row["aclLeakage"] for row in case_results),
+                }
+        preserving_aggregate: dict[str, Any] = {}
+        if args.compare_adjacent_preserving_documents:
+            for budget in args.context_budgets:
+                rows = [
+                    next(item for item in row["adjacentPreservingDocumentsByContextK"] if item["contextK"] == budget)
+                    for case, row in zip(cases, case_results)
+                    if case.get("expected_behavior") == "ANSWER"
+                ]
+                preserving_aggregate[str(budget)] = {
+                    "answerableCaseCount": len(rows),
+                    "meanExactEvidencePointCoverage": round(sum(row["pointCoverage"] or 0 for row in rows) / len(rows), 4) if rows else None,
+                    "casesWithAllExpectedPoints": sum(row["allExpectedPointsCovered"] for row in rows),
+                    "casesWithOffSourceLexicalMatches": sum(bool(row["offSourceMatchedPointIds"]) for row in rows),
+                    "meanNonEvidenceChunkCount": round(sum(row["nonEvidenceChunkCount"] for row in rows) / len(rows), 4) if rows else None,
+                    "meanNonEvidenceDocumentCount": round(sum(row["nonEvidenceDocumentCount"] for row in rows) / len(rows), 4) if rows else None,
+                    "documentSetPreservedCaseCount": sum(row["preservedDocumentSet"] for row in rows),
+                    "aclLeakageCount": sum(row["aclLeakage"] for row in case_results),
+                }
         report = {
             "schemaVersion": "chunk-evidence-diagnostic-v1",
             "productionPathChanged": False,
@@ -272,6 +461,19 @@ def main() -> int:
             "answerableCaseCount": len(all_answerable),
             "contextBudgets": list(args.context_budgets),
             "aggregateByContextK": aggregate,
+            "adjacentWindowSelection": {
+                "enabled": args.compare_adjacent_window,
+                "selectionInputs": ["ACL-filtered vector rank", "filename", "chunk locator"],
+                "answerLabelsUsedForSelection": False,
+                "aggregateByContextK": adjacent_aggregate,
+            },
+            "adjacentDocumentPreservingSelection": {
+                "enabled": args.compare_adjacent_preserving_documents,
+                "selectionInputs": ["ACL-filtered documentId", "vector rank", "chunk locator"],
+                "answerLabelsUsedForSelection": False,
+                "replacesUniqueDocumentEvidence": False,
+                "aggregateByContextK": preserving_aggregate,
+            },
             "caseResults": case_results,
             "caveat": "Lexical evidence-point presence in expected source files is a deterministic diagnostic, not a semantic relevance or answer-quality judgment. Off-source lexical matches are reported separately and do not count as evidence. Larger context budgets do not imply runtime adoption.",
         }

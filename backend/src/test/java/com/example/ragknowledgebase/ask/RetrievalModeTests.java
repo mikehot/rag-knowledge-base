@@ -18,6 +18,7 @@ class RetrievalModeTests {
         assertThat(RetrievalMode.fromHeader("keyword-rrf")).isEqualTo(RetrievalMode.KEYWORD_RRF);
         assertThat(RetrievalMode.fromHeader(" VECTOR ")).isEqualTo(RetrievalMode.VECTOR);
         assertThat(RetrievalMode.fromHeader("vector-diversity")).isEqualTo(RetrievalMode.VECTOR_DIVERSITY);
+        assertThat(RetrievalMode.fromHeader("vector-adjacent")).isEqualTo(RetrievalMode.VECTOR_ADJACENT);
     }
 
     @Test

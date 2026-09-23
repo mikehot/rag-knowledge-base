@@ -29,6 +29,46 @@ abstract class KnowledgeApiClient {
   @GET('/api/documents/{id}')
   Future<ApiEnvelope<DocumentItem>> getDocument(@Path('id') String id);
 
+  @GET('/api/documents/{id}/acl')
+  Future<ApiEnvelope<List<DocumentAclItem>>> listDocumentAcl(
+    @Path('id') String id,
+  );
+
+  @POST('/api/documents/{id}/acl')
+  Future<ApiEnvelope<DocumentAclItem>> grantDocumentAcl(
+    @Path('id') String id,
+    @Body() GrantDocumentAclRequest request,
+  );
+
+  @DELETE('/api/documents/{id}/acl/{aclId}')
+  Future<ApiEnvelope<DeleteDocumentAclResponse>> revokeDocumentAcl(
+    @Path('id') String id,
+    @Path('aclId') String aclId,
+  );
+
+  @GET('/api/admin/users')
+  Future<ApiEnvelope<List<PrincipalOption>>> listUsers();
+
+  @GET('/api/admin/departments')
+  Future<ApiEnvelope<List<PrincipalOption>>> listDepartments();
+
+  @GET('/api/admin/roles')
+  Future<ApiEnvelope<List<PrincipalOption>>> listRoles();
+
+  @GET('/api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks')
+  Future<ApiEnvelope<IndexTaskListResponse>> listIndexTasks(
+    @Path('knowledgeBaseId') String knowledgeBaseId,
+    @Query('limit') int limit,
+  );
+
+  @POST(
+    '/api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/{taskId}/retry',
+  )
+  Future<ApiEnvelope<IndexTaskItem>> retryIndexTask(
+    @Path('knowledgeBaseId') String knowledgeBaseId,
+    @Path('taskId') String taskId,
+  );
+
   @DELETE('/api/documents/{id}')
   Future<ApiEnvelope<DeleteDocumentResponse>> deleteDocument(
     @Path('id') String id,

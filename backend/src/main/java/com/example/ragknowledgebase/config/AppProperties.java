@@ -36,7 +36,8 @@ public record AppProperties(
         boolean hybridExperimentEnabled,
         int hybridCandidateK,
         double hybridKeywordWeight,
-        int hybridRrfK
+        int hybridRrfK,
+        boolean contextSelectionExperimentEnabled
     ) {
     }
 

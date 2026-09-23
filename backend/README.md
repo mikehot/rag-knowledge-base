@@ -63,6 +63,7 @@ All secrets and runtime choices are environment variables.
 | `RAG_HYBRID_CANDIDATE_K` | `50` | ACL-visible chunks inspected by the gated in-memory keyword experiment |
 | `RAG_HYBRID_KEYWORD_WEIGHT` | `2.0` | Keyword weight in the gated RRF comparison |
 | `RAG_HYBRID_RRF_K` | `60` | RRF smoothing constant for the gated comparison |
+| `RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED` | `false` | Dedicated gate for `vector-adjacent`; retrieves only Top-K+2 ACL-visible vector candidates and keeps the selected context at Top-K |
 | `AI_EMBEDDING_DIM` | `768` | Must match embedding model |
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |
 | `AI_MODEL_ID` | `google/gemma-4-26b-a4b-qat` | Chat model; verify the identifier in `GET http://localhost:1234/v1/models` |
@@ -190,6 +191,13 @@ For the local, explicitly enabled retrieval experiment only, send
 `X-RAG-Retrieval-Mode: keyword-rrf` or `X-RAG-Retrieval-Mode: vector-diversity`.
 The headers are rejected while
 `RAG_HYBRID_EXPERIMENT_ENABLED=false`; omitting it always uses `VECTOR`.
+
+The experimental `vector-adjacent` mode has a separate, default-off
+`RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED` gate. It starts with the normal
+ACL-filtered vector Top-K, then may substitute one adjacent `chunk#N` from the
+same document when that chunk is within two candidate ranks after Top-K. It
+does not change the Top-K context budget and is recorded as `VECTOR_ADJACENT`
+in ask diagnostics. Enable only for a controlled evaluation, then turn it off.
 Both experiments reuse server-side tenant/knowledge-base/document ACLs and
 record `retrievalMode` in protected diagnostics. `keyword-rrf` reads a bounded
 set of ACL-visible chunks in memory; `vector-diversity` retrieves a bounded

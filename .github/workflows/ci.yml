@@ -26,6 +26,26 @@ jobs:
         working-directory: backend
         run: ./mvnw --batch-mode test
 
+      - name: Require PostgreSQL integration tests to execute
+        run: |
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report = Path("backend/target/surefire-reports/TEST-com.example.ragknowledgebase.integration.PostgresEnterpriseIntegrationTests.xml")
+          if not report.is_file():
+              sys.exit(f"Missing PostgreSQL integration report: {report}")
+          suite = ET.parse(report).getroot()
+          tests = int(suite.attrib.get("tests", 0))
+          skipped = int(suite.attrib.get("skipped", 0))
+          failures = int(suite.attrib.get("failures", 0))
+          errors = int(suite.attrib.get("errors", 0))
+          print(f"PostgreSQL integration tests: {tests} run, {skipped} skipped, {failures} failures, {errors} errors")
+          if tests < 1 or skipped or failures or errors:
+              sys.exit("Docker-backed PostgreSQL integration tests did not execute cleanly")
+          PY
+
   compose-config:
     runs-on: ubuntu-latest
     steps:

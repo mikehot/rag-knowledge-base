@@ -249,6 +249,22 @@ python3 evaluation/run_vector_candidate_diagnostic.py \
 
 This diagnostic answers whether the expected document is ranked just beyond the production boundary. It must not be used to change `AskService`, Top-K, ACL predicates, or the default retrieval mode. The current Q002 result is recorded in [reports/vector-candidate-diagnostic-quality-002-2026-09-22.md](reports/vector-candidate-diagnostic-quality-002-2026-09-22.md).
 
+To check whether the actual ACL-visible ranked chunks contain the dataset's expected answer-point terms, use `run_chunk_evidence_diagnostic.py` with the same disposable database/manifest and one or more metadata-only vector reports:
+
+```bash
+COMPOSE_FILE=/path/to/disposable-compose.yml python3 evaluation/run_chunk_evidence_diagnostic.py \
+  --dataset evaluation/datasets/golden_v1.jsonl \
+  --dataset evaluation/datasets/answer_quality_v1.jsonl \
+  --case-id RAG-003 --case-id RAG-010 --case-id QUALITY-002 \
+  --diagnostics /private/tmp/golden-vector-candidates.json \
+  --diagnostics /private/tmp/quality-vector-candidates.json \
+  --manifest /private/tmp/rag-eval-manifest.json \
+  --db-name rag_eval --context-budgets 5 8 10 \
+  --output /private/tmp/chunk-evidence-diagnostic.json
+```
+
+Chunk text is fetched into process memory only; output is restricted to chunk IDs, ranks, locators, expected-point IDs, and coverage metadata. Only lexical matches inside `expected_source_documents` count as evidence; off-source matches are reported separately. This is not a semantic relevance or answer-quality score. Run `python3 -m unittest discover -s evaluation -p 'test_*.py'` for its local unit checks. The disposable 2026-09-23 chunk-evidence and Top-K comparison is recorded in [reports/chunk-evidence-topk-ab-local-2026-09-23.md](reports/chunk-evidence-topk-ab-local-2026-09-23.md); its mixed repeat results do not justify changing the Top-K=5 default.
+
 To compare a bounded document-diversity selector without calling a model:
 
 ```bash

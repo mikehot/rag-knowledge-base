@@ -114,13 +114,15 @@ flutter run -d <device-id> \
 设备级最小验收顺序：
 
 1. 登录页显示，输入 disposable `demo` 账号后进入问答页。
-2. 上传 `sample_faq.md`，在知识库页看到 `processing` 到 `ready`。
+2. 选择本轮新准备的唯一测试 Markdown 文件上传，在知识库页看到 `processing` 到 `ready`；不要用已经存在的同名/同内容文档推断新上传成功。
 3. 提问“设备保修期是多久？”，看到引用来源、`grounded` 状态、耗时/Token 和反馈按钮。
 4. 提问资料外问题，确认回答显示拒答状态且没有来源卡片。
 5. 返回知识库页，确认就绪文档菜单包含停用和重建索引；失败文档只演示重建索引，不重复上传。
 6. 点击退出登录，确认回到登录页；再次启动应用时只验证会话恢复，不截图 token。
 
-本轮已在 Android 16/API 36 真实设备完成：登录态恢复、`sample_faq.md` 选择/上传后 `ready` 列表、带 `sample_faq.md · chunk#1` 的命中回答、耗时/Token、`HELPFUL` 反馈、资料外拒答、停用/重建索引/删除菜单、退出登录均已看到。带引用回答和拒答截图分别保存在 `/private/tmp/rag-ask-full-query-result.png`、`/private/tmp/rag-ask-outscope-result.png`；知识库菜单截图为 `/private/tmp/rag-sample-menu.png`，退出登录截图为 `/private/tmp/rag-logged-out.png`。这些是本地临时证据，不应直接当作公开 Demo 资产。
+2026-09-23 在 Android 16/API 36 真实设备独立验证了 Flutter 应用内上传：通过系统文件选择器选择本轮新建的唯一文件 `rag-device-upload-check-20260923.md`，应用回到知识库页先显示 `入库中`，随后显示 `1 段 · 就绪`；同一 demo 账号的只读文档 API 轮询也观察到 `processing` 后变为 `ready`、chunkCount=1。验收后已删除该临时后端文档及设备文件。此前记录的 `sample_faq.md` 上传归因不作为本次上传证据：它在本轮操作前已存在于文档清单且为 `ready`，所以仅凭重选后看到 ready 不能证明这次产生了新上传。
+
+此前问答引用、耗时/Token、`HELPFUL` 反馈、资料外拒答、文档菜单和退出登录截图记录仍是本地临时证据，路径分别为 `/private/tmp/rag-ask-full-query-result.png`、`/private/tmp/rag-ask-outscope-result.png`、`/private/tmp/rag-sample-menu.png`、`/private/tmp/rag-logged-out.png`；不应直接当作公开 Demo 资产，也不替代本轮单独核实的上传证据。
 
 截图或录屏不得包含 JWT、密码输入内容、LM Studio Developer Logs、真实客户文档正文或设备序列号；录屏和公开部署仍是独立门槛。
 

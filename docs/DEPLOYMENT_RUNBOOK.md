@@ -9,6 +9,8 @@
 - Chat/Embedding Provider 使用 LM Studio 或其他 OpenAI-compatible 服务。
 - 生产环境必须替换默认账号、JWT Secret、数据库密码、HTTP 明文和本地文件卷。
 
+使用 LM Studio Gemma 4 作为本地 Chat Provider 时，加载模型后在 **Developer → 模型 → Inference → Custom Fields → Enable Thinking** 关闭 thinking，再通过 Structured Output 探针验收。当前后端 OpenAI-compatible 请求不携带 Gemma 专属自定义字段，不能依赖请求体临时覆盖该开关；模型参数应作为 Provider 的本地运行配置管理。2026-09-23 的本地 6 次重复探针在 thinking 关闭时均通过 JSON 合同，开启时重复探针曾 6 次耗尽 token 并失败；这只是结构化输出能力证据，不代替答案质量、ACL 和延迟评测。
+
 启动前检查：
 
 ```bash
@@ -104,7 +106,8 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 | 症状 | 检查 | 处理 |
 |---|---|---|
 | Docker 无法连接 | `docker version`、Docker Desktop 状态 | 启动 Docker，再检查 `docker compose ps` |
-| LM Studio GUI 能打开但请求失败 | `curl http://localhost:1234/v1/models` | 启动 API Server，核对 Chat/Embedding ID |
+| LM Studio GUI 能打开但请求失败 | `curl http://127.0.0.1:1234/v1/models` | 确认 Developer → Local Server 显示 Running；若从隔离执行环境检查，需允许访问本机回环网络；再核对 Chat/Embedding ID |
+| Gemma Structured Output 反复截断/生成无效 JSON | Developer → 模型 → Inference → Custom Fields → Enable Thinking；再运行 `evaluation/probe_structured_output.py` | 对本地 RAG Chat 模型关闭 thinking 并重复探针；不要放宽 JSON 校验或将 `reasoning_content` 当作答案 |
 | 全部上传在 Embedding 失败 | 模型 ID、维度、Provider 日志 | 确认 `text-embedding-nomic-embed-text-v1.5` 和 768 维；不要直接清库 |
 | `/readyz` 失败 | 容器日志、数据库连接、磁盘空间 | 先恢复依赖，再重新检查；不要重复上传 |
 | 文档一直 processing | index task 状态、attempt、失败原因 | 检查 Provider/解析器，修复原因后调用授权 retry |

@@ -2,6 +2,11 @@ package com.example.ragknowledgebase.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.ragknowledgebase.admin.AdminService;
 import com.example.ragknowledgebase.admin.AssignUserRoleRequest;
@@ -30,17 +35,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker = true)
 class PostgresEnterpriseIntegrationTests {
     private static final UUID TENANT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -59,6 +68,8 @@ class PostgresEnterpriseIntegrationTests {
     private static final UUID SECOND_DOCUMENT_ID = UUID.fromString("40000000-0000-0000-0000-000000000104");
     private static final UUID ASK_LOG_ID = UUID.fromString("50000000-0000-0000-0000-000000000101");
     private static final UUID ASK_REQUEST_ID = UUID.fromString("50000000-0000-0000-0000-000000000102");
+    private static final UUID AGENT_KNOWLEDGE_BASE_ID = UUID.fromString("60000000-0000-0000-0000-000000000101");
+    private static final UUID AGENT_DOCUMENT_ID = UUID.fromString("60000000-0000-0000-0000-000000000102");
 
     @Container
     @SuppressWarnings("resource")
@@ -71,6 +82,9 @@ class PostgresEnterpriseIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @Autowired
     private DocumentRepository documentRepository;
@@ -122,8 +136,10 @@ class PostgresEnterpriseIntegrationTests {
             FINANCE_DEPARTMENT_ID
         );
         jdbcTemplate.update("DELETE FROM document_acl WHERE document_id IN (?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID);
-        jdbcTemplate.update("DELETE FROM chunk WHERE document_id IN (?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID);
-        jdbcTemplate.update("DELETE FROM document WHERE id IN (?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM knowledge_base_membership WHERE knowledge_base_id = ?", AGENT_KNOWLEDGE_BASE_ID);
+        jdbcTemplate.update("DELETE FROM chunk WHERE document_id IN (?, ?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID, AGENT_DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM document WHERE id IN (?, ?, ?)", DOCUMENT_ID, SECOND_DOCUMENT_ID, AGENT_DOCUMENT_ID);
+        jdbcTemplate.update("DELETE FROM knowledge_base WHERE id = ?", AGENT_KNOWLEDGE_BASE_ID);
         try {
             Files.deleteIfExists(Path.of("uploads", "lifecycle.md"));
         } catch (Exception ignored) {
@@ -370,6 +386,83 @@ class PostgresEnterpriseIntegrationTests {
         assertThat(documentRepository.findAccessible(SECOND_TENANT_ID, OWNER_ID)).isEmpty();
         assertThat(documentRepository.findAccessibleById(SECOND_DOCUMENT_ID, TENANT_ID, OWNER_ID)).isEmpty();
         assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, SECOND_TENANT_ID, SECOND_USER_ID)).isEmpty();
+    }
+
+    @Test
+    void agentToolHttpRoutesRequireAuthenticationAndFilterDocumentsByReadableKnowledgeBase() throws Exception {
+        insertUser(OWNER_ID, "agent-route-owner-it");
+        insertUser(READER_ID, "agent-route-reader-it");
+        insertDocument("/tmp/agent-route-default.md");
+        jdbcTemplate.update(
+            "UPDATE document SET filename = 'default-kb.md' WHERE id = ?",
+            DOCUMENT_ID
+        );
+        jdbcTemplate.update(
+            "INSERT INTO knowledge_base (id, tenant_id, code, name, created_by) VALUES (?, ?, 'agent-route-kb', 'Agent Route KB', ?)",
+            AGENT_KNOWLEDGE_BASE_ID,
+            TENANT_ID,
+            OWNER_ID
+        );
+        jdbcTemplate.update(
+            "INSERT INTO document (id, tenant_id, knowledge_base_id, user_id, filename, file_type, file_path, checksum, status) " +
+                "VALUES (?, ?, ?, ?, 'agent-kb.md', 'md', '/tmp/agent-kb.md', ?, 'READY')",
+            AGENT_DOCUMENT_ID,
+            TENANT_ID,
+            AGENT_KNOWLEDGE_BASE_ID,
+            OWNER_ID,
+            "integration-checksum-" + AGENT_DOCUMENT_ID
+        );
+        grantKnowledgeBase("READ", READER_ID);
+        grantKnowledgeBase("USER", READER_ID, "READ", TENANT_ID, AGENT_KNOWLEDGE_BASE_ID);
+        var readerAuthentication = authentication(new UsernamePasswordAuthenticationToken(
+            new AuthenticatedUser(READER_ID, TENANT_ID, "agent-route-reader-it"),
+            null,
+            List.of()
+        ));
+
+        mockMvc.perform(get("/api/agent/tools"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/agent/tools").with(readerAuthentication))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.length()").value(3))
+            .andExpect(jsonPath("$.data[0].name").value("search_knowledge"))
+            .andExpect(jsonPath("$.data[1].name").value("list_documents"))
+            .andExpect(jsonPath("$.data[2].name").value("get_document_status"));
+
+        mockMvc.perform(post("/api/agent/tools/execute")
+                .with(readerAuthentication)
+                .contentType("application/json")
+                .content(String.format(
+                    "{\"calls\":[{\"name\":\"list_documents\",\"arguments\":{\"knowledgeBaseId\":\"%s\"}}]}",
+                    KNOWLEDGE_BASE_ID
+                )))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.results[0].success").value(true))
+            .andExpect(jsonPath("$.data.results[0].data.items.length()").value(1))
+            .andExpect(jsonPath("$.data.results[0].data.items[0].filename").value("default-kb.md"));
+
+        mockMvc.perform(post("/api/agent/tools/execute")
+                .with(readerAuthentication)
+                .contentType("application/json")
+                .content(String.format(
+                    "{\"calls\":[{\"name\":\"list_documents\",\"arguments\":{\"knowledgeBaseId\":\"%s\"}}]}",
+                    AGENT_KNOWLEDGE_BASE_ID
+                )))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.results[0].success").value(true))
+            .andExpect(jsonPath("$.data.results[0].data.items.length()").value(1))
+            .andExpect(jsonPath("$.data.results[0].data.items[0].filename").value("agent-kb.md"));
+
+        mockMvc.perform(post("/api/agent/tools/execute")
+                .with(readerAuthentication)
+                .contentType("application/json")
+                .content(String.format(
+                    "{\"calls\":[{\"name\":\"list_documents\",\"arguments\":{\"knowledgeBaseId\":\"%s\"}}]}",
+                    SECOND_KNOWLEDGE_BASE_ID
+                )))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.results[0].success").value(false))
+            .andExpect(jsonPath("$.data.results[0].failureReason").value("PERMISSION_DENIED"));
     }
 
     @Test

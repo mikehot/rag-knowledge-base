@@ -124,13 +124,15 @@
 | FDE 交付材料 | PASS（文档边界） | 2026-09-22 新增 `docs/ARCHITECTURE.md`、`DISCOVERY_BRIEF.md`、`DEMO.md`、`DEPLOYMENT_RUNBOOK.md`、中文/英文 Case Study；内容与当前代码、评测和 MCP smoke 证据对齐，不把本地样例包装成生产或 ROI 结论 |
 | 隔离 API Demo | PASS（一次性本地证据） | 2026-09-22 在独立 PostgreSQL/pgvector + 当前源码服务上完成上传、V12 迁移、索引 `READY/SUCCEEDED`、2 Chunk、授权回答/引用、反馈、fail-closed 拒答、无权限员工拒绝和 MCP 只读边界；详见 `evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md`；尚不是 Flutter 设备或公开部署证据 |
 | Flutter 客户端会话、回答与文档生命周期 | PASS（客户端解析与本地测试） | 2026-09-22 Flutter 已消费 `requestId`、`grounded`、`latencyMs`、`tokenUsage`、`failureReason`、分段耗时和来源；回答卡展示状态/耗时/Token/失败分类，并接入 `HELPFUL`/`NOT_HELPFUL` 反馈；新增显式登录、平台安全 token 存储、启动恢复和退出登录；知识库页已对接已有文档停用/重建索引接口，并保留服务端权限边界；`flutter analyze` 与 6 个 Flutter tests 通过 |
-| Flutter Android 设备级演示 | PASS（本地 disposable 证据） | 2026-09-22 Android 16/API 36 真实设备：登录、会话恢复、`sample_faq.md` 文件选择/上传后 `ready` 列表、命中回答与 `sample_faq.md · chunk#1` 引用、耗时/Token、`HELPFUL` 反馈、资料外拒答、文档菜单边界和退出登录均通过；本地截图保存在 `/private/tmp/rag-*.png`，未写入仓库；不代表公开部署或生产设备证据 |
+| Flutter Android 设备级演示 | PASS（本地 disposable 证据；范围分项记录） | 2026-09-23 Android 16/API 36 真实设备：Flutter 应用内选择唯一临时 Markdown 文件后，知识库 UI 从“入库中”变为“1 段 · 就绪”，只读文档 API 同步观察到 `processing`→`ready`、chunkCount=1；临时后端文档及设备文件随后删除。更早 `sample_faq.md` 已在操作前存在且为 `ready`，因此此前“选择/上传后 ready”的因果归属未核实，不再作为上传证据；其他问答/反馈/拒答/菜单/退出登录截图仍为本地临时记录，详见 `docs/DEMO.md`；不代表公开部署或生产设备证据 |
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
 2026-09-20 真实联调发现默认 LM Studio 模型 ID 已过期：`text-embedding-nomic-embed-text` 会导致全部请求在 Embedding 阶段失败；已根据 `/v1/models` 核实并同步为 `text-embedding-nomic-embed-text-v1.5`，Chat 模型同步为 `google/gemma-4-26b-a4b-qat`。随后发现 Gemma 在 `AI_MAX_TOKENS=1200` 时会把预算消耗在 reasoning，导致可见答案为空或截断；默认配置已同步为 2400。最新完整压力集恢复为 8/8，STRESS-003 的两个目标文档仍完整命中，说明问题属于生成预算而不是召回。2026-09-21 的完整 4000 候选回归显示 Stress 仍为 8/8，但 Golden 为 15/20 且有 4 次结构化输出失败，暂不切换默认值。
 
 2026-09-22 新增无文档 Structured Output Provider 探针，复核当前 Gemma 与已加载 Qwen 模型。Gemma 在简单和多要点问题上均以 `finish_reason=length` 结束且 content JSON 无法解析；Qwen 以 `stop` 结束但 `message.content` 为空、`reasoning_content` 存在，当前 Java Provider 不将后者当作答案。该证据确认 Q006 的剩余问题属于模型输出契约稳定性，不批准直接切换模型；必须先重复探针，再用同一 answer-quality/stress 门禁复核。
+
+2026-09-23 加载此前未加载的默认 Gemma 后复测：thinking 开启时首次两条合成探针通过、随后重复三轮六条请求均耗尽 2400/3200 completion-token 并返回无效 JSON（2/8）。检查 LM Studio UI 确认 `Enable Thinking=on`；关闭后通过本机 API 重跑三轮，6/6 均 HTTP 200、`finish_reason=stop` 且通过严格 JSON 合同（25–140 completion tokens）。此前 shell 失败由本机回环网络沙箱限制导致，不是 LM Studio 服务故障。后续在 thinking 关闭下完成隔离端到端评测：Golden 16/20、answer-quality 9/12、stress 7/8，ACL 泄漏和 Schema 失败均为 0；再完成失败题 chunk 证据诊断与完整质量集 Top-K 5/8 双轮对照，Top-K 8 的 rubric 通过平均与 Top-K 5 相同、Token 平均约高 9.4%，默认保持 5。LM Studio 原开关已恢复 on；详见 `evaluation/reports/structured-output-gemma-recheck-local-2026-09-23.md`、`gemma-thinking-off-end-to-end-local-2026-09-23.md` 和 `chunk-evidence-topk-ab-local-2026-09-23.md`。
 
 2026-09-22 对 `QUALITY-002` 做了 ACL-aware 向量候选扩展诊断：在 50 候选上实际只有 7 个可见 Chunk，`sample_faq.md` 位于 rank 6，正好落在生产 Top-K=5 之后；rank 5/6 相似度差约 0.0031。该证据确认召回缺口是窄边界排序问题，但不支持全局提升 Top-K；下一步只做离线候选扩展/重排对照。
 
@@ -139,19 +141,19 @@
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前本地回归为 95 个 H2/非 Docker 测试和 14 个 PostgreSQL/Testcontainers 集成测试通过，共 109 个测试、0 skipped；GitHub Actions run `35698781377` 已对本次提交成功完成 `backend-tests`、`compose-config` 和 `flutter-tests`，但长期运行基线仍需持续积累。
+- 后端当前本地回归为 95 个 H2/非 Docker 测试和 15 个 PostgreSQL/Testcontainers 集成测试通过，共 110 个测试、0 skipped。CI 新增读取 Surefire XML 的硬门禁：PostgreSQL 集成报告缺失、全部跳过或存在失败都会让 backend job 失败；本次门禁尚未由 GitHub Actions 远端执行。此前 GitHub Actions run `35698781377` 对旧提交通过 `backend-tests`、`compose-config` 和 `flutter-tests`，长期运行基线仍需持续积累。
 - 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
 - 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
 - 权限拒绝已有基础审计事件、tenant 范围内只读查询 API 和低基数拒绝计数；尚未提供保留策略、脱敏策略和评测记录。
 - 应用自身默认不记录文档正文和 Prompt，但本地真实联调确认 LM Studio Developer Logs 会显示 Embedding 输入、Prompt 和模型输出；客户敏感资料上线前必须单独配置或替换 Provider 日志策略，不能把应用日志边界误认为全链路日志边界。
 - 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针、反馈率/ACL 拒绝/Token/估算成本指标及首版告警 guardrail；尚未用真实 7 天基线调优阈值。
-- 已有 `golden-v1`（20 题）、`answer-quality-v1`（12 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；答案质量扩展集已完成 VECTOR/KEYWORD_RRF 后端 A/B，结果支持区分召回缺口与生成稳定性问题；新增 Structured Output 有界重试，但本地模型非确定性仍使答案完整性未达稳定门槛；受保护诊断采集器和 Recall@1/3/5 评分器已实现，并已用真实 HTTP 诊断样本形成排序边界报告；评测 fixture 现在会幂等补齐 actor roles；云端成本对照和独立的模型评分仍未完成。
+- 已有 `golden-v1`（20 题）、`answer-quality-v1`（12 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；答案质量扩展集已完成 VECTOR/KEYWORD_RRF 后端 A/B；Gemma thinking 关闭时的 disposable 端到端复测为 Golden 16/20、answer-quality 9/12、stress 7/8，结构化失败和 ACL 泄漏均为 0；stress 检索诊断 8/8、Recall@5=100%。新增 chunk 级指定来源词项证据诊断（报告不落文档正文），7 个失败题 Top-5 evidence-point coverage 28.57%、Top-8/10 为 100%，但 Top-8/10 每题平均多带 6 个无明确答案点的 chunk。完整质量集 Top-K=5/8 各运行两轮，rubric 通过均值均为 10/12；Top-8 词项答案点覆盖/引用较高但单轮波动且平均 Token +9.4%，默认仍为 5；详见 `evaluation/reports/chunk-evidence-topk-ab-local-2026-09-23.md`。云端成本对照和独立模型评分仍未完成。
 - 没有生产级 BM25/全文 Hybrid Search 或 Reranker；PostgreSQL 默认 simple FTS 的中文切词预实验不足，`pg_trgm` 仅完成 disposable 查询验证。离线 keyword candidate、文档级 RRF 模拟、ACL-aware 线上候选 A/B、默认关闭的后端 keyword-RRF 端到端 A/B 和默认关闭的 vector-diversity 端到端 A/B 已完成；当前结果不批准默认启用，也没有成本结论。
 - 应用内只读 Agent Tool Registry 和最小无状态 MCP adapter 已实现并完成单元回归；`evaluation/run_mcp_smoke.py` 已提供可重复的本地 HTTP 边界检查；尚无完整 MCP transport/auth conformance、第三方 SDK/client 互操作证据、模型驱动 Agent loop 或写工具。
 - Flutter 问答客户端现在解析并展示后端回答契约、来源、失败分类、耗时/Token，并可提交单次反馈；当前已有独立登录页、平台安全 token 存储、启动恢复和退出登录；知识库页已覆盖可见文档的停用、失败/就绪重建索引和删除入口，但尚无 ACL 管理、已停用文档恢复列表和批量任务管理页面。Flutter CI 已由 run `35698781377` 远端验证通过；Android 设备级截图已完成，尚无录屏、公开可访问 Demo 或生产设备证据。
-- 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。Top-K=8 可找回 RAG-014 但整体质量低于 Top-K=5，默认继续保持 5。
-- 当前本地模型尚未通过独立 Structured Output 能力门禁；不要对截断 JSON 做宽松解析，也不要未经契约设计把 `reasoning_content` 当作 `message.content` 的替代。模型切换必须先通过重复探针、答案质量、压力集、ACL、延迟和 Token 复核。
+- 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。Top-K=8 在失败题离线词项覆盖上优于 5，但完整 answer-quality 两轮未稳定提高 rubric 通过均值且 Token 更高，默认继续保持 5。
+- Gemma 在 LM Studio `Enable Thinking=off` 时通过了 6/6 独立 Structured Output 合同探针；端到端三集合复测中结构化失败=0、ACL 泄漏=0、stress Recall@5=100%，但 Golden 16/20、answer-quality 9/12、stress 7/8，答案质量门未通过。本地设置尚未持久化/自动化，继续保持 fail-closed，不要放宽 JSON 解析，也不要把 `reasoning_content` 当作 `message.content` 替代。
 - 第一版架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；已有一次隔离 API Demo 记录和 Android 设备截图；尚无录屏、公开可访问 Demo、真实客户生产部署和长期运营基线。
 
 ## 下一步
@@ -159,9 +161,9 @@
 RAG 基线、ACL、Structured Output 和应用内只读 Agent Tool 边界已经具备实现与真实 HTTP 证据；本地评测仍暴露召回排序和 Provider 吞吐问题，下一阶段先收敛证据，再决定是否进入 MCP：
 
 1. 在 Docker-backed CI 修复后执行新增 PostgreSQL ACL、知识库过滤和工具 HTTP 路由集成测试。
-2. `QUALITY-002` 已确认是向量 Top-5 边界排序缺口，但离线和端到端多样性重排都没有产生净质量收益；`QUALITY-006` 的目标资料已在 Top-5 第 3 位且高于阈值，剩余问题是模型结构化输出/答案判定。保持 Top-K、Hybrid Search、Reranker 和 vector-diversity 默认关闭，先完成 V12 的 Docker-backed/CI 集成回归和评测稳定性复核。
-3. 保持 2400 默认，优先修复召回缺口和本地模型稳定性；未通过质量、P95 和成本门槛前不打开 `AI_COMPLEX_ROUTING_ENABLED`。
-4. Flutter 客户端会话、回答契约、单文档生命周期、CI 门禁和 Android 设备级演示证据已对齐；下一步评估是否需要 ACL 管理和批量任务页面，再决定公开部署；第三方 SDK/client conformance 作为独立后续门槛，Agent 写操作继续不开放。
+2. 已完成 `QUALITY-002`/`QUALITY-006` 的 chunk 证据、服务端拒答门控、重复 API 对照和固定上下文生成重放：两题答案点 chunk 分别位于 rank 7 和 rank 6，Top-K=5 两轮均失败；Top-K=8 首轮通过、第二轮失败。API failureReason 是生成后的 `INSUFFICIENT_CONTEXT`，不是服务端空候选/阈值短路 `RETRIEVAL_MISS`。只提供各自相关 FAQ 片段时，Gemma Thinking-off 固定上下文调用两题均 5/5 通过 JSON、引用和全部答案点覆盖，说明模型能依据干净充分的证据作答；K=8 失败更可能与上下文组合/干扰或采样交互有关，当前无法再拆分。默认 Top-K=5 不变，不改拒答契约；详见 `evaluation/reports/quality-002-006-failure-classification-local-2026-09-23.md`。
+3. `QUALITY-002` 曾有向量 Top-5 边界排序缺口，但离线和端到端多样性重排未产生净质量收益；继续保持 Top-K、Hybrid Search、Reranker 和 vector-diversity 默认关闭，并完成 V12 CI/评测稳定性复核。
+4. answer-quality 门槛稳定通过后，再进入最小 Flutter ACL 管理 UI 验收；之后补完整设备 Demo 录屏并评估公开部署。第三方 SDK/client conformance 单独排期，Agent 写操作继续不开放。
 
 ## 文档维护规则
 

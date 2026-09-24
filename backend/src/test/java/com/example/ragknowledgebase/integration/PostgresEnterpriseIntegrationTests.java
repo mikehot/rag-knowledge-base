@@ -2,6 +2,13 @@ package com.example.ragknowledgebase.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -15,6 +22,9 @@ import com.example.ragknowledgebase.admin.CreateDepartmentRequest;
 import com.example.ragknowledgebase.admin.CreateKnowledgeBaseRequest;
 import com.example.ragknowledgebase.admin.CreateUserRequest;
 import com.example.ragknowledgebase.admin.GrantKnowledgeBaseMembershipRequest;
+import com.example.ragknowledgebase.ai.AiProvider;
+import com.example.ragknowledgebase.ai.AiProviderResponse;
+import com.example.ragknowledgebase.ai.EmbeddingProvider;
 import com.example.ragknowledgebase.ask.AskFeedbackRating;
 import com.example.ragknowledgebase.ask.AskFeedbackRequest;
 import com.example.ragknowledgebase.ask.AskFeedbackService;
@@ -22,6 +32,8 @@ import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
 import com.example.ragknowledgebase.audit.AuditQueryService;
 import com.example.ragknowledgebase.common.BusinessException;
+import com.example.ragknowledgebase.document.ChunkJdbcRepository;
+import com.example.ragknowledgebase.document.DocumentAclResponse;
 import com.example.ragknowledgebase.document.DocumentRepository;
 import com.example.ragknowledgebase.document.DocumentAclService;
 import com.example.ragknowledgebase.document.DocumentService;
@@ -41,9 +53,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -117,6 +131,15 @@ class PostgresEnterpriseIntegrationTests {
     @Autowired
     private AskFeedbackService askFeedbackService;
 
+    @Autowired
+    private ChunkJdbcRepository chunkJdbcRepository;
+
+    @MockitoBean
+    private AiProvider aiProvider;
+
+    @MockitoBean
+    private EmbeddingProvider embeddingProvider;
+
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -130,6 +153,7 @@ class PostgresEnterpriseIntegrationTests {
         jdbcTemplate.update("DELETE FROM ask_feedback WHERE ask_log_id = ?", ASK_LOG_ID);
         jdbcTemplate.update("DELETE FROM ask_retrieval_hit WHERE ask_log_id = ?", ASK_LOG_ID);
         jdbcTemplate.update("DELETE FROM ask_log WHERE id = ?", ASK_LOG_ID);
+        jdbcTemplate.update("DELETE FROM ask_log WHERE user_id IN (?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID);
         jdbcTemplate.update("DELETE FROM audit_event WHERE user_id IN (?, ?, ?, ?)", OWNER_ID, READER_ID, OUTSIDER_ID, SECOND_USER_ID);
         jdbcTemplate.update(
             "DELETE FROM knowledge_base_membership WHERE principal_id IN (?, ?, ?, ?, ?)",
@@ -399,6 +423,86 @@ class PostgresEnterpriseIntegrationTests {
             .extracting("id")
             .containsExactly(DOCUMENT_ID);
         assertThat(accessControlService.canManageDocument(roleManager, DOCUMENT_ID)).isTrue();
+    }
+
+    @Test
+    void departmentDocumentAclGrantAndRevokeGateRetrievalAndCitedAnswers() throws Exception {
+        insertDepartment(SALES_DEPARTMENT_ID, "MANAGED-SALES-DOC-ACL");
+        insertDepartment(FINANCE_DEPARTMENT_ID, "MANAGED-FINANCE-DOC-ACL");
+        insertUser(OWNER_ID, "dept-acl-owner-it");
+        insertUser(READER_ID, "dept-acl-sales-reader-it", TENANT_ID, SALES_DEPARTMENT_ID);
+        insertUser(OUTSIDER_ID, "dept-acl-finance-outsider-it", TENANT_ID, FINANCE_DEPARTMENT_ID);
+        insertDocument();
+        jdbcTemplate.update(
+            """
+                INSERT INTO chunk (id, document_id, seq, locator, content, embedding)
+                VALUES (?, ?, 1, 'chunk#1', 'Sales travel must be booked 14 days ahead.', ?::vector)
+                """,
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            unitVector()
+        );
+        when(embeddingProvider.embed(anyList())).thenAnswer(invocation -> {
+            List<String> inputs = invocation.getArgument(0);
+            return inputs.stream().map(input -> unitVectorArray()).toList();
+        });
+        AiProviderResponse citedAnswer = new AiProviderResponse(
+            "{\"answer\":\"Book 14 days ahead.\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            40,
+            12,
+            "stop"
+        );
+        when(aiProvider.generate(anyString())).thenReturn(citedAnswer);
+        when(aiProvider.generate(anyString(), anyLong())).thenReturn(citedAnswer);
+
+        AuthenticatedUser owner = new AuthenticatedUser(OWNER_ID, TENANT_ID, "dept-acl-owner-it");
+        AuthenticatedUser reader = new AuthenticatedUser(READER_ID, TENANT_ID, "dept-acl-sales-reader-it");
+        AuthenticatedUser outsider = new AuthenticatedUser(OUTSIDER_ID, TENANT_ID, "dept-acl-finance-outsider-it");
+
+        assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID)).isEmpty();
+        assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5)).isEmpty();
+
+        DocumentAclResponse grant = documentAclService.grant(
+            owner,
+            DOCUMENT_ID,
+            new GrantDocumentAclRequest("DEPARTMENT", SALES_DEPARTMENT_ID, "READ")
+        );
+        Integer versionAfterGrant = permissionVersion();
+
+        assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID))
+            .extracting("id")
+            .containsExactly(DOCUMENT_ID);
+        assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, TENANT_ID, READER_ID)).isPresent();
+        assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5))
+            .extracting("documentId")
+            .containsExactly(DOCUMENT_ID);
+        assertThat(documentRepository.findAccessible(TENANT_ID, OUTSIDER_ID)).isEmpty();
+        assertThat(chunkJdbcRepository.search(TENANT_ID, OUTSIDER_ID, unitVectorArray(), 5)).isEmpty();
+        askAs(reader)
+            .andExpect(jsonPath("$.data.found").value(true))
+            .andExpect(jsonPath("$.data.sources[0].filename").value("acl.md"));
+        askAs(outsider)
+            .andExpect(jsonPath("$.data.found").value(false))
+            .andExpect(jsonPath("$.data.sources").isEmpty());
+
+        assertThatThrownBy(() -> documentAclService.revoke(reader, DOCUMENT_ID, grant.id()))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(404);
+        assertThat(countDeniedAudit(READER_ID, "DOCUMENT_ACL_REVOKE", "DOCUMENT", DOCUMENT_ID)).isEqualTo(1);
+
+        documentAclService.revoke(owner, DOCUMENT_ID, grant.id());
+
+        assertThat(permissionVersion()).isGreaterThan(versionAfterGrant);
+        assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID)).isEmpty();
+        assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, TENANT_ID, READER_ID)).isEmpty();
+        assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5)).isEmpty();
+        clearInvocations(aiProvider);
+        askAs(reader)
+            .andExpect(jsonPath("$.data.found").value(false))
+            .andExpect(jsonPath("$.data.sources").isEmpty());
+        verify(aiProvider, never()).generate(anyString());
+        verify(aiProvider, never()).generate(anyString(), anyLong());
     }
 
     @Test
@@ -1086,6 +1190,28 @@ class PostgresEnterpriseIntegrationTests {
             java.sql.Timestamp.from(createdAt),
             userId
         );
+    }
+
+    private ResultActions askAs(AuthenticatedUser user) throws Exception {
+        return mockMvc.perform(post("/api/ask")
+                .contentType("application/json")
+                .content("{\"question\":\"When must sales travel be booked?\"}")
+                .with(authentication(new UsernamePasswordAuthenticationToken(user, null, List.of()))))
+            .andExpect(status().isOk());
+    }
+
+    private Integer permissionVersion() {
+        return jdbcTemplate.queryForObject("SELECT permission_version FROM document WHERE id = ?", Integer.class, DOCUMENT_ID);
+    }
+
+    private String unitVector() {
+        return "[1," + "0,".repeat(766) + "0]";
+    }
+
+    private float[] unitVectorArray() {
+        float[] vector = new float[768];
+        vector[0] = 1f;
+        return vector;
     }
 
     private String zeroVector() {

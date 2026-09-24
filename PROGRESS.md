@@ -17,7 +17,7 @@
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25（字节码目标 17）、PostgreSQL 16 + pgvector、LM Studio 上传/命中/拒答/删除闭环通过 |
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。2026-09-24 新增 PostgreSQL 集成测试覆盖文档级 DEPARTMENT 授权→列表/详情/向量检索可见、问答带引用→撤权→三处不可见、问答拒答无引用且模型未被调用；非管理者撤权 404 并记审计。缺：部门授权的一次真机抽测 |
-| 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 124 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
+| 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 125 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；**质量门未通过** | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
 | 5. 检索优化决策 | 暂停（阶段 B 在真实语料上恢复） | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
@@ -99,7 +99,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - **评测可复现性**：质量门已冻结于 `evaluation/README.md`（rubric-v2，连续 3 轮 ≥ 10/12）；每组前用探针确认 Thinking-off，但开关本身仍需在 LM Studio UI 手动设置。同配置两次会话间 Golden 波动 17→15，单轮 Golden/Stress 证据偏弱。
 - **ACL**：部门授权/撤权与撤权后问答已由集成测试 `departmentDocumentAclGrantAndRevokeGateRetrievalAndCitedAnswers` 覆盖（模型被 mock，验证的是权限与检索链路，不是模型行为）；部门授权尚无真机抽测；只有 allow 型 ACL，无显式 deny、继承冲突和权限缓存失效策略；用户/部门停用、批量导入未做。
 - **观测**：告警阈值尚无真实 7 天基线；审计事件无保留/脱敏策略。
-- **索引可用性**：reindex 进行中或失败会让已就绪文档暂时不可检索（2026-09-24 演练确认），待修复。
+- **Embedding 迁移**：Chunk 未记录生成它的 Embedding 模型；更换模型时，重建完成前旧向量仍参与检索，需要全量重建并暂停问答。
 - **检索**：无生产级全文检索或 Reranker；现有实验均默认关闭，且无成本结论。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
 - **交付**：无干净环境全流程演练记录、脱敏录屏、公开 Demo；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。
@@ -113,7 +113,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 1. A1 部门 ACL 授权/撤权，以及撤权后员工问答/引用的完整路径：自动化测试已完成（2026-09-24，124 tests 通过）；剩一次真机抽测，可并入 A5 录屏时一起完成。
 2. A2 全新 clone 演练（已完成 2026-09-24）：README/DEMO 共 8 处缺口已修复，README 命令已在第二个全新 clone 中逐字执行通过；机器已有缓存时，从 clone 到首个带引用回答不到 1 分钟。见 `evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md`。
-   - **新发现缺陷**：reindex 进行中或失败时，文档不是 `READY`，旧 Chunk 虽保留却不参与检索，文档在重试成功前对问答不可用；replace 路径不受影响。待修复。
+   - 演练发现的缺陷已修复：reindex/replace 进行中或失败时，文档继续用上一版已提交的 Chunk 回答（检索不再按文档状态过滤）；有集成测试和实机复测，后端全量 125 tests 通过。
 3. A3 V0.1 质量声明：当前评测结果作为已知局限写明，质量门继续跟踪但不阻塞 V0.1。
 4. A4 重写 `PORTFOLIO.md` 与 README 开头（面向两类读者），同步 Case Study，归档 `CODEX_PROMPT.md`。
 5. A5 3–5 分钟脱敏演示视频和截图。

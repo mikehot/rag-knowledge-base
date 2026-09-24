@@ -187,9 +187,9 @@ public class KnowledgeDocument {
     }
 
     public void markFailed(String message) {
+        // chunkCount keeps describing the previous committed version, which stays searchable.
         this.status = DocumentStatus.FAILED;
         this.errorMsg = message;
-        this.chunkCount = 0;
     }
 
     public void markProcessing() {

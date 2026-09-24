@@ -46,11 +46,11 @@ An administrator uploads documents; the system parses, chunks, embeds, and index
 |---|---|---|
 | M1 Reproducible RAG baseline | `verified` | Upload → index → cited answer → refusal → delete, on JDK 25 + pgvector + LM Studio |
 | M2 Identity, ACL, document lifecycle | `in-progress` | Tenant/department/role/document ACL enforced in SQL; lifecycle and index tasks; device evidence for USER/ROLE grant/revoke. Department grant/revoke and the post-revoke ask/citation path are covered by a PostgreSQL integration test (2026-09-24). Open: one device spot check |
-| M3 Structured answers, audit, observability, feedback | `verified` | Structured-output contract, fail-closed handling, requestId/timings, audit, metrics, feedback; 124 backend tests |
+| M3 Structured answers, audit, observability, feedback | `verified` | Structured-output contract, fail-closed handling, requestId/timings, audit, metrics, feedback; 125 backend tests |
 | M4 Evaluation baseline | tooling `verified` | golden-v1 (20), answer-quality-v1 (12), stress (8); frozen gate in `evaluation/README.md`. Current default fails the gate (9–10/12) on a 7-document synthetic fixture |
 | M5 Evaluation-driven retrieval | **paused** | Keyword-RRF, diversity, adjacent, chunk size, and heading-aware chunking all evaluated; none beats the default on this fixture. Resumes in Phase B on a realistic corpus |
 | M6 Read-only Agent tools / MCP | `in-progress` (bounded) | Three read-only tools and a stateless MCP adapter; local smoke 16/16. Real-client demo is optional Phase C |
-| M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found a reindex availability defect). Open: video, portfolio refresh |
+| M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Open: video, portfolio refresh |
 
 ## 6. Plan
 

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -34,6 +35,7 @@ import com.example.ragknowledgebase.audit.AuditQueryService;
 import com.example.ragknowledgebase.common.BusinessException;
 import com.example.ragknowledgebase.document.ChunkJdbcRepository;
 import com.example.ragknowledgebase.document.DocumentAclResponse;
+import com.example.ragknowledgebase.document.DocumentProcessor;
 import com.example.ragknowledgebase.document.DocumentRepository;
 import com.example.ragknowledgebase.document.DocumentAclService;
 import com.example.ragknowledgebase.document.DocumentService;
@@ -133,6 +135,9 @@ class PostgresEnterpriseIntegrationTests {
 
     @Autowired
     private ChunkJdbcRepository chunkJdbcRepository;
+
+    @Autowired
+    private DocumentProcessor documentProcessor;
 
     @MockitoBean
     private AiProvider aiProvider;
@@ -503,6 +508,63 @@ class PostgresEnterpriseIntegrationTests {
             .andExpect(jsonPath("$.data.sources").isEmpty());
         verify(aiProvider, never()).generate(anyString());
         verify(aiProvider, never()).generate(anyString(), anyLong());
+    }
+
+    @Test
+    void previousIndexStaysSearchableWhileReindexIsProcessingAndAfterItFails() throws Exception {
+        Path source = Files.createTempFile("reindex-availability", ".md");
+        try {
+            Files.writeString(source, "Sales travel must be booked 14 days ahead.");
+            insertUser(OWNER_ID, "reindex-owner-it");
+            insertUser(READER_ID, "reindex-reader-it");
+            insertDocument(source.toString());
+            grantKnowledgeBase("READ", READER_ID);
+            jdbcTemplate.update(
+                """
+                    INSERT INTO chunk (id, document_id, seq, locator, content, embedding)
+                    VALUES (?, ?, 1, 'chunk#1', 'previous version', ?::vector)
+                    """,
+                UUID.randomUUID(),
+                DOCUMENT_ID,
+                unitVector()
+            );
+            jdbcTemplate.update("UPDATE document SET chunk_count = 1 WHERE id = ?", DOCUMENT_ID);
+            AuthenticatedUser owner = new AuthenticatedUser(OWNER_ID, TENANT_ID, "reindex-owner-it");
+
+            documentService.reindex(owner, DOCUMENT_ID);
+
+            assertThat(documentStatus()).isEqualTo("PROCESSING");
+            assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5))
+                .extracting("content")
+                .containsExactly("previous version");
+
+            when(embeddingProvider.embed(anyList())).thenThrow(new IllegalStateException("embedding endpoint down"));
+            documentProcessor.process(DOCUMENT_ID);
+
+            assertThat(documentStatus()).isEqualTo("FAILED");
+            assertThat(jdbcTemplate.queryForObject("SELECT chunk_count FROM document WHERE id = ?", Integer.class, DOCUMENT_ID))
+                .isEqualTo(1);
+            assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5))
+                .extracting("content")
+                .containsExactly("previous version");
+
+            reset(embeddingProvider);
+            when(embeddingProvider.embed(anyList())).thenAnswer(invocation -> {
+                List<String> inputs = invocation.getArgument(0);
+                return inputs.stream().map(input -> unitVectorArray()).toList();
+            });
+            documentProcessor.process(DOCUMENT_ID);
+
+            assertThat(documentStatus()).isEqualTo("READY");
+            assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5))
+                .extracting("content")
+                .containsExactly("Sales travel must be booked 14 days ahead.");
+
+            documentService.disable(owner, DOCUMENT_ID);
+            assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5)).isEmpty();
+        } finally {
+            Files.deleteIfExists(source);
+        }
     }
 
     @Test
@@ -1198,6 +1260,10 @@ class PostgresEnterpriseIntegrationTests {
                 .content("{\"question\":\"When must sales travel be booked?\"}")
                 .with(authentication(new UsernamePasswordAuthenticationToken(user, null, List.of()))))
             .andExpect(status().isOk());
+    }
+
+    private String documentStatus() {
+        return jdbcTemplate.queryForObject("SELECT status FROM document WHERE id = ?", String.class, DOCUMENT_ID);
     }
 
     private Integer permissionVersion() {

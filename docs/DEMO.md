@@ -104,7 +104,7 @@ python3 evaluation/run_mcp_smoke.py \
 2. 此时提问返回 `failureReason=EMBEDDING_ERROR`（HTTP 200，不会报 500）；调用 `POST /api/documents/$DOC_ID/reindex` 后，任务约 90 秒后进入 `FAILED`，`attemptCount=3`，失败原因可读。查看方式：`GET /api/admin/knowledge-bases/$KB_ID/index-tasks`，其中 `KB_ID` 为文档详情里的 `knowledgeBaseId`。
 3. 用正常配置重启，调用 `POST /api/admin/knowledge-bases/$KB_ID/index-tasks/$TASK_ID/retry`，任务在第 4 次尝试时 `SUCCEEDED`，文档回到 `ready`，问答恢复引用。
 
-已知限制（2026-09-24 演练发现）：重建索引进行中或失败后，文档状态不是 `READY`，旧 Chunk 虽然保留在库中，却不会被检索，所以重试成功前该文档对问答不可用。文档替换（replace）路径会在失败时恢复旧的可检索版本，reindex 目前不会。
+可讲的设计点：重建进行中或失败时，文档继续用上一版已提交的内容回答（状态显示 `failed`，`chunkCount` 保持不变），不会因为一次模型服务故障而下线。这是 2026-09-24 演练中发现的缺陷，已修复并有集成测试覆盖。
 
 ## 8. Flutter 普通用户设备演示（上传链路已验收）
 

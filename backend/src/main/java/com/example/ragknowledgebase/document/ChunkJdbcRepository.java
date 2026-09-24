@@ -40,6 +40,13 @@ public class ChunkJdbcRepository {
         return search(tenantId, userId, embedding, topK, null);
     }
 
+    /**
+     * Chunk rows only exist for a committed index version: DocumentProcessor
+     * replaces them in one transaction after all embeddings succeed. The
+     * document status is therefore not a retrieval filter, so a document keeps
+     * answering from its previous version while a reindex or replacement is
+     * processing or after it fails.
+     */
     public List<ChunkSearchResult> search(
         UUID tenantId,
         UUID userId,
@@ -56,7 +63,6 @@ public class ChunkJdbcRepository {
             JOIN document d ON d.id = c.document_id
             WHERE d.tenant_id = ?
             """ + knowledgeBaseFilter + """
-              AND d.status = 'READY'
               AND d.deleted_at IS NULL
               AND d.disabled_at IS NULL
               AND (
@@ -142,7 +148,7 @@ public class ChunkJdbcRepository {
     }
 
     /**
-     * Returns only the current user's visible READY chunks for the gated
+     * Returns only the current user's visible searchable chunks for the gated
      * retrieval experiment. The ACL predicates intentionally mirror search().
      */
     public List<ChunkSearchResult> findVisibleReadyChunks(UUID tenantId, UUID userId, int limit) {
@@ -154,7 +160,6 @@ public class ChunkJdbcRepository {
             FROM chunk c
             JOIN document d ON d.id = c.document_id
             WHERE d.tenant_id = ?
-              AND d.status = 'READY'
               AND d.deleted_at IS NULL
               AND d.disabled_at IS NULL
               AND (

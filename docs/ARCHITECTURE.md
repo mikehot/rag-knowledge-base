@@ -64,7 +64,7 @@ sequenceDiagram
     W->>Q: SUCCEEDED or retry/FAILED
 ```
 
-任务以 `documentId:contentVersion` 作为幂等边界，支持有限自动重试、人工重试和进程重启恢复。替换文档只有在新版本索引成功后才切换可检索内容。
+任务以 `documentId:contentVersion` 作为幂等边界，支持有限自动重试、人工重试和进程重启恢复。替换或重建索引只有在新版本全部 Embedding 成功后，才在同一事务中切换 Chunk；在此之前（处理中或失败），文档继续用上一版已提交的 Chunk 回答，检索不依赖文档状态，只排除停用和删除的文档。已知限制：Chunk 未记录 Embedding 模型；更换 Embedding 模型时，重建完成前旧向量仍参与检索，需要全量重建，并在完成前暂停问答。
 
 ### 问答与引用
 

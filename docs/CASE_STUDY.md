@@ -32,10 +32,10 @@
 | Retrieval Stress | 最近记录的 Thinking-off 运行 7/8；历史有 8/8；最近质量 A/B 的 ACL leakage=0 | 小样本、配置相关；不是生产安全保证 |
 | Answer Quality | 修订 rubric 的 VECTOR 12 题集两次记录 10/12；Q002/Q006 两次均失败。source-preserving 离线候选无替换、覆盖仍 75%（6/8） | 评测工具可复跑，但质量门未通过；不启用 Hybrid、Reranker 或相邻策略 |
 | Structured Output | LM Studio Gemma Thinking-off 合同探针 6/6；Thinking-on 重复探针曾发生 token 耗尽/无效 JSON | Provider 本地设置敏感；默认仍 fail-closed，不代表跨配置稳定 |
-| ACL / Flutter 运营 | 2026-09-23 disposable API 实测：授权后员工搜索返回目标来源；撤权后搜索与文档列表均不再返回该文档，leakage=0。失败索引任务 attempt 3 后管理员 retry，attempt 4 成功。Flutter ACL/任务界面静态分析与模型测试通过 | 后端权限与任务恢复 API 已验收；Flutter 管理 UI 被 Android `INSTALL_FAILED_USER_RESTRICTED` 阻断，尚无真机交互证据 |
+| ACL / Flutter 运营 | 9/23 API 测试：撤权后员工搜索和列表均不再返回目标文档。9/24 真机 `.verify`：管理员授权/撤权令员工列表 5→6→5；索引失败 3/3 后 UI 安全重试至 4/6 成功。9/24 新增按文档 MANAGE 授权的主体候选 API，跨租户和无管理权拒绝通过 PostgreSQL 集成测试 | 管理员 Flutter 主路径已有设备证据；主体目录新 API 已修复非系统管理员 403，但更新后 Flutter 路径尚未设备点验。撤权后的一次问答未通过结构化输出，不能声称完整拒答 |
 | MCP | 只读 HTTP smoke 16/16；四个 adapter 单元测试通过；恢复后服务再次 16/16 | 不是完整 MCP SDK/client conformance |
 
-2026-09-22 的空 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈、拒答和员工无权限拒绝；2026-09-23 Android 设备证据覆盖新文件上传到 READY。随后在独立 disposable PostgreSQL 和上传目录中完成一次人工备份/恢复，恢复后 7 个任务状态、员工 ACL 隔离及 MCP smoke 均通过。该证据不包括生产备份调度、异地副本、加密或 PITR。Flutter ACL 管理 UI 仍未设备验收；以上完整业务流程仍待一次性连续重演，详见 [PROGRESS.md](../PROGRESS.md)、[备份恢复记录](../evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md) 与 [DEMO.md](DEMO.md)。
+2026-09-22 的 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈和拒答；2026-09-23 Android 设备证据覆盖新文件上传到 READY。随后独立完成本地人工备份/恢复。2026-09-24 API 连续演示验证授权引用、拒答、权限拒绝、反馈、MCP 16/16 和索引失败恢复；同日隔离 Android `.verify` 包真实操作 Flutter ACL grant/revoke 和 index-task failure/retry，员工文档列表随 UI 操作由 5→6→5，失败任务从 3/3 安全重试至 4/6 成功。初始问法仍暴露 Top-5 措辞敏感，故不代表质量门通过。本地 LM Studio 合成日志探针确认 model-I/O stream 可显示输入/输出；68 个 server-log 文件的权限位为 0644，但未读取正文，model I/O 是否持久化及有效访问/保留策略仍未核实。设备报告仅覆盖合成管理员主路径，不等于真机问答/引用或生产安全验证。完整边界见 [PROGRESS.md](../PROGRESS.md)、[连续演示记录](../evaluation/reports/continuous-disposable-demo-local-2026-09-24.md)、[真机 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)、[Provider 日志复核](../evaluation/reports/provider-log-boundary-review-local-2026-09-24.md)、[备份恢复记录](../evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md) 与 [DEMO.md](DEMO.md)。
 
 ## 5. 业务价值假设
 
@@ -59,7 +59,8 @@
 
 ## 7. 下一阶段
 
-- 用当前 [DEMO.md](DEMO.md) 完成一次干净 disposable 环境演示，增加 ACL 撤权后拒绝引用、失败任务安全重试及备份/恢复验收；只保留非敏感聚合记录。
+- 继续保持 Flutter 运营 UI 的合成设备回归；在设备上点验新文档 MANAGE 主体候选路径和撤权后员工问答/引用，并只保留非敏感聚合记录。
+- 审查 LM Studio Developer Logs/model-I/O 持久化、访问、脱敏和保留控制；在配置不清楚或不可接受前，不发送敏感客户内容。
 - 用真实业务文档补充评测集和反馈闭环。
 - 在第三方 MCP SDK/client 验证明确需求后，再决定是否做完整互操作支持。
 - 只有当评测、P95、成本和上下文干扰同时通过门槛，才考虑 Hybrid Search 或 Reranker。

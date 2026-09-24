@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.ragknowledgebase.admin.AdminService;
 import com.example.ragknowledgebase.admin.AssignUserRoleRequest;
 import com.example.ragknowledgebase.admin.CreateDepartmentRequest;
@@ -85,6 +86,9 @@ class PostgresEnterpriseIntegrationTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private DocumentRepository documentRepository;
@@ -395,6 +399,48 @@ class PostgresEnterpriseIntegrationTests {
             .extracting("id")
             .containsExactly(DOCUMENT_ID);
         assertThat(accessControlService.canManageDocument(roleManager, DOCUMENT_ID)).isTrue();
+    }
+
+    @Test
+    void aclPrincipalDirectoryRequiresDocumentManageAndStaysInTenant() throws Exception {
+        insertUser(OWNER_ID, "acl-directory-owner-it");
+        insertUser(READER_ID, "acl-directory-reader-it");
+        insertUser(OUTSIDER_ID, "acl-directory-outsider-it");
+        insertDocument();
+        insertSecondTenantGraph();
+        grantDocumentAcl("USER", READER_ID, "MANAGE", TENANT_ID, DOCUMENT_ID);
+
+        var managerAuthentication = authentication(new UsernamePasswordAuthenticationToken(
+            new AuthenticatedUser(READER_ID, TENANT_ID, "acl-directory-reader-it"),
+            null,
+            List.of()
+        ));
+        var outsiderAuthentication = authentication(new UsernamePasswordAuthenticationToken(
+            new AuthenticatedUser(OUTSIDER_ID, TENANT_ID, "acl-directory-outsider-it"),
+            null,
+            List.of()
+        ));
+
+        String response = mockMvc.perform(get("/api/documents/{id}/acl/principals", DOCUMENT_ID)
+                .param("type", "USER")
+                .with(managerAuthentication))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        List<String> candidateIds = objectMapper.readTree(response).path("data").findValuesAsText("id");
+
+        assertThat(accessControlService.isSystemAdmin(
+            new AuthenticatedUser(READER_ID, TENANT_ID, "acl-directory-reader-it")
+        )).isFalse();
+        assertThat(candidateIds)
+            .contains(OWNER_ID.toString(), READER_ID.toString(), OUTSIDER_ID.toString())
+            .doesNotContain(SECOND_USER_ID.toString());
+
+        mockMvc.perform(get("/api/documents/{id}/acl/principals", DOCUMENT_ID)
+                .param("type", "USER")
+                .with(outsiderAuthentication))
+            .andExpect(status().isNotFound());
     }
 
     @Test

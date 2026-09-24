@@ -96,16 +96,15 @@ class KnowledgeRepository {
     });
   }
 
-  Future<List<PrincipalOption>> listAclPrincipals(String principalType) async {
+  Future<List<PrincipalOption>> listAclPrincipals(
+    String documentId,
+    String principalType,
+  ) async {
     return _request(() async {
       await _ensureLogin();
-      final response = switch (principalType) {
-        'USER' => await _api.listUsers(),
-        'DEPARTMENT' => await _api.listDepartments(),
-        'ROLE' => await _api.listRoles(),
-        _ => throw const ApiException('不支持的授权主体类型'),
-      };
-      return _unwrap(response);
+      return _unwrap(
+        await _api.listDocumentAclPrincipals(documentId, principalType),
+      );
     });
   }
 

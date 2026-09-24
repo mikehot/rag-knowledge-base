@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/network/providers.dart';
 import '../../data/models/document_models.dart';
 import '../../data/repositories/knowledge_repository.dart';
+import 'index_task_status.dart';
 
 Future<void> showIndexTasksPanel(BuildContext context) async {
   await showModalBottomSheet<void>(
@@ -103,7 +104,7 @@ class _IndexTasksPanelState extends ConsumerState<_IndexTasksPanel> {
                       final retrying = _retrying.contains(task.id);
                       return ListTile(
                         title: Text(
-                          '${task.operation} · ${_status(task.status)}',
+                          '${task.operation} · ${indexTaskStatusLabel(task.status, errorMessage: task.errorMessage)}',
                         ),
                         subtitle: Text(
                           [
@@ -149,13 +150,4 @@ class _IndexTasksPanelState extends ConsumerState<_IndexTasksPanel> {
       ),
     );
   }
-
-  String _status(String status) => switch (status) {
-    'SUCCEEDED' => '成功',
-    'FAILED' => '失败',
-    'RUNNING' => '处理中',
-    'RETRY_WAIT' => '等待重试',
-    'PENDING' => '排队中',
-    _ => status,
-  };
 }

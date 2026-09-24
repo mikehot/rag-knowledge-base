@@ -96,7 +96,7 @@ python3 evaluation/run_mcp_smoke.py \
 
 不要在共享环境中故意破坏 Provider。用已有失败任务或 disposable 环境演示：查看 index task 的状态、attempt、失败原因和耗时，然后调用人工 retry；恢复后确认文档回到 `ready`。若只展示文档替换，说明新版本在新索引成功前不会替换旧的可检索版本。
 
-## 8. Flutter 设备演示（已完成本地验收）
+## 8. Flutter 普通用户设备演示（上传链路已验收）
 
 这一步只使用 disposable 本地账号和 `sample_faq.md`，不连接真实客户数据。开始设备验收前先确认后端和 LM Studio API 已启动，再在另一个终端执行：
 
@@ -120,14 +120,22 @@ flutter run -d <device-id> \
 5. 返回知识库页，确认就绪文档菜单包含停用和重建索引；失败文档只演示重建索引，不重复上传。
 6. 点击退出登录，确认回到登录页；再次启动应用时只验证会话恢复，不截图 token。
 
-### 管理运营 UI（本地实现，待设备端到端验收）
+### 管理运营 UI（2026-09-24 Android 真机最小验收通过）
 
-1. 用文档所有者或具备 `MANAGE` 的 disposable 管理账号打开文档菜单 →「管理文档权限」，核对主体/权限列表。
-2. 授予测试员工 `READ`，确认员工能检索并引用目标文档；随后撤权，再次查询必须无来源且不得引用该文档。
-3. 打开顶部「索引任务」，检查状态、attempt、失败原因和耗时；对一个可控的失败任务只点击一次「安全重试」，确认任务按后端状态机恢复并最终到达成功/ready。
-4. 用无系统管理员角色但有文档 `MANAGE` 的账号确认 ACL 列表仍可查看，若主体目录 API 返回 403，界面应保留已加载 ACL 并明确提示不能授权新主体；不得绕过后端权限。
+1. 在 Android 16/API 36 真机的隔离 `.verify` App 中，用 disposable 管理员打开文档菜单 →「管理文档权限」，选择员工并授予 `READ`。
+2. 以员工身份做只读文档列表检查：目标合成文档出现，列表由 5 份变为 6 份。回到管理员 UI 撤权并确认后，再查列表为 5 份且目标文档不出现。本轮设备 acceptance 验证了列表边界；员工检索/引用撤权另见 2026-09-23 API 报告，未在同一设备会话重新做问答。
+3. 从设备文档菜单重建一份合成文档，在 disposable backend 中制造 Embedding 失败。任务面板应展示失败原因、attempt、耗时和「安全重试」；恢复有效 LM Studio endpoint 后只点一次重试，UI/API 均确认任务成功且文档回到 `ready`。
+4. 非系统管理员但具目标文档 `MANAGE` 的主体候选现在走文档级 API（同租户、最小字段）；后端/API 已验收，Flutter 更新后的设备路径仍待点验。不得回退为调用全局管理员目录或绕过后端权限。
 
-以上是本地 Flutter 接线后的验收用例，尚未作为设备演示结果。ACL 即时撤权、任务恢复与零泄漏必须有新鲜 API/设备证据后才能在作品集里标为通过。
+本轮验收使用 7 份合成文档、无持久卷 PostgreSQL 和 loopback-only 后端；没有覆盖生产、公开部署、员工问答质量或更新后非系统管理员 Flutter 主体选择路径。后者的 API 修复证据见[ACL 主体目录报告](../evaluation/reports/document-acl-principal-directory-local-2026-09-24.md)，管理员设备流程见[真机 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)。
+
+### 2026-09-24 连续 disposable API 演示记录
+
+在全新无持久卷 PostgreSQL/pgvector 环境中完成空库迁移与合成数据演示：管理员/员工/外部员工分别看到 7/5/1 份文档，受限 finance/HR 文档对非管理员不可见；授权回答、资料外拒答、权限拒绝、反馈、只读 MCP smoke（16/16）均通过。另将一条合成索引任务故意指向不可用的 Embedding endpoint，使其在第 3 次尝试后失败；恢复有效 endpoint 后通过 SYSTEM_ADMIN retry 在第 4 次尝试成功，文档回到 `ready`。
+
+演示有一个重要限制：初始问题“整机保修期是多久？”因目标 FAQ 未进入 Top-5 而被正确拒答；更精确措辞使其进入 rank 3 后才得到带引用回答。该结果暴露措辞敏感性，不代表 Top-5 召回缺口已修复，也不计入 Golden/Answer Quality 质量门。管理运营 Flutter UI 于同日另在 Android 真机用合成数据验收，详见[连续演示记录](../evaluation/reports/continuous-disposable-demo-local-2026-09-24.md)及[真机 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)。
+
+本轮还用合成 sentinel 确认本机 `lms log stream --source model --filter input,output` 可见模型输入与输出。真实或敏感文档可能进入模型输入日志；不得将 Developer Logs 或 model-I/O stream 纳入录屏/公开材料，且在使用客户数据前仍须检查本机日志持久化、访问控制、脱敏和保留配置。详情见[Provider 日志复核](../evaluation/reports/provider-log-boundary-review-local-2026-09-24.md)。
 
 2026-09-23 在 Android 16/API 36 真实设备独立验证了 Flutter 应用内上传：通过系统文件选择器选择本轮新建的唯一文件 `rag-device-upload-check-20260923.md`，应用回到知识库页先显示 `入库中`，随后显示 `1 段 · 就绪`；同一 demo 账号的只读文档 API 轮询也观察到 `processing` 后变为 `ready`、chunkCount=1。验收后已删除该临时后端文档及设备文件。此前记录的 `sample_faq.md` 上传归因不作为本次上传证据：它在本轮操作前已存在于文档清单且为 `ready`，所以仅凭重选后看到 ready 不能证明这次产生了新上传。
 

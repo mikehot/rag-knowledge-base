@@ -80,4 +80,35 @@ class DocumentAclServiceTests {
 
         verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
     }
+
+    @Test
+    void hidesPrincipalLookupWhenCallerCannotManageDocument() {
+        when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listPrincipals(USER, DOCUMENT_ID, "USER"))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(404);
+
+        verify(auditService).recordDenied(
+            USER,
+            "DOCUMENT_ACL_PRINCIPAL_LIST",
+            "DOCUMENT",
+            DOCUMENT_ID,
+            "MISSING_DOCUMENT_MANAGE"
+        );
+        verify(jdbcTemplate, never()).query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object[].class));
+    }
+
+    @Test
+    void rejectsUnsupportedPrincipalTypeBeforeDirectoryQuery() {
+        when(accessControlService.canManageDocument(USER, DOCUMENT_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.listPrincipals(USER, DOCUMENT_ID, "TENANT"))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(400);
+
+        verify(jdbcTemplate, never()).query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object[].class));
+    }
 }

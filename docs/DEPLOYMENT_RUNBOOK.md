@@ -116,7 +116,16 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 | Structured Output 失败 | `failureReason`、Provider finish reason | 保持 fail-closed；不要把截断 JSON 或 `reasoning_content` 当答案 |
 | 容器访问宿主机 Provider 失败 | Compose 中的 `AI_BASE_URL` | 使用 `host.docker.internal`，确认 Provider 监听地址和网络策略 |
 
-LM Studio Developer Logs 可能记录 Embedding 输入、Prompt 和模型输出。应用日志不记录正文并不能消除 Provider 侧的数据边界，客户资料上线前必须单独审查。
+### Provider 侧模型 I/O 与隐私边界
+
+LM Studio 官方说明，`lms log stream` 可显示模型实际收到的格式化输入及返回输出；因此它可能暴露文档片段、完整 Prompt、用户问题和模型回答。应用自身不记录正文，并不代表 Provider 侧同样不暴露内容。[LM Studio `lms log stream` 文档](https://lmstudio.ai/docs/cli/serve/log-stream)
+
+- 处理真实客户或敏感资料时，不要开启/分享 model I/O 日志，也不要把 Developer Logs、终端记录或原始 Provider 响应贴入工单、截图、录屏或公开报告。
+- 仅排查服务启动/HTTP 状态时，优先使用 `lms log stream --source server`；不要把 model source 的日志当作无敏感信息的普通诊断日志。
+- 如确需查看 model I/O，只能在获准的隔离测试中用合成文档和账号；报告仅记录检查结论、模型/版本、日期和配置，不保留输入输出正文、凭据或原始日志。
+- 公开文档未在本次核验中证明存在可依赖的自动脱敏、持久化保留策略或统一关闭开关。真实数据上线前必须针对实际安装版本核实本机配置、日志位置、访问控制与清理策略；不满足时改用受控 Provider/禁用该诊断路径。
+
+2026-09-24 在 synthetic disposable 环境用唯一输入/输出标记对本机 `lms log stream --source model --filter input,output --json` 做了内存过滤，两类标记均可见；原始流未输出或存盘。对 LM Studio 0.4.25（Build 1）的只读检查发现本机 `server-logs` 目录有 68 个按日期分文件、mtime 覆盖 2026-03-19 至 2026-09-24 的日志文件；枚举文件权限均为 `0644`，日志及月份目录为 `0755`，用户主目录为 `0750`。这证明 server logs 在本机持续落盘，但未读取日志正文，不能据此判断是否包含 Prompt/文档片段，也不能推断模型 I/O 会否写入这些文件。LM Studio 设置页未看到模型 I/O 脱敏/保留/关闭控制；有效用户可达性、日志内容分类、轮换/保留策略仍 OPEN。把该目录按潜在敏感信息处理；任何权限调整需单独批准并验证。详见 `evaluation/reports/provider-log-boundary-review-local-2026-09-24.md`。
 
 ## 7. 事件处理与证据保留
 

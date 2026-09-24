@@ -2,7 +2,7 @@
 
 > Version: v2.0
 >
-> Last verified: 2026-09-23
+> Last verified: 2026-09-24
 > Target: evolve the existing RAG MVP into an enterprise knowledge-base V0.1, then extend it into a bounded Agent/FDE delivery case.
 
 ## 1. Product Goal
@@ -62,7 +62,7 @@ Milestone 2 checkpoint on 2026-09-16:
 - JWT authentication carries the tenant boundary, and document/chunk SQL performs security trimming before content reaches generation.
 - Upload and delete require `MANAGE`; list, detail, and retrieval accept inherited `READ`/`MANAGE` grants from user, department, or role principals.
 - Both an existing non-empty database upgrade and a fresh V1+V2 database were verified. A temporary reader saw no document before a grant, saw it after `READ`, and still could not delete it.
-- This milestone remains `in-progress`: the minimum management APIs, document ACL grant/list/revoke boundary, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are implemented with coverage; the new document ACL integration test now passes locally against Docker Desktop 4.91.0 with Testcontainers 1.21.4, and still needs the next Docker-backed CI run. Management UI and secondary identity lifecycle operations remain open.
+- This milestone remains `in-progress`: the minimum management APIs, document ACL grant/list/revoke boundary, permission-denied audit, rollback-safe replacement upload, automated PostgreSQL ACL tests, cross-tenant cases, persistent batch reindex, retry, idempotency, task observability, and restart recovery are implemented with coverage. The Flutter ACL/index-task UI passed synthetic Android 16/API 36 acceptance for administrator grant/revoke, employee list visibility, failed-task display, and safe retry. A new document-scoped principal-candidate endpoint fixes the non-system document manager's 403 against global admin directories; PostgreSQL integration and local API checks confirm document-MANAGE gating and tenant scoping. The Flutter client is built but this path still awaits device acceptance. Secondary identity lifecycle operations and the next Docker-backed CI run remain open.
 
 ## 4. Delivery Principles
 
@@ -284,11 +284,13 @@ Acceptance gate:
 
 Goal: demonstrate both engineering quality and customer delivery ability.
 
-Current status (2026-09-22): the first evidence-bounded delivery package is now
+Current status (2026-09-24): the first evidence-bounded delivery package is now
 checked in under `docs/`: architecture/data-flow diagrams, discovery brief,
 demo script, deployment/operations runbook, and Chinese/English case-study
-material. A clean disposable demo run, public deployment, screenshots, and
-real customer operating baseline remain separate evidence gates.
+material. Disposable API flows and minimum Flutter ACL/index-task interactions
+have been exercised locally, including on an isolated Android device. A
+sanitized recording, public deployment, and real customer operating baseline
+remain separate evidence gates.
 
 Deliverables:
 
@@ -308,12 +310,12 @@ Acceptance gate:
 - No credentials, customer data, internal-only links, or unsupported metrics are published.
 - The project can be presented as an end-to-end customer deployment, not only as a framework demo.
 
-## 6. Immediate Four-Week Focus (updated 2026-09-23)
+## 6. Immediate Four-Week Focus (updated 2026-09-24)
 
 - Week 1: **committed and pushed** — reconciled the pre-existing 24-file change set, preserved the user-owned experiment/test/report changes, kept V13 and retrieval experiments default-off, and made evaluator-verification vs. quality-gate status explicit. Core delivery commit: `a7d7568`.
-- Week 2: **API acceptance passed; device UI pending** — Flutter exposes document ACL list/grant/revoke and persistent index-task status/failure/retry using existing APIs. Static analysis/model tests pass. Disposable API evidence confirms revoke blocks search/list with leakage=0 and retry moves a failed task from attempt 3 to SUCCEEDED at attempt 4. Android canceled the isolated `.verify` package install (`INSTALL_FAILED_USER_RESTRICTED`); no bypass was attempted.
-- Week 3: **partially evidenced** — an empty disposable API demo exists (2026-09-22), Android upload-to-READY was verified on device (2026-09-23), fresh ACL revoke/task recovery API paths passed, and a manual database+upload-directory backup restore passed in a second disposable environment (2026-09-23). The new operator screens have not been demonstrated end-to-end. Full continuous demo and explicit Provider log review remain open; the restore test is not production backup/PITR evidence.
-- Week 4: Chinese/English Case Studies now reflect the latest local tests and quality limitations. A sanitized recording and separate public-hosting go/no-go remain pending the UI and clean-delivery gates; public hosting is not required to claim local verification.
+- Week 2: **minimum API and administrator device acceptance passed; bounded follow-ups remain** — on Android 16/API 36, the isolated `.verify` app granted and revoked employee READ access through Flutter, with employee list visibility changing 5→6→5. The same UI showed a controlled index failure at attempt 3/3; after restoring LM Studio, the UI retry reached SUCCEEDED at attempt 4/6 and the document returned to ready. A document-scoped, tenant-bound principal directory now supports non-system document managers at API level; its Flutter flow still needs device acceptance.
+- Week 3: **API and minimum device delivery slice passed; provider log policy remains open** — an empty disposable API demo exists (2026-09-22), Android upload-to-READY was verified (2026-09-23), ACL/task UI acceptance and manual database+upload-directory restore passed. On 2026-09-24, a continuous API demo passed authorized citation, refusal, permission denial, feedback, failure/retry recovery, and MCP 16/16; a synthetic live LM Studio log-stream probe confirmed input/output visibility. Metadata inventory found 68 dated local server-log files from 2026-03-19 to 2026-09-24 with mode 0644; log contents, model-I/O persistence, effective access, redaction, and retention/rotation remain unverified. One happy-path wording miss remains a retrieval-quality limitation, not a passed benchmark. The restore test is not production backup/PITR evidence.
+- Week 4: Chinese/English Case Studies and Demo notes now include the minimum UI acceptance and current quality limitations. A sanitized recording and separate public-hosting go/no-go remain pending provider-log and clean-delivery gates; public hosting is not required to claim local verification.
 
 The retrieval candidate experiment is complete for now and did not yield an acceptable runtime change. Reopen it only when a new offline hypothesis passes the same-budget source-preservation gate. Milestone 6 extensions beyond the existing read-only tools/MCP adapter remain deferred until the V0.1 security, quality, and delivery gates are stable.
 

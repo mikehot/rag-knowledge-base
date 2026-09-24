@@ -34,6 +34,12 @@ abstract class KnowledgeApiClient {
     @Path('id') String id,
   );
 
+  @GET('/api/documents/{id}/acl/principals')
+  Future<ApiEnvelope<List<PrincipalOption>>> listDocumentAclPrincipals(
+    @Path('id') String id,
+    @Query('type') String principalType,
+  );
+
   @POST('/api/documents/{id}/acl')
   Future<ApiEnvelope<DocumentAclItem>> grantDocumentAcl(
     @Path('id') String id,

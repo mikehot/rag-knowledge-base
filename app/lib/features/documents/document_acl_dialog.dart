@@ -56,7 +56,10 @@ class _DocumentAclDialogState extends ConsumerState<_DocumentAclDialog> {
         _acl = acl;
       });
       try {
-        final principals = await repository.listAclPrincipals(_principalType);
+        final principals = await repository.listAclPrincipals(
+          widget.documentId,
+          _principalType,
+        );
         if (!mounted) return;
         setState(() {
           _principals = principals

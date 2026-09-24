@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -49,6 +50,19 @@ public class DocumentController {
     @GetMapping("/{id}/acl")
     public ApiResponse<List<DocumentAclResponse>> listAcl(Authentication authentication, @PathVariable UUID id) {
         return ApiResponse.ok(documentAclService.list(currentUser(authentication), id));
+    }
+
+    @GetMapping("/{id}/acl/principals")
+    public ApiResponse<List<AclPrincipalResponse>> listAclPrincipals(
+        Authentication authentication,
+        @PathVariable UUID id,
+        @RequestParam("type") String principalType
+    ) {
+        return ApiResponse.ok(documentAclService.listPrincipals(
+            currentUser(authentication),
+            id,
+            principalType
+        ));
     }
 
     @PostMapping("/{id}/acl")

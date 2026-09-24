@@ -15,12 +15,12 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25、真实 pgvector + LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | 已提交基线包含 Flyway V1-V12；V13 为默认关闭的检索实验审计值。Flutter ACL/索引任务 UI 已接入并通过静态/模型测试；2026-09-23 新 disposable API 实测证明授权后可检索/引用、撤权后搜索和列表均不再返回文档，leakage=0；失败任务从 attempt 3 安全重试并于 attempt 4 成功。Flutter 管理界面真机验收仍受 Android 安装限制未完成 |
-| 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；本地 Docker-backed 全量回归 109 passed/0 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | 已提交基线包含 Flyway V1-V12；V13 为默认关闭的检索实验审计值。管理员 Flutter ACL/索引任务主路径已有 Android 16/API 36 合成设备证据。新增按文档 MANAGE 授权的主体候选 API，后端/API 验证了非系统管理员可读取同租户 USER/DEPARTMENT/ROLE 候选，普通无权员工仍 404；新 Flutter 路径尚未设备验收。撤权后一次问答 `found=false` 但生成失败为 `STRUCTURED_OUTPUT_INVALID`；受保护检索快照未含被撤权 FAQ，不能算完整拒答门禁 |
+| 3. 结构化回答、审计、观测、反馈 | `verified` | requestId、总/分段耗时、稳定失败分类、超时/参数校验/401/403 契约、V6/V7 观测字段、V8 用户反馈、健康/就绪探针、反馈/ACL 拒绝/Token/估算成本指标、受保护检索诊断和 Structured Output Contract 已落地；2026-09-24 本地 Docker-backed 全量回归 119 passed/0 skipped，OpenAI-compatible Provider 已发送原生 JSON Schema，并完成 LM Studio 真实 A/B 复核 |
 | 4. 评测基线与检索压力集 | `verified` | **评测工具/数据集门槛通过，不等于质量门通过**。golden-v1 有历史 20/20，当前记录的默认 Top-K=5 为 16/20；修订 rubric 的 answer-quality VECTOR 在最近配对两轮均 10/12；Thinking-off 的 stress 记录为 7/8。跨数据集/模型设置分开报告；ACL leakage 和 Schema 失败在最近相邻策略 API A/B 中均为 0 |
 | 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出整体重复质量门槛；默认继续 VECTOR/Top-K=5。新的 source-preserving 离线邻块候选无可用替换、答案点覆盖不变，暂停继续加组件 |
 | 6. Agent Tool / MCP | `in-progress` | 三个只读 Agent Tool、闭合参数 schema、ACL/租户继承、空结果/超时/未知工具/预算/审计测试已落地；最小无状态 MCP 适配层和可重复的本地 HTTP smoke 已通过，完整 MCP transport/auth、第三方 SDK/client conformance 和 Agent loop 尚未完成 |
-| 7. 交付包 / FDE Case Study | `in-progress` | 架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；2026-09-22 有 disposable API 演示、2026-09-23 有 Android 上传设备证据及一次独立数据库+上传目录备份恢复演练；含 ACL 运营 UI 的干净全链路演示、Provider 日志治理复核、脱敏录屏、公开部署和真实客户运营基线仍未完成 |
+| 7. 交付包 / FDE Case Study | `in-progress` | 架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；2026-09-24 disposable API 连续演示覆盖授权引用、拒答、权限拒绝、反馈、失败恢复，MCP 16/16；同日 Android 16/API 36 真机通过最小 ACL 授权/撤权及索引任务失败恢复 UI 验收。LM Studio 本机 metadata inventory 确认跨 2026-03 至 2026-09 有 68 个 server-log 文件、权限位为 0644；日志内容分类、模型 I/O 是否落盘、有效访问范围及保留/轮换策略仍未核实。脱敏录屏、公开部署和真实客户运营基线仍未完成 |
 
 ## 已实现（代码静态核对）
 
@@ -125,7 +125,7 @@
 | FDE 交付材料 | PASS（文档边界） | 2026-09-22 新增 `docs/ARCHITECTURE.md`、`DISCOVERY_BRIEF.md`、`DEMO.md`、`DEPLOYMENT_RUNBOOK.md`、中文/英文 Case Study；内容与当前代码、评测和 MCP smoke 证据对齐，不把本地样例包装成生产或 ROI 结论 |
 | 隔离 API Demo | PASS（一次性本地证据） | 2026-09-22 在独立 PostgreSQL/pgvector + 当前源码服务上完成上传、V12 迁移、索引 `READY/SUCCEEDED`、2 Chunk、授权回答/引用、反馈、fail-closed 拒答、无权限员工拒绝和 MCP 只读边界；详见 `evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md`；尚不是 Flutter 设备或公开部署证据 |
 | Flutter 客户端会话、回答与文档生命周期 | PASS（客户端解析与本地测试） | 2026-09-22 Flutter 已消费 `requestId`、`grounded`、`latencyMs`、`tokenUsage`、`failureReason`、分段耗时和来源；回答卡展示状态/耗时/Token/失败分类，并接入 `HELPFUL`/`NOT_HELPFUL` 反馈；新增显式登录、平台安全 token 存储、启动恢复和退出登录；知识库页已对接已有文档停用/重建索引接口，并保留服务端权限边界；`flutter analyze` 与 6 个 Flutter tests 通过 |
-| Flutter Android 设备级演示 | PASS（本地 disposable 证据；范围分项记录） | 2026-09-23 Android 16/API 36 真实设备：Flutter 应用内选择唯一临时 Markdown 文件后，知识库 UI 从“入库中”变为“1 段 · 就绪”，只读文档 API 同步观察到 `processing`→`ready`、chunkCount=1；临时后端文档及设备文件随后删除。更早 `sample_faq.md` 已在操作前存在且为 `ready`，因此此前“选择/上传后 ready”的因果归属未核实，不再作为上传证据；其他问答/反馈/拒答/菜单/退出登录截图仍为本地临时记录，详见 `docs/DEMO.md`；不代表公开部署或生产设备证据 |
+| Flutter Android 设备级演示 | PASS（本地 disposable 证据；范围分项记录） | 2026-09-23 Android 16/API 36 真机验证唯一临时 Markdown 上传到 `ready`；2026-09-24 以隔离 `.verify` 包验证管理员在 Flutter UI 授权/撤权，员工文档列表随之 5→6→5、受限文档不再出现；任务面板显示合成 reindex 失败 3/3 和安全重试，恢复 LM Studio 后 UI 重试到 `SUCCEEDED` 4/6，文档回到 `ready`。本轮员工列表可见性以只读 API 复核；同轮未重做员工提问/引用验收。完整范围见 `evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md`；不是公开部署或生产证明 |
 
 ### 2026-09-23 本轮回归刷新
 
@@ -147,6 +147,27 @@
 - 从新建的无持久卷 PostgreSQL 16.15/pgvector 源容器导出 custom-format 数据库备份，并单独归档上传文件目录；恢复到另一全新 PostgreSQL 容器和独立上传目录，应用连接恢复目标后正常启动，Flyway 识别 V13 schema 已存在且无重新迁移。
 - 恢复 API 核验：管理员可见 7 份合成文档；员工可见 5 份被授权文档，finance/HR 限制文档不可见，ACL leakage=0；7 条持久化索引任务均恢复为 `SUCCEEDED`。现有只读 MCP smoke 为 16/16。
 - PASS 仅指一次本地数据库 dump + 文件归档的人工恢复路径；不证明生产备份调度、加密、异地副本、PITR、保留轮换、恢复时间目标或灾难恢复 SLA。源/目标容器、临时备份、上传副本和合成凭据均已清理，5432 开发数据库未连接或更改。详见 `evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md`。
+
+### 2026-09-24 Provider 日志隐私边界复核
+
+- LM Studio 官方 `lms log stream` 文档明确可展示模型实际收到的格式化输入和返回输出；RAG 输入可能包含检索文档片段，因此必须按敏感内容处理。Runbook 已记录客户数据期间不得暴露/分享 model I/O 日志、仅以合成数据进行获准诊断，以及先核实本机版本日志存储/访问/保留/脱敏/关闭控制的要求。
+- 2026-09-24 服务恢复后，在获准的 disposable 环境用 unique synthetic sentinel 对 `lms log stream --source model --filter input,output --json` 做内存过滤；输入和输出标记均可见，只打印匹配布尔值，原始流与回答未落盘。只读检查 LM Studio 0.4.25（Build 1）General/Developer 设置及本地文件元数据：68 个 dated server-log 文件的 mtime 覆盖 2026-03-19 至 2026-09-24；所有枚举文件权限位 0644，server-logs/月目录 0755、用户主目录 0750。没有读取日志正文；model I/O 是否持久化、内容分类、实际可达用户及保留/轮换策略仍 OPEN。详见 `evaluation/reports/provider-log-boundary-review-local-2026-09-24.md`。
+
+### 2026-09-24 连续 disposable 交付演示
+
+- 新建无持久卷 pgvector 环境，从空库迁移到 V13；7 个合成文档全部完成索引。管理员/员工/外部员工列表分别为 7/5/1，restricted finance/HR 文档对非管理员不可见，ACL leakage=0。
+- 员工授权问答获得后端引用，资料外问题 `found=false` 且无来源；直接读取受限文档返回 403/404，Agent Tool 返回 `PERMISSION_DENIED`；反馈提交成功，MCP HTTP smoke 16/16。
+- 诚实记录检索措辞敏感：初始“整机保修期是多久？”因 FAQ 未进入 Top-5 而 `INSUFFICIENT_CONTEXT`；更精确措辞使 FAQ 位列 rank 3 后 happy path 通过。这是演示成功，不是对 Top-5 质量缺口的修复或质量门通过。
+- 单条重建索引任务在隔离无效 Embedding endpoint 下到 `FAILED`/attempt 3；恢复有效 endpoint 后由 SYSTEM_ADMIN retry 到 `SUCCEEDED`/attempt 4，文档回到 `ready`。未改 SQL 状态或 LM Studio 持久设置。
+- Chat model load API 请求 8192 context 但回报 effective context 226304，Thinking/推理设置也未被作为受控实验变量；此轮只作功能演示，不纳入质量基线。数据库、服务、账号、文件、模型都已清理/卸载，5432 未触及。详见 `evaluation/reports/continuous-disposable-demo-local-2026-09-24.md`。
+
+### 2026-09-24 Flutter 运营 UI 真机验收
+
+- Android 16/API 36 上安装独立 `.verify` Debug 包，未覆盖日常 App。使用 loopback-only 8089 后端、55490 无持久卷 pgvector 数据库和 7 份 synthetic 文档。
+- 管理员通过 Flutter ACL 弹窗给 `finance-policy.md` 授予员工 `READ`；员工只读文档列表由 5 项变为 6 项且出现该文档。随后从同一 UI 二次确认撤权；员工列表回到 5 项且不再出现该文档。此处验证 UI 操作与列表即时变化；本轮没有重新发起员工问答/引用。
+- 管理员从设备文档菜单重建一份合成文档；临时不可用 Embedding endpoint 使任务进入 `FAILED`（3/3，记录耗时 90,385 ms），任务面板显示失败原因/尝试/耗时及“安全重试”。恢复 LM Studio endpoint 后，在 UI 点击安全重试，任务经 API 与 UI 双重读取为 `SUCCEEDED`（4/6，记录耗时 247,181 ms），文档 `ready`，7 份文档均 ready。
+- 验收中发现 `PENDING` 且含上次错误的退避任务被标成“排队中”；已修正为“等待重试”，新建无错 `PENDING` 仍显示“排队中”。新增 4 个状态映射用例；`flutter analyze` 通过，`flutter test --no-pub --concurrency=1` 共 12 项通过，Debug `.verify` APK 构建并安装成功。此临时状态映射有单测覆盖，本轮设备最终状态是成功，未在更新后的 App 中再次观察瞬态等待重试标签。
+- 未覆盖非系统管理员文档 MANAGE 主体目录路径。临时凭据、manifest、上传内容、后端、容器及 ADB reverse 已清理；没有截图、日志正文或真实文档写入仓库。详情见 `evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md`。
 
 本轮真实验证发现并修复：模型判断资料不足时曾错误返回 `found=true` 和无关来源；删除文档时曾残留原始文件。两条路径均已增加回归测试。
 
@@ -171,32 +192,32 @@
 ## 已知缺口
 
 - 本地和 GitHub Actions 均固定 JDK 25；GitHub Actions 已完成远端验证。
-- 后端当前本地回归为 95 个 H2/非 Docker 测试和 15 个 PostgreSQL/Testcontainers 集成测试通过，共 110 个测试、0 skipped。CI 新增读取 Surefire XML 的硬门禁：PostgreSQL 集成报告缺失、全部跳过或存在失败都会让 backend job 失败；本次门禁尚未由 GitHub Actions 远端执行。此前 GitHub Actions run `35698781377` 对旧提交通过 `backend-tests`、`compose-config` 和 `flutter-tests`，长期运行基线仍需持续积累。
-- 企业身份与 ACL schema、查询边界和最小管理 API 已建立；尚无前端管理页、批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵。
+- 2026-09-24 后端完整回归 119 项通过、0 skipped，其中新增 PostgreSQL 测试覆盖非系统管理员的文档 MANAGE 主体目录查询；CI 新增读取 Surefire XML 的硬门禁，本轮尚未由 GitHub Actions 远端执行。此前 GitHub Actions run `35698781377` 对旧提交通过 `backend-tests`、`compose-config` 和 `flutter-tests`，长期运行基线仍需持续积累。
+- 企业身份与 ACL schema、查询边界、最小管理 API 和首版 Flutter 管理界面已建立；管理员 READ 授权/撤权有设备证据，文档 MANAGE 候选目录有后端/API 证据但未做设备点验。批量导入、用户停用、部门停用和更细的知识库管理员权限矩阵仍未完成。
 - 当前只有 allow 型 ACL；尚未定义显式 deny、组织继承冲突和权限缓存失效策略。
-- 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；尚无任务取消、优先级、分布式 Broker 或前端任务管理页，这些不属于当前最小闭环。
+- 文档已实现 checksum、内容版本、权限版本、停用、软删除、reindex、可回滚替换和持久化任务治理；首版 Flutter 索引任务界面已通过合成设备的失败与安全重试验收。尚无任务取消、优先级或分布式 Broker；批量任务管理不属于当前最小闭环。
 - 权限拒绝已有基础审计事件、tenant 范围内只读查询 API 和低基数拒绝计数；尚未提供保留策略、脱敏策略和评测记录。
 - 应用自身默认不记录文档正文和 Prompt，但本地真实联调确认 LM Studio Developer Logs 会显示 Embedding 输入、Prompt 和模型输出；客户敏感资料上线前必须单独配置或替换 Provider 日志策略，不能把应用日志边界误认为全链路日志边界。
 - 问答已有 requestId、总/分段耗时、结构化失败原因、Provider 超时分类、参数校验和统一 401/403 契约、用户反馈、健康/就绪探针、反馈率/ACL 拒绝/Token/估算成本指标及首版告警 guardrail；尚未用真实 7 天基线调优阈值。
 - 已有 `golden-v1`（20 题）、`answer-quality-v1`（12 题）、`retrieval-stress-v1`（8 题）、真实 API 采集和聚合报告；答案质量扩展集已完成 VECTOR/KEYWORD_RRF 后端 A/B；Gemma thinking 关闭时的历史 disposable 端到端复测为 Golden 16/20、answer-quality 9/12、stress 7/8，结构化失败和 ACL 泄漏均为 0；stress 检索诊断 8/8、Recall@5=100%。新增 chunk 级指定来源词项证据诊断（报告不落文档正文），7 个失败题 Top-5 evidence-point coverage 28.57%、Top-8/10 为 100%，但 Top-8/10 每题平均多带 6 个无明确答案点的 chunk。完整质量集 Top-K=5/8 各运行两轮，rubric 通过均值均为 10/12；Top-8 词项答案点覆盖/引用较高但单轮波动且平均 Token +9.4%，默认仍为 5。修订 `QUALITY-001` 的同义词并补离线回归后，修订 rubric 的单次 Top-K=5 API 捕获为 7/12（answerable 3/8），失败 Q001/002/003/005/006；与旧版 9/12 口径不同且尚未重复，不作为新稳定基线。详见 `evaluation/reports/chunk-evidence-topk-ab-local-2026-09-23.md` 和 `evaluation/reports/quality-001-rubric-diagnostic-local-2026-09-23.md`。云端成本对照和独立模型评分仍未完成。
 - 没有生产级 BM25/全文 Hybrid Search 或 Reranker；PostgreSQL 默认 simple FTS 的中文切词预实验不足，`pg_trgm` 仅完成 disposable 查询验证。离线 keyword candidate、文档级 RRF 模拟、ACL-aware 线上候选 A/B、默认关闭的后端 keyword-RRF 端到端 A/B 和默认关闭的 vector-diversity 端到端 A/B 已完成；当前结果不批准默认启用，也没有成本结论。
 - 应用内只读 Agent Tool Registry 和最小无状态 MCP adapter 已实现并完成单元回归；`evaluation/run_mcp_smoke.py` 已提供可重复的本地 HTTP 边界检查；尚无完整 MCP transport/auth conformance、第三方 SDK/client 互操作证据、模型驱动 Agent loop 或写工具。
-- Flutter 问答客户端解析并展示后端回答契约、来源、失败分类、耗时/Token，并可提交反馈；已有独立登录、安全 token 存储和会话恢复。知识库页已有 ACL 管理、索引任务只读状态/错误/耗时与失败重试入口的本地实现，尚待设备与实时 ACL 撤权验收；停用文档恢复和批量任务管理未做。既有 Flutter CI run `35698781377` 远端通过；本轮本地 `flutter analyze`、`flutter test --no-pub --concurrency=1` 通过；2026-09-23 Android 设备证据只覆盖独立文件上传到 READY，不覆盖新增管理界面。尚无录屏或公开 Demo。
+- Flutter 问答客户端解析并展示后端回答契约、来源、失败分类、耗时/Token，并可提交反馈；已有独立登录、安全 token 存储和会话恢复。管理员 ACL 与最小索引任务 UI 已通过 Android 16/API 36 合成设备验收；按文档 MANAGE 读取主体候选的新 Flutter 调用已静态/构建验证，仍待设备点验。停用文档恢复和批量任务管理未完成。既有 Flutter CI run `35698781377` 远端通过；本轮 `dart analyze`、12 项 Flutter 测试和 Debug `.verify` APK 构建通过。尚无脱敏录屏或公开 Demo。
 - 已加入确定性的复杂问题识别与预算路由开关，并增加模型拒答字段一致性 fail-closed；3200 开启实测未通过质量门槛，默认继续关闭。Top-K=8 在失败题离线词项覆盖上优于 5，但完整 answer-quality 两轮未稳定提高 rubric 通过均值且 Token 更高，默认继续保持 5。
 - Gemma 在 LM Studio `Enable Thinking=off` 时通过了 6/6 独立 Structured Output 合同探针；端到端三集合复测中结构化失败=0、ACL 泄漏=0、stress Recall@5=100%，但 Golden 16/20、answer-quality 9/12、stress 7/8，答案质量门未通过。本地设置尚未持久化/自动化，继续保持 fail-closed，不要放宽 JSON 解析，也不要把 `reasoning_content` 当作 `message.content` 替代。
 - 第一版架构图、Discovery Brief、Demo、部署 Runbook 和中英文 Case Study 已完成；已有一次隔离 API Demo 记录和 Android 设备截图；尚无录屏、公开可访问 Demo、真实客户生产部署和长期运营基线。
 
 ## 下一步
 
-截至 2026-09-23，V0.1 的实现主干已在，但质量通过、管理运营 UI 和新环境交付证据仍未闭环。优先顺序：
+截至 2026-09-24，V0.1 的实现主干和管理员运营 UI 已有真机证据；新文档 MANAGE 主体目录接口通过后端/API 与 SQL 集成测试，尚待真机点验；答案质量门、Provider 日志边界及对外交付证据仍未闭环。优先顺序：
 
 1. **本轮状态收敛（已完成）**：计划开始时盘点的 24 个既有本地变更已核对用途；保留 answer-quality rubric/测试/报告；V13 与 `VECTOR_ADJACENT` 只作为默认关闭的实验，不推广默认检索策略。核心 37 文件已由 `a7d7568` 提交并推送；后续 API/备份恢复验收记录目前仅在本地待收敛。
 2. **检索候选窄诊断**：已新增“只替换同文档冗余 Chunk”的离线候选比较。当前 12 题里它没有做出任何替换，答案点覆盖仍为 75%（6/8），不值得做在线 API A/B；Q002/Q006 仍是已知缺口。除非有新的 source-preserving 候选假设，不继续堆 Hybrid/Reranker/重排。
-3. **Flutter 最小运营 UI（API 通过、真机 UI 待验收）**：服务端 disposable 实测已证明撤权阻断搜索/列表且 leakage=0，失败任务可从 FAILED 安全 retry 到 SUCCEEDED。剩余只需 Android 设备允许安装独立 `.verify` 包后点验 ACL 对话框、任务列表和重试状态；当前设备拒绝安装，未绕过限制。
-4. **干净交付演练（部分通过）**：备份/恢复演练已通过一次本地人工恢复；还需在全新 disposable 环境按文档完成上传、索引、授权回答、引用、拒答、越权拒绝、反馈和失败恢复的一次连续演示，并检查 Provider 侧是否记录 Prompt/文档输入。
-5. **作品集收尾**：更新中英文 Case Study、Demo 讲稿和脱敏录屏；根据干净演练结果再独立决定是否公开部署，不宣称未测的 ROI 或生产 SLA。
+3. **Flutter 最小运营 UI（管理员主路径通过；非系统管理员 API 修复已完成）**：管理员 Android 真机 `.verify` 已验证 ACL 授权/撤权及索引安全重试。已修复文档 MANAGE 用户无法调用全局管理员主体目录的问题：新按文档授权的候选端点返回同租户最小字段，跨租户及无 MANAGE 均被测试拒绝。Flutter 调用已构建，但本轮未安装/点验更新包；员工问答撤权后的模型输出也因 `STRUCTURED_OUTPUT_INVALID` 未通过完整拒答验收。详见 `evaluation/reports/document-acl-principal-directory-local-2026-09-24.md`。
+4. **干净交付演练（API 连续流程和最小 UI 通过，日志治理待完成）**：隔离 API 连续演示、数据库+文件恢复及 Flutter 管理 UI 的合成真机主路径均有新鲜证据；本机 LM Studio model I/O 可见已由合成 sentinel 确认，server-log 文件存在和权限位已盘点但未读正文。仍需核实模型 I/O 是否落盘、日志内容分类、有效访问范围、脱敏与保留/轮换控制；演示问法的 Top-5 召回敏感性需保留说明。
+5. **作品集收尾（文档本轮同步）**：中英文 Case Study 和 Demo 讲稿已纳入 2026-09-24 连续演示、Provider 日志与 Flutter 运营 UI 真机证据；脱敏录屏仍待日志边界确认后再制作。是否公开部署仍单独决策，不宣称未测的 ROI 或生产 SLA。
 
-近期完整证据和离线 source-preserving 结果见 `evaluation/reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md`。核心功能已由 `a7d7568` 推送；本轮新增加的 API 验收、备份恢复报告及路线/案例状态修订尚待提交。
+近期完整证据和离线 source-preserving 结果见 `evaluation/reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md`。核心功能 `a7d7568` 与 API/备份恢复验收文档 `e6919a7` 均已推送；本轮 Provider 日志 sentinel、连续演示报告，以及 Runbook、Demo、Case Study、路线/进度更新均仍在本地待提交。
 
 ### 2026-09-23：QUALITY-002 / QUALITY-006 新鲜隔离复核
 

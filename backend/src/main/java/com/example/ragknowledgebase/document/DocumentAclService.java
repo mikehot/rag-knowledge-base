@@ -7,6 +7,7 @@ import com.example.ragknowledgebase.common.BusinessException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,6 +44,54 @@ public class DocumentAclService {
             user.tenantId(),
             documentId
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<AclPrincipalResponse> listPrincipals(
+        AuthenticatedUser user,
+        UUID documentId,
+        String principalType
+    ) {
+        requireManage(user, documentId, "DOCUMENT_ACL_PRINCIPAL_LIST");
+        String normalizedType = principalType == null
+            ? ""
+            : principalType.trim().toUpperCase(Locale.ROOT);
+        return switch (normalizedType) {
+            case "USER" -> jdbcTemplate.query(
+                """
+                    SELECT id, username, display_name,
+                           NULL::varchar AS name, NULL::varchar AS code, status
+                    FROM app_user
+                    WHERE tenant_id = ? AND status = 'ACTIVE'
+                    ORDER BY display_name NULLS LAST, username, id
+                    """,
+                this::principalResponse,
+                user.tenantId()
+            );
+            case "DEPARTMENT" -> jdbcTemplate.query(
+                """
+                    SELECT id, NULL::varchar AS username, NULL::varchar AS display_name,
+                           name, code, status
+                    FROM department
+                    WHERE tenant_id = ? AND status = 'ACTIVE'
+                    ORDER BY name, code, id
+                    """,
+                this::principalResponse,
+                user.tenantId()
+            );
+            case "ROLE" -> jdbcTemplate.query(
+                """
+                    SELECT id, NULL::varchar AS username, NULL::varchar AS display_name,
+                           name, code, NULL::varchar AS status
+                    FROM app_role
+                    WHERE tenant_id = ?
+                    ORDER BY code, id
+                    """,
+                this::principalResponse,
+                user.tenantId()
+            );
+            default -> throw new BusinessException(400, "principalType 仅支持 USER、DEPARTMENT、ROLE");
+        };
     }
 
     @Transactional
@@ -162,6 +211,17 @@ public class DocumentAclService {
             rs.getString("principal_type"),
             rs.getObject("principal_id", UUID.class),
             rs.getString("permission")
+        );
+    }
+
+    private AclPrincipalResponse principalResponse(ResultSet rs, int rowNum) throws SQLException {
+        return new AclPrincipalResponse(
+            rs.getObject("id", UUID.class),
+            rs.getString("username"),
+            rs.getString("display_name"),
+            rs.getString("name"),
+            rs.getString("code"),
+            rs.getString("status")
         );
     }
 }

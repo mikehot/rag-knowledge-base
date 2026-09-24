@@ -19,7 +19,7 @@
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。缺：部门授权/撤权验收、撤权后员工问答/引用的完整路径验收 |
 | 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 123 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；**质量门未通过** | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
-| 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
+| 5. 检索优化决策 | 暂停（阶段 B 在真实语料上恢复） | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
 | 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练、脱敏录屏 |
 
@@ -106,12 +106,21 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 ## 下一步
 
-1. **质量门定义（已完成 2026-09-24）**：见 `evaluation/README.md`。
-2. **chunking 对照实验（已完成 2026-09-24，不采用）**：见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
-3. **按 Markdown 标题切块（已离线否决 2026-09-24）**：见 `evaluation/reports/heading-chunking-offline-replay-local-2026-09-24.md`。剩余检索杠杆是多语言 Embedding（当前 nomic v1.5 以英文为主，数据全为中文）；需下载模型，维度若非 768 还涉及 schema/重建索引，先用 `run_chunking_replay.py --embedding-model` 离线比较，待决策。
-4. **补齐 ACL 验收**：部门授权/撤权，以及撤权后员工问答/引用的完整路径（API 为主，真机抽测）。
-5. **干净环境全流程演练**：启动、上传索引、授权问答、拒答、权限拒绝、失败恢复、备份恢复。
-6. **脱敏录屏与作品集收尾**；公开部署单独决策，不宣称未测的 ROI 或 SLA。
+按 `ROADMAP.md` v3.0（2026-09-24）执行。项目定位：AI 转型作品，同时面向求职（AI 应用工程师 / FDE）和接单客户。
+
+**阶段 A：V0.1 可展示（约 1 周）**
+
+1. A1 部门 ACL 授权/撤权，以及撤权后员工问答/引用的完整路径（自动化测试为主，真机抽测）。
+2. A2 从全新 clone 按 README 完整演练，修复 README 缺口，记录首次回答耗时。
+3. A3 V0.1 质量声明：当前评测结果作为已知局限写明，质量门继续跟踪但不阻塞 V0.1。
+4. A4 重写 `PORTFOLIO.md` 与 README 开头（面向两类读者），同步 Case Study，归档 `CODEX_PROMPT.md`。
+5. A5 3–5 分钟脱敏演示视频和截图。
+
+**阶段 B：V0.2 有意义的评测**：真实规模公开语料和约 50 题数据集 → 重新建立基线 → 再按顺序做检索优化（含多语言 Embedding）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
+
+**阶段 C（可选）**：真实 MCP 客户端演示；英文技术文章。
+
+已完成的检索实验（质量门冻结、chunking A/B、按标题切块离线否决）见 `evaluation/reports/`。在现有 7 份合成文档上的检索调优已停止：效果已饱和，而且低于噪声。
 
 继续不做：Fine-tuning、GraphRAG/Neo4j、复杂 Multi-Agent、Kubernetes、本地 GPU；不默认开启 Hybrid Search 或 Reranker。
 

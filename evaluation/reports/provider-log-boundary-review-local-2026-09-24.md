@@ -20,6 +20,13 @@ For this RAG service, model input can include retrieved document chunks and the 
 - The local review did not open the Developer Logs UI or inspect log contents. It confirms that this synthetic request's input/output markers persisted, but does not classify all historical log contents or establish a configured retention policy, rotation behavior, redaction control, or complete per-user reachability.
 - No customer content or non-synthetic prompt/response was intentionally inspected or retained in this review.
 
+### Follow-up metadata-only check and restart attempt
+
+- A follow-up check found the `server-logs` root at `0700`; the six dated month directories remain `0755`, and all 68 files remain `0644`. Their aggregate size was about 41.8 MB, with modification times from 2026-03-19 through 2026-09-24. Only metadata was read.
+- With the user's approval, LM Studio was normally quit to test permission persistence across restart. The app then failed to reopen: LaunchServices returned `-10827` (`kLSNoExecutableErr`) although `Contents/MacOS/LM Studio` exists; direct execution exited with status 134. `Info.plist` passes `plutil -lint`, but `codesign --verify --deep --strict` reports an invalid signature. Spotlight found no second installed copy. No repair, replacement, or reinstall was attempted.
+- After the failed relaunch, the `server-logs` root still reports `0700`; all 68 files remain `0644`. This confirms the filesystem mode survived the app exit, but not a successful application restart or directory recreation. `lms server status` reports that the local API server is not running; no request was sent and no server was started.
+- The folder/file metadata does not establish application-managed rotation or retention: the inventory shows dated monthly directories and historical files, but does not prove a maximum age, size cap, or deletion policy. No log content was inspected.
+
 ## Operational rule
 
 - Never expose model I/O logs in screenshots, recordings, tickets, or public reports when real or sensitive data may be present.
@@ -37,6 +44,6 @@ Installed-instance server-log inventory: **PASS, metadata only** (dated log file
 
 Synthetic model-I/O persistence check: **CONFIRMED** (both unique input and output markers were found only in newly appended bytes from one local server-log file; raw log text was not inspected or retained).
 
-Local filesystem access mitigation: **APPLIED** (`server-logs` root is owner-only `0700`; files were not changed or deleted). Recheck after an LM Studio restart or directory recreation; persistence of this mode was not tested.
+Local filesystem access mitigation: **APPLIED** (`server-logs` root is owner-only `0700`; files were not changed or deleted). The mode remained `0700` after a normal app quit, but the app could not relaunch because its signature is invalid; persistence across a successful restart or directory recreation remains unverified.
 
 Full log-content classification, accounts outside the observed `/Users` homes, application-managed rotation/retention, redaction, and disablement controls: **OPEN**. Treat the local log directory as sensitive. Do not send sensitive customer content to this configuration until the remaining controls are assessed and accepted; any further permission change or log deletion needs explicit, separate approval.

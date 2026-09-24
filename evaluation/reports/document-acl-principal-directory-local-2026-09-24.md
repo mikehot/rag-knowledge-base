@@ -19,6 +19,16 @@ Added `GET /api/documents/{documentId}/acl/principals?type=USER|DEPARTMENT|ROLE`
 - Full backend suite: 119 passed, 0 failures/errors/skips. Flutter analysis: no issues; Flutter tests: 12 passed; isolated `.verify` Debug APK build passed.
 - After revoking the employee's `READ` grant, one `/api/ask` attempt persisted `found=false` but ended as `STRUCTURED_OUTPUT_INVALID` (2,957 tokens). Its retrieval snapshot contained five chunks from four other employee-authorized synthetic files and no `sample_faq.md`. This supports the ACL retrieval boundary, but it is **not** a completed refusal/citation UI acceptance because generation failed.
 
-## Device and evidence limits
+## Android device follow-up — 2026-09-24
 
-The new Flutter client was built but was not installed or exercised on-device in this follow-up. The non-system-manager UI flow therefore remains pending real-device verification. A prior device-control attempt was interrupted after the foreground app changed unexpectedly; no further device input was issued. This report makes no claim of a successful employee question/refusal on-device, production ACL security, or answer-quality success.
+- Installed the current build as the separate package `com.example.rag_knowledge_base_app.verify` on an Android 16/API 36 device. The everyday package remained separate; the foreground was verified at the launcher before opening `.verify`.
+- Used a fresh no-volume pgvector container and loopback-only backend ports 55492/8089. The fixture contained two synthetic EMPLOYEE users, one synthetic department, one READY document, and an initial document-level `MANAGE` grant for the manager. No model or question-generation endpoint was called.
+- Confirmed through the app/API that the manager had only the `EMPLOYEE` role and was not a `SYSTEM_ADMIN`. The Flutter ACL dialog loaded same-tenant USER, DEPARTMENT, and ROLE candidates; the synthetic reader, synthetic department, and Employee role were visible in their respective pickers.
+- Granted the synthetic reader `READ` through Flutter. Its fresh `GET /api/documents` response changed to include the fixture document. Revoked that grant through the UI confirmation; the reader's list no longer included the document, and its document-scoped principal lookup returned HTTP 404 because it had no `MANAGE` permission.
+- Granted `READ` to the Employee role through Flutter; the synthetic reader then saw the document through role inheritance. Revoking the role grant removed it again. Department candidates were loaded and displayed, but department grant/revoke was not exercised on-device.
+- Backend suite: 119 passed, 0 failures/errors/skips. Flutter analysis: no issues; Flutter tests: 12 passed; current isolated `.verify` Debug APK built and installed successfully.
+- The manager was logged out. The temporary database/container, backend, ADB reverse mapping, UI hierarchy captures, and in-memory synthetic credentials/tokens were removed. The `.verify` package remains installed but logged out, distinct from the everyday app. No screenshot, credential, answer text, customer data, or provider log was retained.
+
+## Remaining evidence limits
+
+This verifies candidate loading and USER/ROLE grant/revoke effects on document-list visibility for one synthetic tenant; the department candidate list was displayed but its grant path was not tested. Cross-tenant exclusion and no-`MANAGE` denial also have PostgreSQL/API coverage, but cross-tenant candidates were not part of this single-tenant device fixture. Employee question/citation behavior after revoke was not tested here; a separate attempt ended with `STRUCTURED_OUTPUT_INVALID`, so this does not establish a successful refusal, production ACL security, or answer-quality success.

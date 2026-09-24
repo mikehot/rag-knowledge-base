@@ -125,9 +125,9 @@ flutter run -d <device-id> \
 1. 在 Android 16/API 36 真机的隔离 `.verify` App 中，用 disposable 管理员打开文档菜单 →「管理文档权限」，选择员工并授予 `READ`。
 2. 以员工身份做只读文档列表检查：目标合成文档出现，列表由 5 份变为 6 份。回到管理员 UI 撤权并确认后，再查列表为 5 份且目标文档不出现。本轮设备 acceptance 验证了列表边界；员工检索/引用撤权另见 2026-09-23 API 报告，未在同一设备会话重新做问答。
 3. 从设备文档菜单重建一份合成文档，在 disposable backend 中制造 Embedding 失败。任务面板应展示失败原因、attempt、耗时和「安全重试」；恢复有效 LM Studio endpoint 后只点一次重试，UI/API 均确认任务成功且文档回到 `ready`。
-4. 非系统管理员但具目标文档 `MANAGE` 的主体候选现在走文档级 API（同租户、最小字段）；后端/API 已验收，Flutter 更新后的设备路径仍待点验。不得回退为调用全局管理员目录或绕过后端权限。
+4. 后续隔离真机补测已通过：非系统 `EMPLOYEE` 文档管理员可在 Flutter 中加载同租户 USER、DEPARTMENT、ROLE 候选；对合成员工授予/撤销 USER READ，以及授予/撤销 Employee ROLE READ，员工文档列表可见性随之开关。部门候选已显示，但部门授权动作未测；无 `MANAGE` 员工访问主体目录仍返回 404。
 
-本轮验收使用 7 份合成文档、无持久卷 PostgreSQL 和 loopback-only 后端；没有覆盖生产、公开部署、员工问答质量或更新后非系统管理员 Flutter 主体选择路径。后者的 API 修复证据见[ACL 主体目录报告](../evaluation/reports/document-acl-principal-directory-local-2026-09-24.md)，管理员设备流程见[真机 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)。
+管理员和任务面板验收使用 7 份合成文档；主体目录补测使用一条合成文档。两者均使用无持久卷 PostgreSQL 与 loopback-only 后端。主体目录设备证据不覆盖跨租户候选（由 PostgreSQL/API 测试覆盖）、员工问答/引用、生产、公开部署或质量门。详情见[ACL 主体目录报告](../evaluation/reports/document-acl-principal-directory-local-2026-09-24.md)及[管理员 ACL/索引任务真机报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)。
 
 ### 2026-09-24 连续 disposable API 演示记录
 

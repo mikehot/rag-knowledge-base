@@ -476,6 +476,84 @@ class AskServiceTests {
     }
 
     @Test
+    void rejectsCompleteJsonWhenProviderReportsTokenLimitTermination() {
+        askService = new AskService(
+            properties(0, false, false, 0),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "有效资料",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of("截断回答必须拒绝吗？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"资料回答\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            2409,
+            2400,
+            "length"
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest("截断回答必须拒绝吗？"));
+
+        assertThat(response.answer()).isEqualTo("暂时无法生成可验证的回答，建议转人工。");
+        assertThat(response.found()).isFalse();
+        assertThat(response.grounded()).isFalse();
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.STRUCTURED_OUTPUT_INVALID);
+        verify(aiProvider, times(1)).generate(anyString());
+    }
+
+    @Test
+    void rejectsCompleteJsonWhenProviderReportsAnUnrecognizedTermination() {
+        askService = new AskService(
+            properties(0, false, false, 0),
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics
+        );
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            "faq.md",
+            "chunk#1",
+            "有效资料",
+            0.91
+        );
+        when(embeddingProvider.embed(List.of("未知终止原因也必须拒绝吗？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hit));
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"资料回答\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            20,
+            12,
+            "other"
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest("未知终止原因也必须拒绝吗？"));
+
+        assertThat(response.answer()).isEqualTo("暂时无法生成可验证的回答，建议转人工。");
+        assertThat(response.found()).isFalse();
+        assertThat(response.grounded()).isFalse();
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.failureReason()).isEqualTo(AskFailureReason.STRUCTURED_OUTPUT_INVALID);
+        verify(aiProvider, times(1)).generate(anyString());
+    }
+
+    @Test
     void retriesOnceWhenStructuredOutputIsInvalid() {
         askService = new AskService(
             properties(0, false, false, 1),

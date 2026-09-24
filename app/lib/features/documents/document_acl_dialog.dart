@@ -150,122 +150,161 @@ class _DocumentAclDialogState extends ConsumerState<_DocumentAclDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final contentMaxHeight = MediaQuery.sizeOf(context).height * 0.5;
     return AlertDialog(
       title: Text(
         '文档权限 · ${widget.filename}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      content: SizedBox(
-        width: 520,
-        child: _loading
-            ? const SizedBox(
-                height: 100,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_error != null) ...[
-                      Text(_error!, style: const TextStyle(color: Colors.red)),
-                      TextButton(onPressed: _load, child: const Text('重试')),
-                    ],
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('type-$_principalType'),
-                      initialValue: _principalType,
-                      decoration: const InputDecoration(labelText: '主体类型'),
-                      items: const [
-                        DropdownMenuItem(value: 'USER', child: Text('用户')),
-                        DropdownMenuItem(
-                          value: 'DEPARTMENT',
-                          child: Text('部门'),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: contentMaxHeight),
+        child: SizedBox(
+          width: 520,
+          child: _loading
+              ? const SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null) ...[
+                        Text(
+                          _error!,
+                          style: const TextStyle(color: Colors.red),
                         ),
-                        DropdownMenuItem(value: 'ROLE', child: Text('角色')),
+                        TextButton(onPressed: _load, child: const Text('重试')),
                       ],
-                      onChanged: _saving
-                          ? null
-                          : (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _principalType = value;
-                                _principalId = null;
-                              });
-                              _load();
-                            },
-                    ),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey(
-                        'principal-$_principalId-${_principals.length}',
-                      ),
-                      initialValue: _principalId,
-                      decoration: const InputDecoration(labelText: '授权对象'),
-                      items: _principals
-                          .map(
-                            (principal) => DropdownMenuItem(
-                              value: principal.id,
-                              child: Text(
-                                principal.label,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                      _labeledDropdown(
+                        '主体类型',
+                        DropdownButtonFormField<String>(
+                          key: ValueKey('type-$_principalType'),
+                          initialValue: _principalType,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 18,
                             ),
-                          )
-                          .toList(),
-                      onChanged: _saving
-                          ? null
-                          : (value) => setState(() => _principalId = value),
-                    ),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('permission-$_permission'),
-                      initialValue: _permission,
-                      decoration: const InputDecoration(labelText: '权限'),
-                      items: const [
-                        DropdownMenuItem(value: 'READ', child: Text('只读')),
-                        DropdownMenuItem(value: 'MANAGE', child: Text('管理')),
-                      ],
-                      onChanged: _saving
-                          ? null
-                          : (value) {
-                              if (value != null) {
-                                setState(() => _permission = value);
-                              }
-                            },
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: _principalId == null || _saving
-                          ? null
-                          : _grant,
-                      icon: const Icon(Icons.person_add_alt_1),
-                      label: const Text('授权'),
-                    ),
-                    const Divider(height: 24),
-                    if (_acl.isEmpty)
-                      const Text('当前没有显式文档授权')
-                    else
-                      ..._acl.map(
-                        (item) => ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            '${item.principalType} · ${item.principalId}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          subtitle: Text(item.permission),
-                          trailing: IconButton(
-                            tooltip: '撤权',
-                            onPressed: _saving
-                                ? null
-                                : () => _confirmRevoke(item),
-                            icon: const Icon(Icons.remove_circle_outline),
-                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'USER', child: Text('用户')),
+                            DropdownMenuItem(
+                              value: 'DEPARTMENT',
+                              child: Text('部门'),
+                            ),
+                            DropdownMenuItem(value: 'ROLE', child: Text('角色')),
+                          ],
+                          onChanged: _saving
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _principalType = value;
+                                    _principalId = null;
+                                  });
+                                  _load();
+                                },
                         ),
                       ),
-                  ],
+                      _labeledDropdown(
+                        '授权对象',
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'principal-$_principalId-${_principals.length}',
+                          ),
+                          initialValue: _principalId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 18,
+                            ),
+                          ),
+                          items: _principals
+                              .map(
+                                (principal) => DropdownMenuItem(
+                                  value: principal.id,
+                                  child: Text(
+                                    principal.label,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _saving
+                              ? null
+                              : (value) => setState(() => _principalId = value),
+                        ),
+                      ),
+                      _labeledDropdown(
+                        '权限',
+                        DropdownButtonFormField<String>(
+                          key: ValueKey('permission-$_permission'),
+                          initialValue: _permission,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 18,
+                            ),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'READ', child: Text('只读')),
+                            DropdownMenuItem(
+                              value: 'MANAGE',
+                              child: Text('管理'),
+                            ),
+                          ],
+                          onChanged: _saving
+                              ? null
+                              : (value) {
+                                  if (value != null) {
+                                    setState(() => _permission = value);
+                                  }
+                                },
+                        ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _principalId == null || _saving
+                            ? null
+                            : _grant,
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: const Text('授权'),
+                      ),
+                      const Divider(height: 24),
+                      if (_acl.isEmpty)
+                        const Text('当前没有显式文档授权')
+                      else
+                        ..._acl.map(
+                          (item) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              '${item.principalType} · ${item.principalId}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(item.permission),
+                            trailing: IconButton(
+                              tooltip: '撤权',
+                              onPressed: _saving
+                                  ? null
+                                  : () => _confirmRevoke(item),
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
+        ),
       ),
       actions: [
         TextButton(
@@ -273,6 +312,28 @@ class _DocumentAclDialogState extends ConsumerState<_DocumentAclDialog> {
           child: const Text('关闭'),
         ),
       ],
+    );
+  }
+
+  Widget _labeledDropdown(String label, Widget dropdown) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ExcludeSemantics(
+            child: Text(
+              label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Semantics(label: label, child: dropdown),
+        ],
+      ),
     );
   }
 }

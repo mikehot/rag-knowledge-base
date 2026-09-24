@@ -121,11 +121,14 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 LM Studio 官方说明，`lms log stream` 可显示模型实际收到的格式化输入及返回输出；因此它可能暴露文档片段、完整 Prompt、用户问题和模型回答。应用自身不记录正文，并不代表 Provider 侧同样不暴露内容。[LM Studio `lms log stream` 文档](https://lmstudio.ai/docs/cli/serve/log-stream)
 
 - 处理真实客户或敏感资料时，不要开启/分享 model I/O 日志，也不要把 Developer Logs、终端记录或原始 Provider 响应贴入工单、截图、录屏或公开报告。
+- 本机 LM Studio 0.4.25（Build 1）的合成持久化探针已确认：一个请求的输入、输出标记均出现在新增的本地 server-log 字节中。当前配置会持久化至少部分 model I/O；在访问、保留、脱敏和关闭控制核实并接受之前，不要发送敏感客户内容。
 - 仅排查服务启动/HTTP 状态时，优先使用 `lms log stream --source server`；不要把 model source 的日志当作无敏感信息的普通诊断日志。
 - 如确需查看 model I/O，只能在获准的隔离测试中用合成文档和账号；报告仅记录检查结论、模型/版本、日期和配置，不保留输入输出正文、凭据或原始日志。
 - 公开文档未在本次核验中证明存在可依赖的自动脱敏、持久化保留策略或统一关闭开关。真实数据上线前必须针对实际安装版本核实本机配置、日志位置、访问控制与清理策略；不满足时改用受控 Provider/禁用该诊断路径。
 
-2026-09-24 在 synthetic disposable 环境用唯一输入/输出标记对本机 `lms log stream --source model --filter input,output --json` 做了内存过滤，两类标记均可见；原始流未输出或存盘。对 LM Studio 0.4.25（Build 1）的只读检查发现本机 `server-logs` 目录有 68 个按日期分文件、mtime 覆盖 2026-03-19 至 2026-09-24 的日志文件；枚举文件权限均为 `0644`，日志及月份目录为 `0755`，用户主目录为 `0750`。这证明 server logs 在本机持续落盘，但未读取日志正文，不能据此判断是否包含 Prompt/文档片段，也不能推断模型 I/O 会否写入这些文件。LM Studio 设置页未看到模型 I/O 脱敏/保留/关闭控制；有效用户可达性、日志内容分类、轮换/保留策略仍 OPEN。把该目录按潜在敏感信息处理；任何权限调整需单独批准并验证。详见 `evaluation/reports/provider-log-boundary-review-local-2026-09-24.md`。
+2026-09-24 对 LM Studio 0.4.25（Build 1）完成合成持久化探针：只扫描一次请求后新增的日志字节，在一个文件的 4,055 个新增字节中分别找到输入与输出标记；没有读取旧日志正文、输出/保存原始日志或保留标记值，探针卸载了临时加载的模型。故本机配置已证实会把至少部分 model I/O 持久化到 server-log。此前只读盘点发现 68 个按日期分文件、mtime 覆盖 2026-03-19 至 2026-09-24；文件权限均为 `0644`，日志及月份目录为 `0755`，用户主目录为 `0750`，无 ACL 条目。模式位允许 owning `staff` 组成员遍历并读取；当前账号的 primary GID 为 20（`staff`），但 Directory Services 枚举其它本地账号时返回错误，故其他人类账号的实际可达性未确认。系统 `/etc/newsyslog.conf` 与 `/etc/newsyslog.d` 中未发现 LM Studio/`server-logs` 专属规则；这不能排除应用内部轮转，公开官方文档也未给出本机日志保留/轮转承诺。日志正文整体分类、脱敏、关闭控制及轮换/保留策略仍 OPEN；把目录按敏感信息处理，在剩余控制得到评估并接受前不要发送敏感客户资料。任何权限调整或日志删除需单独批准。详见 `evaluation/reports/provider-log-boundary-review-local-2026-09-24.md`。
+
+同日随后已将本机 `server-logs` 根目录权限收紧为 owner-only `0700`（目录 owner 仍为当前账号）；已有日志文件仍为 `0644`，但其他账号无法穿过该父目录访问。此为本机权限缓解，不等于 LM Studio 应用提供了脱敏或保留策略；尚未验证重启/重建目录后权限是否保持。后续权限改动或日志清理仍需单独批准。
 
 ## 7. 事件处理与证据保留
 

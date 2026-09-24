@@ -17,11 +17,14 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AskService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AskService.class);
     private static final String HANDOFF = "未找到相关信息，建议转人工。";
     private static final String TEMPORARY_UNAVAILABLE = "暂时无法检索资料，建议转人工。";
     private static final String STRUCTURED_OUTPUT_FALLBACK = "暂时无法生成可验证的回答，建议转人工。";
@@ -160,9 +163,11 @@ public class AskService {
                 int tokenUsage = providerResponse.tokenUsage();
                 StructuredAnswer structuredAnswer;
                 try {
-                    structuredAnswer = new StructuredOutputParser().parse(providerResponse.text());
+                    structuredAnswer = parseProviderAnswer(providerResponse);
                 } catch (StructuredOutputException ex) {
+                    logStructuredOutputFailure(requestId, 1, providerResponse);
                     StructuredOutputRetryResult retryResult = retryStructuredOutput(
+                        requestId,
                         prompt,
                         question,
                         providerResponse,
@@ -302,6 +307,7 @@ public class AskService {
     }
 
     private StructuredOutputRetryResult retryStructuredOutput(
+        UUID requestId,
         String prompt,
         String question,
         AiProviderResponse firstResponse,
@@ -312,6 +318,7 @@ public class AskService {
         int retries = Math.max(0, properties.ai().structuredOutputRetries());
         StructuredOutputParser parser = new StructuredOutputParser();
         for (int retry = 0; retry < retries; retry++) {
+            int attempt = retry + 2;
             long retryStarted = System.nanoTime();
             AiProviderResponse retryResponse = generate(
                 prompt + "\n\n上一次输出未通过 JSON 校验。请重新输出同一个问题的答案，必须只包含一个严格 JSON 对象，字段只能是 answer、found、grounded、sourceIndexes；不要输出 Markdown、解释或代码围栏。回答必须覆盖用户问题中的每个子问题。",
@@ -320,12 +327,41 @@ public class AskService {
             tokenUsage += retryResponse.tokenUsage();
             generationMs += elapsedMs(retryStarted);
             try {
-                return new StructuredOutputRetryResult(parser.parse(retryResponse.text()), tokenUsage, generationMs);
+                return new StructuredOutputRetryResult(
+                    parseProviderAnswer(retryResponse, parser),
+                    tokenUsage,
+                    generationMs
+                );
             } catch (StructuredOutputException ignored) {
+                logStructuredOutputFailure(requestId, attempt, retryResponse);
                 // Keep the bounded retry fail-closed; the caller returns a stable fallback.
             }
         }
         return new StructuredOutputRetryResult(null, tokenUsage, generationMs);
+    }
+
+    private StructuredAnswer parseProviderAnswer(AiProviderResponse response) {
+        return parseProviderAnswer(response, new StructuredOutputParser());
+    }
+
+    private StructuredAnswer parseProviderAnswer(AiProviderResponse response, StructuredOutputParser parser) {
+        String finishReason = response.finishReason();
+        if (finishReason != null && !finishReason.equals("stop") && !finishReason.equals("unknown")) {
+            throw new StructuredOutputException("Provider did not finish the answer normally");
+        }
+        return parser.parse(response.text());
+    }
+
+    private void logStructuredOutputFailure(UUID requestId, int attempt, AiProviderResponse response) {
+        String output = response.text();
+        LOGGER.warn(
+            "Structured answer validation failed; requestId={}, attempt={}, finishReason={}, completionTokens={}, outputChars={}",
+            requestId,
+            attempt,
+            response.finishReason(),
+            response.completionTokens(),
+            output == null ? 0 : output.length()
+        );
     }
 
     private void enforceDailyLimit(UUID userId) {

@@ -73,7 +73,12 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         if (text.isBlank()) {
             throw new AiCallException("OpenAI 兼容接口返回内容为空");
         }
-        return new AiProviderResponse(text.trim(), tokenUsage(root));
+        return new AiProviderResponse(
+            text.trim(),
+            tokenUsage(root),
+            completionTokens(root),
+            finishReason(root)
+        );
     }
 
     private Map<String, Object> structuredResponseFormat() {
@@ -118,5 +123,21 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
             return usage.path("prompt_tokens").asInt(0) + usage.path("completion_tokens").asInt(0);
         }
         return 0;
+    }
+
+    private int completionTokens(JsonNode root) {
+        return Math.max(0, root.path("usage").path("completion_tokens").asInt(0));
+    }
+
+    private String finishReason(JsonNode root) {
+        JsonNode finishReason = root.path("choices").path(0).path("finish_reason");
+        String value = finishReason.asText("");
+        if (value.isBlank()) {
+            return "unknown";
+        }
+        return switch (value) {
+            case "stop", "length", "content_filter", "tool_calls" -> value;
+            default -> "other";
+        };
     }
 }

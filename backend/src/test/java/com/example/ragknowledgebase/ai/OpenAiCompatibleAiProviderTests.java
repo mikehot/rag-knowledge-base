@@ -20,16 +20,18 @@ import org.junit.jupiter.api.Test;
 class OpenAiCompatibleAiProviderTests {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicReference<String> requestBody = new AtomicReference<>();
+    private final AtomicReference<String> providerResponse = new AtomicReference<>();
     private HttpServer server;
 
     @BeforeEach
     void setUp() throws IOException {
+        providerResponse.set("""
+            {"choices":[{"finish_reason":"stop","message":{"content":"{\\"answer\\":\\"已处理\\",\\"found\\":true,\\"grounded\\":true,\\"sourceIndexes\\":[1]}"}}],"usage":{"prompt_tokens":6,"completion_tokens":11,"total_tokens":17}}
+            """);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] response = """
-                {"choices":[{"message":{"content":"{\\"answer\\":\\"已处理\\",\\"found\\":true,\\"grounded\\":true,\\"sourceIndexes\\":[1]}"}}],"usage":{"total_tokens":17}}
-                """.getBytes(StandardCharsets.UTF_8);
+            byte[] response = providerResponse.get().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, response.length);
             try (var output = exchange.getResponseBody()) {
@@ -57,6 +59,8 @@ class OpenAiCompatibleAiProviderTests {
 
         assertThat(response.text()).contains("\"sourceIndexes\":[1]");
         assertThat(response.tokenUsage()).isEqualTo(17);
+        assertThat(response.completionTokens()).isEqualTo(11);
+        assertThat(response.finishReason()).isEqualTo("stop");
         JsonNode body = objectMapper.readTree(requestBody.get());
         assertThat(body.path("response_format").path("type").asText()).isEqualTo("json_schema");
         assertThat(body.path("response_format").path("json_schema").path("name").asText())
@@ -70,6 +74,46 @@ class OpenAiCompatibleAiProviderTests {
             .containsExactlyInAnyOrder("answer", "found", "grounded", "sourceIndexes");
         assertThat(schema.path("additionalProperties").asBoolean()).isFalse();
         assertThat(body.path("max_tokens").asInt()).isEqualTo(2400);
+    }
+
+    @Test
+    void capturesLengthFinishReasonWithoutTreatingItAsValidStructuredOutput() {
+        providerResponse.set("""
+            {"choices":[{"finish_reason":"length","message":{"content":"{\\"answer\\":"}}],"usage":{"prompt_tokens":9,"completion_tokens":2400,"total_tokens":2409}}
+            """);
+        OpenAiCompatibleAiProvider provider = new OpenAiCompatibleAiProvider(
+            properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1"),
+            objectMapper
+        );
+
+        AiProviderResponse response = provider.generate("回答问题");
+
+        assertThat(response.finishReason()).isEqualTo("length");
+        assertThat(response.completionTokens()).isEqualTo(2400);
+        assertThat(response.text()).isEqualTo("{\"answer\":");
+    }
+
+    @Test
+    void distinguishesExplicitUnknownFinishReasonFromMissingFinishReason() {
+        providerResponse.set("""
+            {"choices":[{"finish_reason":"provider_specific_limit","message":{"content":"{\\"answer\\":\\"已处理\\",\\"found\\":true,\\"grounded\\":true,\\"sourceIndexes\\":[1]}"}}],"usage":{"completion_tokens":12}}
+            """);
+        OpenAiCompatibleAiProvider provider = new OpenAiCompatibleAiProvider(
+            properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1"),
+            objectMapper
+        );
+
+        AiProviderResponse response = provider.generate("回答问题");
+
+        assertThat(response.finishReason()).isEqualTo("other");
+        assertThat(response.completionTokens()).isEqualTo(12);
+
+        providerResponse.set("""
+            {"choices":[{"message":{"content":"{\\"answer\\":\\"已处理\\",\\"found\\":true,\\"grounded\\":true,\\"sourceIndexes\\":[1]}"}}],"usage":{"completion_tokens":12}}
+            """);
+        AiProviderResponse legacyResponse = provider.generate("回答问题");
+
+        assertThat(legacyResponse.finishReason()).isEqualTo("unknown");
     }
 
     @Test

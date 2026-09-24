@@ -93,6 +93,14 @@ A configuration passes the answer-quality gate only when all of the following ho
 
 A candidate replaces the default only if it passes this gate, is not worse than the baseline on `golden-v1` and `retrieval-stress-v1` under the same configuration record, and does not raise mean token usage by more than 15%. If the baseline itself fails to reproduce its recorded score in the same session, the comparison is invalid and is reported without a decision.
 
+## Replay chunking strategies offline
+
+```bash
+python3 evaluation/run_chunking_replay.py [--prefix]
+```
+
+Re-chunks the fixture documents with the current size packing (700/100, 300/60) and heading-aware variants, embeds them through the local OpenAI-compatible endpoint, applies fixture visibility per actor, and reports Top-5 answer-point evidence per dataset. It calls only the embedding model and prints no chunk text. Use it to screen a chunking or embedding change before any backend A/B.
+
 ## Run the answer-quality extension set
 
 `datasets/answer_quality_v1.jsonl` adds 12 focused cases to the frozen 20-case baseline: 8 answerable questions covering battery, installation, warranty, returns, password recovery, and temporary passwords, plus 2 out-of-scope refusals and 2 ACL-filtered refusals. Together with `golden_v1`, the repository now has 32 versioned cases without rewriting the historical baseline.

@@ -19,7 +19,7 @@
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。缺：部门授权/撤权验收、撤权后员工问答/引用的完整路径验收 |
 | 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 123 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；**质量门未通过** | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
-| 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。下一候选：按 Markdown 标题切块 |
+| 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
 | 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练、脱敏录屏 |
 
@@ -108,7 +108,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 1. **质量门定义（已完成 2026-09-24）**：见 `evaluation/README.md`。
 2. **chunking 对照实验（已完成 2026-09-24，不采用）**：见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
-3. **按 Markdown 标题切块**（需改 `TextChunker`）：先离线复放候选排名，再在同一配置记录下 A/B；Golden/Stress 每组至少 2 轮以区分噪声。
+3. **按 Markdown 标题切块（已离线否决 2026-09-24）**：见 `evaluation/reports/heading-chunking-offline-replay-local-2026-09-24.md`。剩余检索杠杆是多语言 Embedding（当前 nomic v1.5 以英文为主，数据全为中文）；需下载模型，维度若非 768 还涉及 schema/重建索引，先用 `run_chunking_replay.py --embedding-model` 离线比较，待决策。
 4. **补齐 ACL 验收**：部门授权/撤权，以及撤权后员工问答/引用的完整路径（API 为主，真机抽测）。
 5. **干净环境全流程演练**：启动、上传索引、授权问答、拒答、权限拒绝、失败恢复、备份恢复。
 6. **脱敏录屏与作品集收尾**；公开部署单独决策，不宣称未测的 ROI 或 SLA。

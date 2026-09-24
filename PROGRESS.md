@@ -19,7 +19,7 @@
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。缺：部门授权/撤权验收、撤权后员工问答/引用的完整路径验收 |
 | 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 123 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；**质量门未通过** | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
-| 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。**路线图第 1 步 chunking 调参尚未测量** |
+| 5. 检索优化决策 | `in-progress` | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。下一候选：按 Markdown 标题切块 |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
 | 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练、脱敏录屏 |
 
@@ -95,8 +95,8 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 ## 已知缺口
 
-- **答案质量**：Q002 为 Top-5 边界召回缺口（目标 chunk rank 6–7，与第 5 名相似度差约 0.003）；Q006 答案点位于相邻 chunk。两者都指向切块粒度，但 chunking 尚未做对照实验。
-- **评测可复现性**：Thinking 开关未自动化；质量门未定义为“固定配置下重复 N 轮均达标”。
+- **答案质量**：默认 700/100 下 FAQ 的 chunk#1 混合规格/安装/保修/退换货四节，导致 Q002/Q006 召回失败（2026-09-24 对照组 6 轮全部失败）。300/60 修复了这两题的召回，但切碎了其他答案和引用（Golden RAG-005/012/013/014、STRESS-003、Q004 引用），净效果持平。按固定大小打包无法同时兼顾；详见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
+- **评测可复现性**：质量门已冻结于 `evaluation/README.md`（rubric-v2，连续 3 轮 ≥ 10/12）；每组前用探针确认 Thinking-off，但开关本身仍需在 LM Studio UI 手动设置。同配置两次会话间 Golden 波动 17→15，单轮 Golden/Stress 证据偏弱。
 - **ACL**：部门 grant/revoke 未验收；撤权后员工问答仅有 API 合成回放（3 次安全拒答），无设备级完整路径；只有 allow 型 ACL，无显式 deny、继承冲突和权限缓存失效策略；用户/部门停用、批量导入未做。
 - **观测**：告警阈值尚无真实 7 天基线；审计事件无保留/脱敏策略。
 - **检索**：无生产级全文检索或 Reranker；现有实验均默认关闭，且无成本结论。
@@ -106,11 +106,12 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 ## 下一步
 
-1. **固定质量门定义**：冻结 rubric-v2；把 Thinking-off 做成可复现配置；门槛定为同一配置连续 3 轮每轮 ≥ 10/12，且 ACL 泄漏 0、Schema 失败 0。
-2. **chunking 对照实验**（路线图第 5 阶段第 1 步）：在同一数据集和配置记录下对比 `700/100`（现状）与若干候选，跑 Golden / answer-quality / stress，重点看 Q002/Q006。
-3. **补齐 ACL 验收**：部门授权/撤权，以及撤权后员工问答/引用的完整路径（API 为主，真机抽测）。
-4. **干净环境全流程演练**：启动、上传索引、授权问答、拒答、权限拒绝、失败恢复、备份恢复。
-5. **脱敏录屏与作品集收尾**；公开部署单独决策，不宣称未测的 ROI 或 SLA。
+1. **质量门定义（已完成 2026-09-24）**：见 `evaluation/README.md`。
+2. **chunking 对照实验（已完成 2026-09-24，不采用）**：见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
+3. **按 Markdown 标题切块**（需改 `TextChunker`）：先离线复放候选排名，再在同一配置记录下 A/B；Golden/Stress 每组至少 2 轮以区分噪声。
+4. **补齐 ACL 验收**：部门授权/撤权，以及撤权后员工问答/引用的完整路径（API 为主，真机抽测）。
+5. **干净环境全流程演练**：启动、上传索引、授权问答、拒答、权限拒绝、失败恢复、备份恢复。
+6. **脱敏录屏与作品集收尾**；公开部署单独决策，不宣称未测的 ROI 或 SLA。
 
 继续不做：Fine-tuning、GraphRAG/Neo4j、复杂 Multi-Agent、Kubernetes、本地 GPU；不默认开启 Hybrid Search 或 Reranker。
 

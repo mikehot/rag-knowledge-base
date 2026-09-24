@@ -81,6 +81,18 @@ The report retains per-case failures instead of hiding them behind an average. I
 
 The first two real local API runs are recorded in [reports/golden-v1-local-2026-09-18.md](reports/golden-v1-local-2026-09-18.md). Each run passed 20/20 cases, with 100% answerable pass rate, citation coverage/correctness, refusal correctness, and zero ACL leakage. Latency and token figures are local-provider evidence only, not production SLOs.
 
+## Answer-quality release gate (frozen 2026-09-24)
+
+A configuration passes the answer-quality gate only when all of the following hold:
+
+- Dataset `answer-quality-v1` scored with **rubric-v2** (the matchers after the 2026-09-23 `QUALITY-001` revision). Changing any `match_any`/`quality_rules` term creates a new rubric version; scores from different versions are never compared.
+- **3 consecutive full 12-case captures** under one fixed configuration, each scoring **≥ 10/12**.
+- ACL leakage = 0 and Schema (structured-output) failures = 0 in every capture.
+- The configuration record is written next to the scores: chat/embedding model IDs, provider version, `Enable Thinking` state, effective context length, Top-K, similarity threshold, chunk size/overlap, `AI_MAX_TOKENS`, retrieval mode, and dataset/rubric version.
+- Before each configuration run, `probe_structured_output.py` must pass for the chat model; a failed probe aborts that run instead of producing a score.
+
+A candidate replaces the default only if it passes this gate, is not worse than the baseline on `golden-v1` and `retrieval-stress-v1` under the same configuration record, and does not raise mean token usage by more than 15%. If the baseline itself fails to reproduce its recorded score in the same session, the comparison is invalid and is reported without a decision.
+
 ## Run the answer-quality extension set
 
 `datasets/answer_quality_v1.jsonl` adds 12 focused cases to the frozen 20-case baseline: 8 answerable questions covering battery, installation, warranty, returns, password recovery, and temporary passwords, plus 2 out-of-scope refusals and 2 ACL-filtered refusals. Together with `golden_v1`, the repository now has 32 versioned cases without rewriting the historical baseline.

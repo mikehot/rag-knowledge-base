@@ -211,13 +211,13 @@
 
 截至 2026-09-24，V0.1 的实现主干和管理员运营 UI 已有真机证据；新文档 MANAGE 主体目录接口通过后端/API 与 SQL 集成测试，尚待真机点验；答案质量门、Provider 日志边界及对外交付证据仍未闭环。优先顺序：
 
-1. **本轮状态收敛（已完成）**：计划开始时盘点的 24 个既有本地变更已核对用途；保留 answer-quality rubric/测试/报告；V13 与 `VECTOR_ADJACENT` 只作为默认关闭的实验，不推广默认检索策略。核心 37 文件已由 `a7d7568` 提交并推送；后续 API/备份恢复验收记录目前仅在本地待收敛。
+1. **本轮状态收敛（已完成）**：计划开始时盘点的 24 个既有本地变更已核对用途；保留 answer-quality rubric/测试/报告；V13 与 `VECTOR_ADJACENT` 只作为默认关闭的实验，不推广默认检索策略。核心 37 文件由 `a7d7568` 提交，API/备份恢复验收文档由 `e6919a7` 提交，本轮 ACL 主体目录、演示/日志证据与路线更新由 `fadcd29` 提交，均已推送。
 2. **检索候选窄诊断**：已新增“只替换同文档冗余 Chunk”的离线候选比较。当前 12 题里它没有做出任何替换，答案点覆盖仍为 75%（6/8），不值得做在线 API A/B；Q002/Q006 仍是已知缺口。除非有新的 source-preserving 候选假设，不继续堆 Hybrid/Reranker/重排。
 3. **Flutter 最小运营 UI（管理员主路径通过；非系统管理员 API 修复已完成）**：管理员 Android 真机 `.verify` 已验证 ACL 授权/撤权及索引安全重试。已修复文档 MANAGE 用户无法调用全局管理员主体目录的问题：新按文档授权的候选端点返回同租户最小字段，跨租户及无 MANAGE 均被测试拒绝。Flutter 调用已构建，但本轮未安装/点验更新包；员工问答撤权后的模型输出也因 `STRUCTURED_OUTPUT_INVALID` 未通过完整拒答验收。详见 `evaluation/reports/document-acl-principal-directory-local-2026-09-24.md`。
 4. **干净交付演练（API 连续流程和最小 UI 通过，日志治理待完成）**：隔离 API 连续演示、数据库+文件恢复及 Flutter 管理 UI 的合成真机主路径均有新鲜证据；本机 LM Studio model I/O 可见已由合成 sentinel 确认，server-log 文件存在和权限位已盘点但未读正文。仍需核实模型 I/O 是否落盘、日志内容分类、有效访问范围、脱敏与保留/轮换控制；演示问法的 Top-5 召回敏感性需保留说明。
 5. **作品集收尾（文档本轮同步）**：中英文 Case Study 和 Demo 讲稿已纳入 2026-09-24 连续演示、Provider 日志与 Flutter 运营 UI 真机证据；脱敏录屏仍待日志边界确认后再制作。是否公开部署仍单独决策，不宣称未测的 ROI 或生产 SLA。
 
-近期完整证据和离线 source-preserving 结果见 `evaluation/reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md`。核心功能 `a7d7568` 与 API/备份恢复验收文档 `e6919a7` 均已推送；本轮 Provider 日志 sentinel、连续演示报告，以及 Runbook、Demo、Case Study、路线/进度更新均仍在本地待提交。
+近期完整证据和离线 source-preserving 结果见 `evaluation/reports/adjacent-chunk-selection-answer-quality-local-2026-09-23.md`。截至 `fadcd29`，本轮 Provider 日志 sentinel、连续演示报告，以及 Runbook、Demo、Case Study、路线/进度更新均已提交并推送。
 
 ### 2026-09-23：QUALITY-002 / QUALITY-006 新鲜隔离复核
 

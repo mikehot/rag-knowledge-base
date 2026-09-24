@@ -135,7 +135,7 @@ flutter run -d <device-id> \
 
 演示有一个重要限制：初始问题“整机保修期是多久？”因目标 FAQ 未进入 Top-5 而被正确拒答；更精确措辞使其进入 rank 3 后才得到带引用回答。该结果暴露措辞敏感性，不代表 Top-5 召回缺口已修复，也不计入 Golden/Answer Quality 质量门。管理运营 Flutter UI 于同日另在 Android 真机用合成数据验收，详见[连续演示记录](../evaluation/reports/continuous-disposable-demo-local-2026-09-24.md)及[真机 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)。
 
-本轮还用合成 sentinel 确认本机 `lms log stream --source model --filter input,output` 可见模型输入与输出。真实或敏感文档可能进入模型输入日志；不得将 Developer Logs 或 model-I/O stream 纳入录屏/公开材料，且在使用客户数据前仍须检查本机日志持久化、访问控制、脱敏和保留配置。详情见[Provider 日志复核](../evaluation/reports/provider-log-boundary-review-local-2026-09-24.md)。
+本轮还用合成 sentinel 确认本机 `lms log stream --source model --filter input,output` 可见模型输入与输出。真实或敏感文档可能进入模型输入日志；不得将 Developer Logs 或 model-I/O stream 纳入录屏/公开材料，LM Studio 只用于合成数据；使用客户数据前须换用通过 Runbook Provider 验收清单的 Provider。详情见[Provider 日志复核](../evaluation/reports/provider-log-boundary-review-local-2026-09-24.md)。
 
 2026-09-23 在 Android 16/API 36 真实设备独立验证了 Flutter 应用内上传：通过系统文件选择器选择本轮新建的唯一文件 `rag-device-upload-check-20260923.md`，应用回到知识库页先显示 `入库中`，随后显示 `1 段 · 就绪`；同一 demo 账号的只读文档 API 轮询也观察到 `processing` 后变为 `ready`、chunkCount=1。验收后已删除该临时后端文档及设备文件。此前记录的 `sample_faq.md` 上传归因不作为本次上传证据：它在本轮操作前已存在于文档清单且为 `ready`，所以仅凭重选后看到 ready 不能证明这次产生了新上传。
 

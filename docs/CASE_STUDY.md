@@ -37,7 +37,7 @@
 
 2026-09-22 的 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈和拒答；2026-09-23 Android 设备证据覆盖新文件上传到 READY。随后独立完成本地人工备份/恢复。2026-09-24 API 连续演示验证授权引用、拒答、权限拒绝、反馈、MCP 16/16 和索引失败恢复；同日隔离 Android `.verify` 包验证管理员 ACL/索引任务流程，以及非系统 EMPLOYEE 文档管理员加载 USER/DEPARTMENT/ROLE 候选、通过 Flutter 授权/撤销 USER 与 Employee ROLE READ，并观察合成员工文档列表可见性变化。初始问法仍暴露 Top-5 措辞敏感，故不代表质量门通过。本机 LM Studio 合成持久化探针在一个 server-log 文件的 4,055 个新增字节中发现输入、输出标记；未读取旧日志或保留原文。日志文件权限位为 0644，owning `staff` 组访问边界、完整内容分类、脱敏及保留策略仍未闭环；敏感资料不得通过当前配置。后端现对结构化失败记录不含内容的 Provider 终止元数据，并对非正常终止 fail-closed；仅经合成测试验证，尚未重放此前撤权失败。真机未覆盖部门 grant/revoke、员工问答/引用或生产安全验证。完整边界见 [PROGRESS.md](../PROGRESS.md)、[连续演示记录](../evaluation/reports/continuous-disposable-demo-local-2026-09-24.md)、[主体目录真机报告](../evaluation/reports/document-acl-principal-directory-local-2026-09-24.md)、[结构化终止诊断报告](../evaluation/reports/structured-output-termination-diagnostics-local-2026-09-24.md)、[管理员 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)、[Provider 日志复核](../evaluation/reports/provider-log-boundary-review-local-2026-09-24.md)、[备份恢复记录](../evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md) 与 [DEMO.md](DEMO.md)。
 
-同日后续将本机 LM Studio `server-logs` 根目录收紧为 owner-only `0700`；旧日志文件仍为 `0644`，通过父目录权限限制访问。应用重启或重建目录后此权限是否保持、以及应用内保留/轮转策略仍未验证；这属于本机缓解措施，不是产品级日志治理能力。
+同日后续将本机 LM Studio `server-logs` 根目录收紧为 owner-only `0700`，正常退出/重开后保持；这只是开发机缓解，不是产品级日志治理能力。随后按范围决策收口：LM Studio 定位为本地开发/评测 Provider，只处理合成数据；接入真实数据的 Provider 须通过 Runbook 中的 Provider 验收清单（保留期限、日志关闭/脱敏、访问控制、删除路径）。
 
 ## 5. 业务价值假设
 
@@ -57,7 +57,7 @@
 2. 没有因为一次局部召回缺口就打开 Hybrid Search、Reranker 或提高默认 Top-K。
 3. 没有把模型生成的文件名当作可信引用；引用由后端 ACL 可见结果映射。
 4. 没有先做写 Agent；只读 Tool/MCP 先通过权限、预算、审计和失败路径验证。
-5. 没有把本地 LM Studio 能运行包装成生产部署；Provider 日志和模型输出稳定性仍需治理。
+5. 没有把本地 LM Studio 能运行包装成生产部署；本地 Provider 只处理合成数据，真实数据须先通过 Provider 验收清单；模型输出稳定性仍需治理。
 
 ## 7. 下一阶段
 

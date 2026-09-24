@@ -1,5 +1,9 @@
 # Provider Log Boundary Review — 2026-09-24
 
+## Closure decision (2026-09-24)
+
+This review is **closed by scope decision**, not by further investigation. LM Studio is the local development/evaluation provider only; it is not part of the V0.1 delivered system. The confirmed facts below are sufficient to set the usage rule: LM Studio receives synthetic/public sample data only. Rotation, retention, content classification, and directory-recreation permission behavior of LM Studio logs are intentionally left unverified and are no longer tracked as open items for this repository. Any provider handling real customer data must instead pass the acceptance checklist in `docs/DEPLOYMENT_RUNBOOK.md` (section "Provider 侧模型 I/O 与隐私边界").
+
 ## Finding
 
 LM Studio's official `lms log stream` documentation says the model log stream can show the exact formatted input sent to the model and the output returned by the model: <https://lmstudio.ai/docs/cli/serve/log-stream>.

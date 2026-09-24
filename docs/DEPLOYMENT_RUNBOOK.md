@@ -118,17 +118,27 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 
 ### Provider 侧模型 I/O 与隐私边界
 
-LM Studio 官方说明，`lms log stream` 可显示模型实际收到的格式化输入及返回输出；因此它可能暴露文档片段、完整 Prompt、用户问题和模型回答。应用自身不记录正文，并不代表 Provider 侧同样不暴露内容。[LM Studio `lms log stream` 文档](https://lmstudio.ai/docs/cli/serve/log-stream)
+**范围声明（2026-09-24 收口）**：LM Studio 是本项目的**本地开发/评测 Provider**，不属于 V0.1 交付系统的一部分。它的日志治理不作为本仓库的验收门槛，本仓库也不再继续调查其日志轮转、保留或目录重建后的权限行为。
 
-- 处理真实客户或敏感资料时，不要开启/分享 model I/O 日志，也不要把 Developer Logs、终端记录或原始 Provider 响应贴入工单、截图、录屏或公开报告。
-- 本机 LM Studio 0.4.25（Build 1）的合成持久化探针已确认：一个请求的输入、输出标记均出现在新增的本地 server-log 字节中。当前配置会持久化至少部分 model I/O；在访问、保留、脱敏和关闭控制核实并接受之前，不要发送敏感客户内容。
-- 仅排查服务启动/HTTP 状态时，优先使用 `lms log stream --source server`；不要把 model source 的日志当作无敏感信息的普通诊断日志。
-- 如确需查看 model I/O，只能在获准的隔离测试中用合成文档和账号；报告仅记录检查结论、模型/版本、日期和配置，不保留输入输出正文、凭据或原始日志。
-- 公开文档未在本次核验中证明存在可依赖的自动脱敏、持久化保留策略或统一关闭开关。真实数据上线前必须针对实际安装版本核实本机配置、日志位置、访问控制与清理策略；不满足时改用受控 Provider/禁用该诊断路径。
+已确认的事实（证据见 `evaluation/reports/provider-log-boundary-review-local-2026-09-24.md`）：
 
-2026-09-24 对 LM Studio 0.4.25（Build 1）完成合成持久化探针：只扫描一次请求后新增的日志字节，在一个文件的 4,055 个新增字节中分别找到输入与输出标记；没有读取旧日志正文、输出/保存原始日志或保留标记值，探针卸载了临时加载的模型。故本机配置已证实会把至少部分 model I/O 持久化到 server-log。此前只读盘点发现 68 个按日期分文件、mtime 覆盖 2026-03-19 至 2026-09-24；文件权限均为 `0644`，日志及月份目录为 `0755`，用户主目录为 `0750`，无 ACL 条目。模式位允许 owning `staff` 组成员遍历并读取；当前账号的 primary GID 为 20（`staff`），但 Directory Services 枚举其它本地账号时返回错误，故其他人类账号的实际可达性未确认。系统 `/etc/newsyslog.conf` 与 `/etc/newsyslog.d` 中未发现 LM Studio/`server-logs` 专属规则；这不能排除应用内部轮转，公开官方文档也未给出本机日志保留/轮转承诺。日志正文整体分类、脱敏、关闭控制及轮换/保留策略仍 OPEN；把目录按敏感信息处理，在剩余控制得到评估并接受前不要发送敏感客户资料。任何权限调整或日志删除需单独批准。详见 `evaluation/reports/provider-log-boundary-review-local-2026-09-24.md`。
+- LM Studio 0.4.25（Build 1）会把至少部分 model I/O（格式化输入与输出）持久化到本机 `~/.lmstudio/server-logs`；RAG 输入包含检索到的文档片段，因此这些日志按敏感数据处理。[LM Studio `lms log stream` 文档](https://lmstudio.ai/docs/cli/serve/log-stream)
+- 公开文档与本机设置中未发现可依赖的脱敏、保留期限或关闭开关。
+- 本机缓解：`server-logs` 根目录已收紧为 `0700`，正常退出/重开后保持；这只是开发机缓解，不是控制措施。
 
-同日随后已将本机 `server-logs` 根目录权限收紧为 owner-only `0700`（目录 owner 仍为当前账号）；已有日志文件仍为 `0644`，但其他账号无法穿过该父目录访问。此为本机权限缓解，不等于 LM Studio 应用提供了脱敏或保留策略；尚未验证重启/重建目录后权限是否保持。后续权限改动或日志清理仍需单独批准。
+由此得出的使用规则：
+
+- **LM Studio 只处理合成/公开样例数据**。不向其发送真实客户文档、真实员工问题或任何受限内容。
+- 排查服务启动/HTTP 状态时用 `lms log stream --source server`；不要分享 Developer Logs、model source 日志、终端记录或原始 Provider 响应，也不要把它们放进截图、录屏、工单或公开报告。
+- 应用自身不记录 Prompt、问题或文档正文；这只覆盖应用边界，不代表全链路无内容日志。
+
+**接入真实数据前的 Provider 验收清单**（任一项不满足即不得接入真实数据）：
+
+1. Provider 提供书面的请求/响应数据保留期限，以及是否用于训练的承诺；
+2. 可关闭或脱敏 Prompt/输出日志，或者日志访问受控并有审计；
+3. 数据驻留地区、传输加密和访问控制满足客户要求；
+4. 有可审计的删除路径和事件响应联系人；
+5. 以合成数据重跑 Golden / answer-quality / stress 评测，并在 `PROGRESS.md` 记录模型 ID、参数和结果。
 
 ## 7. 事件处理与证据保留
 

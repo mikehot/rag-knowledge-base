@@ -37,31 +37,77 @@
 
 ## Quick Start
 
-前提：Docker daemon 已启动，并准备一个 OpenAI-compatible Chat + Embedding 服务。默认配置面向本机 LM Studio。
+在一台已有依赖的机器上，从 clone 到拿到第一个带引用的回答，机器时间约 1 分钟（2026-09-24 全新 clone 演练，见 [报告](evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md)）。首次运行还需要额外时间拉取 Docker 镜像、下载 Maven 依赖，并在 LM Studio 中下载模型。
 
-当前验证工具链为 JDK 25.0.3；`.java-version` 固定为 `25`，Maven 仍以 Java 17 release 编译源码。
+### 前提
+
+- Docker（daemon 已启动）、JDK 25（`.java-version`；源码以 Java 17 字节码编译）、`curl`、`jq`。
+- 一个 OpenAI-compatible 模型服务，默认是本机 LM Studio `http://localhost:1234/v1`，需要：
+  - Chat：`google/gemma-4-26b-a4b-qat`（通过 `AI_MODEL_ID` 可替换）。Gemma 需在 LM Studio 中关闭 **Enable Thinking**，否则可能耗尽输出预算，导致结构化回答失败，见 [Runbook](docs/DEPLOYMENT_RUNBOOK.md)。
+  - Embedding：`text-embedding-nomic-embed-text-v1.5`，768 维。
+  - 两个 ID 必须与 `curl -s http://localhost:1234/v1/models` 的返回完全一致。
+- LM Studio 只处理合成或公开样例数据，不要用它处理真实客户资料。
+- `docker-compose.yml` 固定了容器名 `rag-knowledge-base-db` 并使用 5432 端口；同一台机器已有另一份 checkout 的容器时，会发生冲突。
+
+### 1. 启动
+
+所有命令都在仓库根目录执行。
 
 ```bash
 docker compose up -d db
-cd backend
-./mvnw spring-boot:run
+(cd backend && ./mvnw spring-boot:run)
 ```
 
-默认演示账号：
+另开一个终端，等待 `curl -s http://localhost:8080/readyz` 返回 `{"status":"UP"}`。默认管理员是 `demo` / `demo123456`，仅限本地演示。
 
-- username: `demo`
-- password: `demo123456`
+### 2. 上传并提问
 
-默认 AI 配置：
+```bash
+BASE_URL=http://localhost:8080
+TOKEN=$(curl -s "$BASE_URL/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"demo","password":"demo123456"}' | jq -r .data.token)
 
-- Chat base URL: `http://localhost:1234/v1`
-- Embedding model: `text-embedding-nomic-embed-text-v1.5` (the exact identifier must match LM Studio's `/v1/models` output)
-- Embedding dim: `768`
-- Chat completion budget: `2400` tokens by default; reasoning models may use part of this budget before returning visible answer content.
+DOC_ID=$(curl -s "$BASE_URL/api/documents/upload" -H "Authorization: Bearer $TOKEN" \
+  -F 'file=@sample_faq.md' | jq -r .data.documentId)
 
-如果后端运行在 Docker 中而 LM Studio/Ollama 运行在宿主机，`AI_BASE_URL` 和 `AI_EMBEDDING_BASE_URL` 通常需要设置为 `http://host.docker.internal:1234/v1`。
+# 等待索引完成（通常几秒）
+until curl -s "$BASE_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $TOKEN" \
+  | jq -e '.data.status == "ready"' >/dev/null; do sleep 2; done
 
-上述命令是项目启动入口。每个新环境仍需按 [ROADMAP.md](ROADMAP.md) 的 Milestone 1 和 [PROGRESS.md](PROGRESS.md) 的证据要求重新验证。
+# 资料内：found=true，sources 来自后端检索
+curl -s "$BASE_URL/api/ask" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"question":"设备保修期是多久？"}' | jq '.data | {found, answer, sources: [.sources[].filename], latencyMs}'
+
+# 资料外：found=false，不编造
+curl -s "$BASE_URL/api/ask" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"question":"公司明年的股权计划是什么？"}' | jq '.data | {found, sources, failureReason}'
+```
+
+### 3. 权限：员工只能检索被授权的文档
+
+```bash
+EMP_ID=$(curl -s "$BASE_URL/api/admin/users" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"username":"demo-employee","password":"employee123456","roleCodes":["EMPLOYEE"]}' | jq -r .data.id)
+EMP_TOKEN=$(curl -s "$BASE_URL/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"demo-employee","password":"employee123456"}' | jq -r .data.token)
+ask_as_employee() {
+  curl -s "$BASE_URL/api/ask" -H "Authorization: Bearer $EMP_TOKEN" -H 'Content-Type: application/json' \
+    -d '{"question":"设备保修期是多久？"}' | jq -c '.data | {found, sources: [.sources[].filename]}'
+}
+
+ask_as_employee    # 未授权：found=false，无引用；GET /api/documents 为空
+
+ACL_ID=$(curl -s "$BASE_URL/api/documents/$DOC_ID/acl" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"principalType\":\"USER\",\"principalId\":\"$EMP_ID\",\"permission\":\"READ\"}" | jq -r .data.id)
+ask_as_employee    # 已授权：found=true，引用 sample_faq.md
+
+curl -s -X DELETE "$BASE_URL/api/documents/$DOC_ID/acl/$ACL_ID" -H "Authorization: Bearer $TOKEN" >/dev/null
+ask_as_employee    # 撤权后：再次拒答
+```
+
+授权对象也可以是 `DEPARTMENT` 或 `ROLE`。权限在 SQL 检索阶段过滤，未授权的内容不会进入模型上下文。
+
+更完整的演示（反馈、只读 Tool/MCP、失败恢复、Flutter 客户端）见 [docs/DEMO.md](docs/DEMO.md)。
 
 ## V0.1 推进顺序
 

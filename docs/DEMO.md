@@ -10,11 +10,12 @@
 
 ## 0. 启动前检查（约 1 分钟）
 
+所有命令都在仓库根目录执行（上传命令引用根目录的 `sample_faq.md`）。
+
 ```bash
 docker compose up -d db
 curl -s http://localhost:1234/v1/models
-cd backend
-./mvnw spring-boot:run
+(cd backend && ./mvnw spring-boot:run)
 ```
 
 如果使用宿主机 LM Studio，确认 `/v1/models` 返回的 Chat 和 Embedding ID 与配置完全一致。GUI 能打开不等于 API Server 已启动；详细故障排查见 [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md)。
@@ -35,7 +36,7 @@ curl -s "$BASE_URL/api/documents/upload" \
   -F 'file=@sample_faq.md'
 ```
 
-记录返回的 `documentId`，随后通过 `GET /api/documents` 轮询，直到文档状态为 `ready`。索引任务失败时不要重复上传；先看任务状态和失败原因，再使用授权的 retry API。
+记录返回的 `documentId`，然后轮询直到文档状态为 `ready`，例如 `curl -s "$BASE_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $TOKEN" | jq -r .data.status`。列表接口的返回结构是 `.data.items[]`。索引任务失败时不要重复上传；先看任务状态和失败原因，再使用授权的 retry API。
 
 ## 2. 授权回答与引用（约 1 分钟）
 
@@ -80,6 +81,7 @@ curl -s -X PUT "$BASE_URL/api/ask/$REQUEST_ID/feedback" \
 curl -s "$BASE_URL/api/agent/tools" \
   -H "Authorization: Bearer $TOKEN"
 
+echo '{"username":"demo","password":"demo123456"}' > /private/tmp/rag-eval-admin.json   # 仅本地演示账号
 python3 evaluation/run_mcp_smoke.py \
   --base-url "$BASE_URL" \
   --credentials /private/tmp/rag-eval-admin.json \
@@ -88,13 +90,21 @@ python3 evaluation/run_mcp_smoke.py \
 
 展示点：只能发现 `search_knowledge`、`list_documents`、`get_document_status`；身份参数覆盖会被拒绝；未认证请求返回 401；没有删除、改权限或写 OA/CRM 的 Tool。
 
-## 6. ACL 演示（约 1 分钟，可选）
+## 6. ACL 演示（约 1 分钟）
 
-使用外部凭证和 disposable tenant 运行 `evaluation/prepare_api_fixture.py`，再用员工凭证执行 `evaluation/run_api_eval.py`。展示员工只能看到已授权 FAQ，不能列出或引用受保护策略文档；评测报告只保留聚合结果，不公开凭证、问题正文或 Token。
+最简单的方式是按 [README Quick Start 第 3 步](../README.md#3-权限员工只能检索被授权的文档) 用 curl 演示：新员工未授权时列表为空、提问拒答；授予 READ 后得到带引用的回答；撤权后再次拒答；员工尝试删除文档返回 404。该流程于 2026-09-24 在全新 clone 上验证。
 
-## 7. 失败恢复（约 1 分钟，可选）
+多角色、多文档的完整 ACL 评测：使用外部凭证和 disposable tenant 运行 `evaluation/prepare_api_fixture.py`，再用员工凭证执行 `evaluation/run_api_eval.py`。展示员工只能看到已授权 FAQ，不能列出或引用受保护策略文档；评测报告只保留聚合结果，不公开凭证、问题正文或 Token。
 
-不要在共享环境中故意破坏 Provider。用已有失败任务或 disposable 环境演示：查看 index task 的状态、attempt、失败原因和耗时，然后调用人工 retry；恢复后确认文档回到 `ready`。若只展示文档替换，说明新版本在新索引成功前不会替换旧的可检索版本。
+## 7. 失败恢复（约 3 分钟，可选）
+
+不要在共享环境中故意破坏 Provider，只在 disposable 环境里演示：
+
+1. 用不可达的 Embedding 地址重启后端：`(cd backend && AI_EMBEDDING_BASE_URL=http://127.0.0.1:9/v1 AI_EMBEDDING_MAX_RETRIES=0 ./mvnw spring-boot:run)`。
+2. 此时提问返回 `failureReason=EMBEDDING_ERROR`（HTTP 200，不会报 500）；调用 `POST /api/documents/$DOC_ID/reindex` 后，任务约 90 秒后进入 `FAILED`，`attemptCount=3`，失败原因可读。查看方式：`GET /api/admin/knowledge-bases/$KB_ID/index-tasks`，其中 `KB_ID` 为文档详情里的 `knowledgeBaseId`。
+3. 用正常配置重启，调用 `POST /api/admin/knowledge-bases/$KB_ID/index-tasks/$TASK_ID/retry`，任务在第 4 次尝试时 `SUCCEEDED`，文档回到 `ready`，问答恢复引用。
+
+已知限制（2026-09-24 演练发现）：重建索引进行中或失败后，文档状态不是 `READY`，旧 Chunk 虽然保留在库中，却不会被检索，所以重试成功前该文档对问答不可用。文档替换（replace）路径会在失败时恢复旧的可检索版本，reindex 目前不会。
 
 ## 8. Flutter 普通用户设备演示（上传链路已验收）
 

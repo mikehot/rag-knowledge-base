@@ -58,7 +58,7 @@ flowchart LR
 
 - **文档**：PDF / DOCX / TXT / Markdown 上传；checksum 幂等；版本化替换；停用、启用、软删除、重建索引。
 - **索引**：持久化任务队列，支持幂等入队、自动重试 3 次、管理员人工重试、进程重启后恢复。重建或替换失败时，旧版本继续提供服务。
-- **身份与权限**：JWT 携带 tenant 和 user；用户、部门、角色、知识库成员、文档 ACL 均可按 USER / DEPARTMENT / ROLE 授权；越权访问统一返回 404 并记录审计。
+- **身份与权限**：JWT 携带 tenant 和 user；用户、部门、角色、知识库成员、文档 ACL 均可按 USER / DEPARTMENT / ROLE 授权；越权访问统一返回 404 并记录拒绝审计；权限变更（文档 ACL、知识库成员、用户角色的授予与撤销）记录谁在何时改了什么，且与变更本身在同一事务提交。
 - **问答**：pgvector Top-K 检索，相似度过低时直接拒答；返回结构化答案、后端引用、requestId、分段耗时、Token 用量和失败分类。
 - **运营**：审计查询、受保护的检索诊断、Prometheus 指标（含估算成本）、健康和就绪探针、用户反馈。
 - **Agent 边界**：3 个只读 Tool 和一个无状态 MCP 适配层，复用同一套身份、ACL、调用预算和审计。
@@ -94,7 +94,7 @@ flowchart LR
 
 ## 工程证据
 
-- 后端 125 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试），GitHub Actions CI 通过。
+- 后端 126 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试），GitHub Actions CI 通过。
 - 从全新 clone 按 README 跑通：启动、上传、问答、拒答、授权与撤权、故障重试。演练中发现 8 处文档缺口和 1 个真实缺陷（重建失败会让文档下线），当天全部修复。见 [演练报告](evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md)。
 - 本地备份恢复演练，MCP 只读冒烟检查 16/16，Android 16 真机完成管理员 ACL 和索引任务的验收。
 

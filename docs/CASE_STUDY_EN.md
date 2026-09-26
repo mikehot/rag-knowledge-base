@@ -27,9 +27,9 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 
 | Area | Evidence |
 |---|---|
-| Access control | PostgreSQL integration tests cover grant → answerable and revoke → refused (after revoke, the model is never called); verified with curl on a fresh clone; zero ACL leakage across all evaluation runs |
+| Access control | PostgreSQL integration tests cover grant → answerable and revoke → refused (after revoke, the model is never called); every permission change is audited (who, when, what) in the same transaction as the change; verified with curl on a fresh clone; zero ACL leakage across all evaluation runs |
 | Reliability | Provider outages return stable error codes; failed index tasks recover through admin retry; a failed reindex keeps serving the previous version (integration test plus live replay) |
-| Engineering | 125 backend tests including Testcontainers integration tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
+| Engineering | 126 backend tests including Testcontainers integration tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
 | Reproducibility | A fresh clone following the README verbatim reaches a cited answer in under a minute of machine time (warm caches) |
 | Quality | answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. See [PORTFOLIO.md](../PORTFOLIO.md) |
 

@@ -40,6 +40,22 @@ public class AuditService {
         record(user, action, resourceType, resourceId, "ALLOW", reason);
     }
 
+    /**
+     * Records a successful permission change. Unlike denials, this joins the
+     * caller's transaction so the change and its audit row commit or roll back
+     * together; MANDATORY rejects calls made outside a transaction.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordPermissionChange(
+        AuthenticatedUser user,
+        String action,
+        String resourceType,
+        UUID resourceId,
+        String detail
+    ) {
+        record(user, action, resourceType, resourceId, "ALLOW", detail);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordError(
         AuthenticatedUser user,

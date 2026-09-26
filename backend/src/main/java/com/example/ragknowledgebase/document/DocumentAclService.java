@@ -123,6 +123,13 @@ public class DocumentAclService {
             throw new BusinessException(409, "文档权限已存在");
         }
         bumpPermissionVersion(user.tenantId(), documentId);
+        auditService.recordPermissionChange(
+            user,
+            "DOCUMENT_ACL_GRANT",
+            "DOCUMENT",
+            documentId,
+            grantDetail(request.principalType(), request.principalId(), request.permission())
+        );
         return get(user.tenantId(), aclId);
     }
 
@@ -133,16 +140,26 @@ public class DocumentAclService {
         UUID aclId
     ) {
         requireManage(user, documentId, "DOCUMENT_ACL_REVOKE");
-        int deleted = jdbcTemplate.update(
-            "DELETE FROM document_acl WHERE id = ? AND tenant_id = ? AND document_id = ?",
+        List<String> revoked = jdbcTemplate.query(
+            """
+                DELETE FROM document_acl
+                WHERE id = ? AND tenant_id = ? AND document_id = ?
+                RETURNING principal_type, principal_id, permission
+                """,
+            (rs, rowNum) -> grantDetail(
+                rs.getString("principal_type"),
+                rs.getObject("principal_id", UUID.class),
+                rs.getString("permission")
+            ),
             aclId,
             user.tenantId(),
             documentId
         );
-        if (deleted == 0) {
+        if (revoked.isEmpty()) {
             throw new BusinessException(404, "文档权限不存在");
         }
         bumpPermissionVersion(user.tenantId(), documentId);
+        auditService.recordPermissionChange(user, "DOCUMENT_ACL_REVOKE", "DOCUMENT", documentId, revoked.get(0));
         return new DeleteDocumentAclResponse(true);
     }
 
@@ -181,6 +198,10 @@ public class DocumentAclService {
         if (!"READ".equals(permission) && !"MANAGE".equals(permission)) {
             throw new BusinessException(400, "permission 仅支持 READ、MANAGE");
         }
+    }
+
+    private static String grantDetail(String principalType, UUID principalId, String permission) {
+        return principalType + ":" + principalId + ":" + permission;
     }
 
     private void bumpPermissionVersion(UUID tenantId, UUID documentId) {

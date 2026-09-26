@@ -112,6 +112,13 @@ public class AdminService {
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(409, "用户名已存在");
         }
+        auditService.recordPermissionChange(
+            operator,
+            "USER_CREATE",
+            "USER",
+            userId,
+            "roles=" + String.join(",", request.normalizedRoleCodes())
+        );
         return getUser(operator.tenantId(), userId);
     }
 
@@ -138,6 +145,15 @@ public class AdminService {
         );
         if (assigned == 0 && !roleExists(operator.tenantId(), request.roleCode())) {
             throw new BusinessException(400, "角色不存在: " + request.roleCode());
+        }
+        if (assigned > 0) {
+            auditService.recordPermissionChange(
+                operator,
+                "USER_ROLE_ASSIGN",
+                "USER",
+                userId,
+                "role=" + request.roleCode()
+            );
         }
         return getUser(operator.tenantId(), userId);
     }
@@ -167,6 +183,7 @@ public class AdminService {
         if (deleted == 0) {
             throw new BusinessException(404, "用户角色不存在");
         }
+        auditService.recordPermissionChange(operator, "USER_ROLE_REVOKE", "USER", userId, "role=" + normalizedRoleCode);
         return new DeleteUserRoleResponse(true);
     }
 
@@ -347,6 +364,13 @@ public class AdminService {
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(409, "授权已存在");
         }
+        auditService.recordPermissionChange(
+            operator,
+            "KNOWLEDGE_BASE_MEMBERSHIP_GRANT",
+            "KNOWLEDGE_BASE",
+            knowledgeBaseId,
+            membershipDetail(request.principalType(), request.principalId(), request.permission())
+        );
         return getMembership(operator.tenantId(), membershipId);
     }
 
@@ -357,21 +381,38 @@ public class AdminService {
         UUID membershipId
     ) {
         requireKnowledgeBaseManager(operator, knowledgeBaseId, "KNOWLEDGE_BASE_MEMBERSHIP_REVOKE");
-        int deleted = jdbcTemplate.update(
+        List<String> revoked = jdbcTemplate.query(
             """
                 DELETE FROM knowledge_base_membership
                 WHERE id = ?
                   AND tenant_id = ?
                   AND knowledge_base_id = ?
+                RETURNING principal_type, principal_id, permission
                 """,
+            (rs, rowNum) -> membershipDetail(
+                rs.getString("principal_type"),
+                rs.getObject("principal_id", UUID.class),
+                rs.getString("permission")
+            ),
             membershipId,
             operator.tenantId(),
             knowledgeBaseId
         );
-        if (deleted == 0) {
+        if (revoked.isEmpty()) {
             throw new BusinessException(404, "授权不存在");
         }
+        auditService.recordPermissionChange(
+            operator,
+            "KNOWLEDGE_BASE_MEMBERSHIP_REVOKE",
+            "KNOWLEDGE_BASE",
+            knowledgeBaseId,
+            revoked.get(0)
+        );
         return new DeleteMembershipResponse(true);
+    }
+
+    private static String membershipDetail(String principalType, UUID principalId, String permission) {
+        return principalType + ":" + principalId + ":" + permission;
     }
 
     private void requireSystemAdmin(AuthenticatedUser operator, String action) {

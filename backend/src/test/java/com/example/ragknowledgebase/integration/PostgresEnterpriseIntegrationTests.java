@@ -568,6 +568,61 @@ class PostgresEnterpriseIntegrationTests {
     }
 
     @Test
+    void permissionChangesWriteAllowAuditEventsInTheSameTransaction() {
+        insertDepartment(SALES_DEPARTMENT_ID, "MANAGED-SALES-AUDIT");
+        insertUser(OWNER_ID, "audit-admin-it");
+        insertUser(READER_ID, "audit-reader-it", TENANT_ID, SALES_DEPARTMENT_ID);
+        insertDocument();
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "audit-admin-it");
+        GrantDocumentAclRequest departmentRead = new GrantDocumentAclRequest("DEPARTMENT", SALES_DEPARTMENT_ID, "READ");
+
+        DocumentAclResponse acl = documentAclService.grant(admin, DOCUMENT_ID, departmentRead);
+        assertThatThrownBy(() -> documentAclService.grant(admin, DOCUMENT_ID, departmentRead))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).code())
+            .isEqualTo(409);
+        documentAclService.revoke(admin, DOCUMENT_ID, acl.id());
+
+        var membership = adminService.grantMembership(
+            admin,
+            KNOWLEDGE_BASE_ID,
+            new GrantKnowledgeBaseMembershipRequest("USER", READER_ID, "READ")
+        );
+        adminService.revokeMembership(admin, KNOWLEDGE_BASE_ID, membership.id());
+
+        adminService.assignUserRole(admin, READER_ID, new AssignUserRoleRequest("AUDITOR"));
+        adminService.assignUserRole(admin, READER_ID, new AssignUserRoleRequest("AUDITOR"));
+        adminService.revokeUserRole(admin, READER_ID, "AUDITOR");
+        UUID createdUserId = adminService.createUser(
+            admin,
+            new CreateUserRequest("managed-audit-user-it", "audit-password-123", null, null, List.of("EMPLOYEE"))
+        ).id();
+
+        String departmentGrant = "DEPARTMENT:" + SALES_DEPARTMENT_ID + ":READ";
+        String userGrant = "USER:" + READER_ID + ":READ";
+        assertThat(jdbcTemplate.queryForList(
+            """
+                SELECT action || '|' || resource_type || '|' || resource_id || '|' || reason
+                FROM audit_event
+                WHERE tenant_id = ? AND user_id = ? AND outcome = 'ALLOW'
+                ORDER BY created_at, action
+                """,
+            String.class,
+            TENANT_ID,
+            OWNER_ID
+        )).containsExactly(
+            "DOCUMENT_ACL_GRANT|DOCUMENT|" + DOCUMENT_ID + "|" + departmentGrant,
+            "DOCUMENT_ACL_REVOKE|DOCUMENT|" + DOCUMENT_ID + "|" + departmentGrant,
+            "KNOWLEDGE_BASE_MEMBERSHIP_GRANT|KNOWLEDGE_BASE|" + KNOWLEDGE_BASE_ID + "|" + userGrant,
+            "KNOWLEDGE_BASE_MEMBERSHIP_REVOKE|KNOWLEDGE_BASE|" + KNOWLEDGE_BASE_ID + "|" + userGrant,
+            "USER_ROLE_ASSIGN|USER|" + READER_ID + "|role=AUDITOR",
+            "USER_ROLE_REVOKE|USER|" + READER_ID + "|role=AUDITOR",
+            "USER_CREATE|USER|" + createdUserId + "|roles=EMPLOYEE"
+        );
+    }
+
+    @Test
     void aclPrincipalDirectoryRequiresDocumentManageAndStaysInTenant() throws Exception {
         insertUser(OWNER_ID, "acl-directory-owner-it");
         insertUser(READER_ID, "acl-directory-reader-it");

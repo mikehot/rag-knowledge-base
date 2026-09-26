@@ -1,68 +1,72 @@
 # Case Study：从 RAG Demo 到可治理的企业知识库 V0.1
 
-> 本案例使用脱敏样例和本地验证环境，不代表真实客户生产上线，也不构成准确率、SLA 或 ROI 承诺。
+> 使用合成样例和本地环境验证，不代表真实客户上线，也不构成准确率、SLA 或 ROI 承诺。最后更新：2026-09-24。
 
-## 1. 背景
+## 1. 问题
 
-原始项目能够把文档切片、向量化并回答问题，但企业交付还需要回答更多问题：员工是否只能看到授权资料？回答能否引用来源？文档更新失败如何恢复？模型输出不完整怎么办？上线后如何判断系统变慢、变贵或答错？
+一个能“上传文档、问答”的 RAG Demo 做起来不难，但企业真正要问的是：
+
+- 员工能不能只看到自己有权看的资料？
+- 答案从哪来？模型会不会编造出处？
+- 资料里没有的内容会不会乱答？
+- 文档更新失败、模型服务宕机时会怎样？
+- 怎么证明它答得好、够快、成本可控？
 
 ## 2. 目标
 
-建立一个可以运行、解释、评测、部署和交接的企业知识库闭环：
+建立一个可以运行、解释、评测、部署和交接的闭环：
 
-> 管理员上传文档 → 持久化索引 → 员工按权限提问 → 后端返回可校验引用 → 记录审计/延迟/Token/反馈 → 用版本化评测集复核质量。
+> 管理员上传文档 → 持久化索引 → 员工按权限提问 → 后端生成可校验的引用 → 记录审计、延迟、Token、反馈 → 用版本化评测集复核质量。
+
+## 开发方式
+
+实现代码主要由 AI 编码代理（OpenAI Codex、Claude Code）编写。本人负责需求与范围、架构和技术取舍、评测设计、代码评审、验收与发布决策。第 5 节的关键判断就来自这种工作方式：代理负责执行，人负责决定做什么、何时停，以及怎样验证结论。
 
 ## 3. 方案
 
-- Java/Spring Boot 保留企业 API、事务、权限、生命周期和运维接口。
-- PostgreSQL + pgvector 统一保存业务、ACL、Chunk、审计、问答观测和任务状态。
-- `index_task` 提供幂等入队、有限重试、失败状态、耗时和重启恢复。
-- 检索阶段先执行 tenant/user/department/role/knowledge-base/document ACL，再进行向量 Top-K。
-- 模型只返回受约束的 `answer`、`found`、`grounded` 和 `sourceIndexes`；后端二次校验并生成最终引用。
-- 三个只读 Agent Tool 和最小无状态 MCP 适配层复用同一身份、ACL、参数和审计边界。
+- **权限在检索时生效。** tenant、部门、角色、知识库成员和文档 ACL 都写在向量检索的 SQL 里，未授权内容不会进入模型上下文。
+- **引用归后端所有。** 模型只返回答案、`found`、`grounded` 和片段编号；后端校验 JSON Schema 和编号范围后生成出处。任何不合规的输出都 fail-closed，转人工。
+- **索引可恢复。** 持久化任务队列支持幂等、重试和重启恢复。chunk 只在全部 Embedding 成功后才在同一事务中切换，所以重建失败时旧版本继续可用。
+- **可观测。** 提供 requestId、分段耗时、失败分类、Token 与估算成本指标、审计查询、用户反馈，以及受保护的检索诊断。
+- **Agent 有边界。** 3 个只读 Tool 和无状态 MCP 适配层复用同一套身份、ACL、调用预算和审计；不开放写操作。
+- **技术选型。** Java/Spring Boot 负责业务、事务和权限，PostgreSQL + pgvector 统一存放业务数据与向量，Python 只用于评测。
 
-架构细节见 [ARCHITECTURE.md](ARCHITECTURE.md)，部署和故障处理见 [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md)。
+架构图见 [ARCHITECTURE.md](ARCHITECTURE.md)，关键设计决策见 [PORTFOLIO.md](../PORTFOLIO.md#三个关键设计决策)。
 
-## 4. 验证结果
+## 4. 结果
 
-| 维度 | 当前证据 | 结论边界 |
-|---|---|---|
-| 后端回归 | 2026-09-24 本地 Docker-backed 123 tests，0 failures/errors/skipped | 本地代码/集成回归通过，不等于 CI 新运行或生产 SLA |
-| Golden Dataset | 历史数据契约和本地运行有 20/20；最近记录的 Top-K=5/Thinking-off 为 16/20 | 合成样例，不是客户准确率或上线门槛通过 |
-| Retrieval Stress | 最近记录的 Thinking-off 运行 7/8；历史有 8/8；最近质量 A/B 的 ACL leakage=0 | 小样本、配置相关；不是生产安全保证 |
-| Answer Quality | 修订 rubric 的 VECTOR 12 题集两次记录 10/12；Q002/Q006 两次均失败。source-preserving 离线候选无替换、覆盖仍 75%（6/8） | 评测工具可复跑，但质量门未通过；不启用 Hybrid、Reranker 或相邻策略 |
-| Structured Output | LM Studio Gemma Thinking-off 合同探针 6/6；Thinking-on 重复探针曾发生 token 耗尽/无效 JSON；后端现记录脱敏终止元数据，并对非正常终止 fail-closed | 新 metadata guard 已通过合成回归；撤权后失败尚未用新观测重放，不能推断根因或声称跨配置稳定 |
-| ACL / Flutter 运营 | 9/23 API 测试：撤权后员工搜索和列表均不再返回目标文档。9/24 真机 `.verify`：管理员授权/撤权令员工列表 5→6→5；索引失败 3/3 后 UI 安全重试至 4/6 成功。非系统 EMPLOYEE 文档管理员真机加载 USER/DEPARTMENT/ROLE 候选；USER 与 Employee ROLE 的 READ 授权/撤权均改变合成员工列表可见性 | Flutter 主体目录最小路径已有设备证据；部门 grant/revoke 与跨租户真机路径未测（跨租户 API/SQL 测试通过）。撤权后的一次问答未通过结构化输出，不能声称完整拒答 |
-| MCP | 只读 HTTP smoke 16/16；四个 adapter 单元测试通过；恢复后服务再次 16/16 | 不是完整 MCP SDK/client conformance |
+| 维度 | 证据 |
+|---|---|
+| 权限 | 授权→可答、撤权→拒答（撤权后模型根本不会被调用）都有 PostgreSQL 集成测试；全新 clone 上用 curl 实测；所有评测运行 ACL 泄漏均为 0 |
+| 可靠性 | 模型服务故障时返回稳定错误码；索引任务 3 次失败后可人工重试恢复；重建失败期间旧版本照常回答（有集成测试和实机复测） |
+| 工程质量 | 后端 125 个测试（含 Testcontainers 集成测试），CI 通过；备份恢复演练通过；MCP 只读冒烟检查 16/16；Android 真机完成管理员 ACL 与索引任务验收 |
+| 可复现 | 全新 clone 按 README 逐字执行即可跑通，本机已有缓存时从 clone 到首个带引用回答不到 1 分钟 |
+| 质量 | answer-quality 每轮 8–10/12，**未通过**自定的质量门（连续 3 轮 ≥10/12）；golden 15–17/20；stress 8/8。完整声明见 [PORTFOLIO.md](../PORTFOLIO.md#评测结果与已知局限) |
 
-2026-09-22 的 disposable API Demo 覆盖上传、持久化索引、授权回答/引用、反馈和拒答；2026-09-23 Android 设备证据覆盖新文件上传到 READY。随后独立完成本地人工备份/恢复。2026-09-24 API 连续演示验证授权引用、拒答、权限拒绝、反馈、MCP 16/16 和索引失败恢复；同日隔离 Android `.verify` 包验证管理员 ACL/索引任务流程，以及非系统 EMPLOYEE 文档管理员加载 USER/DEPARTMENT/ROLE 候选、通过 Flutter 授权/撤销 USER 与 Employee ROLE READ，并观察合成员工文档列表可见性变化。初始问法仍暴露 Top-5 措辞敏感，故不代表质量门通过。本机 LM Studio 合成持久化探针在一个 server-log 文件的 4,055 个新增字节中发现输入、输出标记；未读取旧日志或保留原文。日志文件权限位为 0644，owning `staff` 组访问边界、完整内容分类、脱敏及保留策略仍未闭环；敏感资料不得通过当前配置。后端现对结构化失败记录不含内容的 Provider 终止元数据，并对非正常终止 fail-closed；仅经合成测试验证，尚未重放此前撤权失败。真机未覆盖部门 grant/revoke、员工问答/引用或生产安全验证。完整边界见 [PROGRESS.md](../PROGRESS.md)、[连续演示记录](../evaluation/reports/continuous-disposable-demo-local-2026-09-24.md)、[主体目录真机报告](../evaluation/reports/document-acl-principal-directory-local-2026-09-24.md)、[结构化终止诊断报告](../evaluation/reports/structured-output-termination-diagnostics-local-2026-09-24.md)、[管理员 ACL/索引任务报告](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md)、[Provider 日志复核](../evaluation/reports/provider-log-boundary-review-local-2026-09-24.md)、[备份恢复记录](../evaluation/reports/backup-restore-rehearsal-local-2026-09-23.md) 与 [DEMO.md](DEMO.md)。
+## 5. 过程中的关键判断
 
-同日后续将本机 LM Studio `server-logs` 根目录收紧为 owner-only `0700`，正常退出/重开后保持；这只是开发机缓解，不是产品级日志治理能力。随后按范围决策收口：LM Studio 定位为本地开发/评测 Provider，只处理合成数据；接入真实数据的 Provider 须通过 Runbook 中的 Provider 验收清单（保留期限、日志关闭/脱敏、访问控制、删除路径）。
+1. **结论可以是负的。** Keyword-RRF、多样性重排、相邻块、4 种切块大小、按标题切块都在同一数据集和固定配置下对比过。300/60 切块修好了两道题并通过了 answer-quality 门槛，但 golden 和 stress 同时退步，按事先定好的规则没有采用。默认配置一项都没改，报告全部保留。
+2. **知道什么时候停。** 语料只有 7 份文档时，Top-5 已经覆盖一半以上的 chunk，同配置两次运行就能差 ±2 分。继续在这上面调检索没有意义，所以把检索优化推迟到真实规模的语料上再做。
+3. **演练比自测更能发现问题。** 从全新 clone 只按 README 操作，找到了 8 处文档缺口，还找到 1 个真实缺陷：检索只认 `READY` 状态，导致一次重建失败就会让文档下线。当天修复，并补上一个“修复前失败、修复后通过”的集成测试。
+4. **用范围决策收口。** 本地模型服务（LM Studio）会把部分输入输出写入本机日志。我没有继续深挖第三方工具的日志机制，而是明确规定本地模型服务只处理合成数据，并为接入真实数据的模型服务写了验收清单。
 
-## 5. 业务价值假设
+## 6. 局限
 
-项目目前不虚构 ROI，而是定义待客户数据验证的指标：
+- 没有生产部署、公开 Demo 或真实用户数据；所有数字都来自本地合成数据。
+- 质量门尚未通过；语料规模太小，不足以做可信的检索优化。
+- ACL 只支持 allow 规则；chunk 没有记录 Embedding 模型，更换模型需要全量重建。
+- MCP 是最小的只读适配，没有第三方 SDK 互操作验证，也没有 Agent 循环或写操作。
 
-- 员工查找资料的平均时间是否下降；
-- 有引用回答的采纳率和有帮助反馈率是否提升；
-- 资料外拒答和 ACL 拒绝是否减少错误传播；
-- 文档更新到可检索的时间、失败重试成功率和人工介入次数；
-- 单次问答 Token、延迟和 Provider 成本是否在预算内。
+## 7. 下一步
 
-上线前需要用真实用户、真实文档和至少 7 天运营基线重新测量，不能把本地样例数据当作业务收益。
+见 [ROADMAP.md](../ROADMAP.md)：录制演示视频（阶段 A）；换成真实规模的公开语料和约 50 道题，重新建立基线，再对比多语言 Embedding 与云端模型的质量、延迟和成本（阶段 B）；可选地用真实 MCP 客户端做演示（阶段 C）。
 
-## 6. 交付中的关键取舍
+## 业务价值（待真实数据验证）
 
-1. 没有因为“主流”而把 Java 后端重写成 Python；Python 只承担评测和实验。
-2. 没有因为一次局部召回缺口就打开 Hybrid Search、Reranker 或提高默认 Top-K。
-3. 没有把模型生成的文件名当作可信引用；引用由后端 ACL 可见结果映射。
-4. 没有先做写 Agent；只读 Tool/MCP 先通过权限、预算、审计和失败路径验证。
-5. 没有把本地 LM Studio 能运行包装成生产部署；本地 Provider 只处理合成数据，真实数据须先通过 Provider 验收清单；模型输出稳定性仍需治理。
+不虚构 ROI。上线后需要用真实用户和至少 7 天的运营基线来测量：
 
-## 7. 下一阶段
-
-- 继续保持 Flutter 运营 UI 的合成设备回归；模型结构化拒答稳定后，再在设备上补验撤权后的员工问答/引用，并只保留非敏感聚合记录。
-- 审查 LM Studio Developer Logs/model-I/O 持久化、访问、脱敏和保留控制；在配置不清楚或不可接受前，不发送敏感客户内容。
-- 用真实业务文档补充评测集和反馈闭环。
-- 在第三方 MCP SDK/client 验证明确需求后，再决定是否做完整互操作支持。
-- 只有当评测、P95、成本和上下文干扰同时通过门槛，才考虑 Hybrid Search 或 Reranker。
+- 员工查找资料的时间是否下降；
+- 带引用回答的采纳率和“有帮助”反馈率；
+- 拒答和 ACL 拒绝能否减少错误信息的传播；
+- 文档从更新到可检索的时间；
+- 单次问答的 Token 用量与成本。

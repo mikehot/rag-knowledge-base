@@ -1,69 +1,115 @@
-# 作品集说明：Enterprise RAG Knowledge Base
+# Enterprise RAG Knowledge Base — 作品集说明
 
-> 本文件只描述已实现能力和当前可核对证据。规划中的企业能力以 `ROADMAP.md` 为准。
+> **English summary.** An enterprise knowledge-base Q&A system (Spring Boot, PostgreSQL + pgvector, Flutter). Employees retrieve only documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented. The project includes evaluation, audit, and deployment runbooks. It was built with AI coding agents (Codex, Claude Code), with scope, architecture, evaluation, review, and acceptance owned by me. Full write-up: [docs/CASE_STUDY_EN.md](docs/CASE_STUDY_EN.md).
+>
+> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/) 为准。最后更新：2026-09-24。
 
-## 一句话定位
+## 快速入口
 
-基于 Java / Spring Boot、PostgreSQL + pgvector 和 Flutter 的企业资料问答项目，正在以可验证的 ACL、审计、评测、部署和只读 Agent/MCP 边界交付企业知识库 V0.1。
+| 你想… | 去这里 |
+|---|---|
+| 5 分钟在本机跑起来 | [README Quick Start](README.md#quick-start)（已在全新 clone 上逐字验证） |
+| 看演示 | 演示视频制作中（ROADMAP A5）；可执行讲稿见 [docs/DEMO.md](docs/DEMO.md) |
+| 看架构和权限边界 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| 看评测方法和结果 | 下文「评测结果与已知局限」、[evaluation/README.md](evaluation/README.md) |
+| 看项目复盘 | [中文 Case Study](docs/CASE_STUDY.md) / [English](docs/CASE_STUDY_EN.md) |
 
-## 当前已实现能力
+## 解决的问题
 
-- RAG 后端：文档解析、Chunk、Embedding、pgvector Top-K 检索和相似度拒答。
-- 文档类型：PDF、DOCX、TXT、Markdown。
-- 可追溯回答：返回文档名、定位和原文片段，引用由后端检索结果生成。
-- Structured Output Contract：模型只提交答案、found/grounded 和资料片段编号；后端校验 JSON、引用范围和 ACL 后生成最终来源字段，非法结构或缺失引用安全转人工。
-- AI 集成：OpenAI-compatible Chat + Embedding Provider，可配置本地或云端服务。
-- Flutter：问答、文档上传、处理状态轮询、删除和来源片段弹窗。
-- 企业边界：JWT 携带 tenant/user 上下文，用户、部门、角色、知识库 membership 和 document ACL 已落地；文档列表、详情和向量检索在服务端执行权限过滤。
-- 交付治理：文档版本与持久化索引任务、失败重试、审计事件、requestId、分段耗时、Token/成本指标、健康探针和用户反馈已实现；具体验证状态见 [PROGRESS.md](PROGRESS.md)。
-- 交付材料：系统架构、Discovery Brief、5–10 分钟 Demo、部署/故障 Runbook，以及中英文 Case Study 已整理在 [docs/](docs/)；内容明确区分本地证据、演示能力和生产限制。
+企业把制度、产品手册、售后 FAQ 放进 AI 问答之后，会马上遇到这些问题：
 
-## 当前验证证据（2026-09-20）
+- 员工 A 不该看到财务制度，怎么保证 AI 不会“说漏嘴”？
+- 答案来自哪份文件的哪一段？模型会不会编造引用？
+- 资料里没有的问题，AI 会不会凭常识乱答？
+- 文档更新失败、模型服务宕机时，系统会怎样？
+- 答得好不好、快不快、贵不贵，拿什么衡量？
 
-- `flutter analyze --no-pub`：通过。
-- `flutter test --no-pub --concurrency=1`：通过，但当前只有一个 Widget smoke test。
-- `docker compose config --quiet`：通过，仅证明 Compose 配置可解析。
-- `./mvnw test`：本地 JDK 25.0.3 + Docker Desktop 下 109 个测试通过，0 failures/errors/skipped；包含 14 个 PostgreSQL/Testcontainers 集成测试。
-- PostgreSQL 16.15 + pgvector 0.8.6：扩展、业务表和 HNSW cosine 索引已验证。
-- LM Studio：Gemma 4 26B + Nomic Embedding 真实完成上传、2 个 Chunk 入库、资料内回答与引用、资料外拒答和删除。
-- 删除验证：document/chunk 行和原始上传文件都被清理，删除后再次查询返回拒答。
-- 评测契约：`evaluation/datasets/golden_v1.jsonl` 包含 20 题，另有 8 题 `retrieval_stress_v1.jsonl`；`run_eval.py` 通过数据完整性和响应评分检查，历史本地 Golden 两次 20/20、压力集最新 8/8 通过；最新压力集答案点、引用、拒答均 100%，ACL leakage=0。STRESS-003 的生成预算问题已通过默认 `AI_MAX_TOKENS=2400` 修复并由完整套件验证。
-- 评测采集：`evaluation/run_api_eval.py` 已提供外部 credentials map 和 `/api/ask` JSONL 采集入口；真实用户/ACL fixture 已在 disposable tenant 验证，原始响应不入库。
-- Agent Tool：`GET /api/agent/tools` 和 `POST /api/agent/tools/execute` 已提供三个只读工具，继承 tenant/用户/ACL，限制未知参数和单次三调用预算，并记录 allow/deny/error 审计。
-- MCP：无状态 `POST /mcp` 适配层和标准库 HTTP smoke 已验证发现、列表、调用、身份参数覆盖拒绝、Header 不匹配和未认证 401；本地 smoke 16/16 通过，但不声称完整 SDK/client conformance。
-- 隔离 Demo：在独立 PostgreSQL/pgvector 数据库中完成上传、持久化索引、授权回答、引用、反馈、资料外 fail-closed、员工 ACL 拒绝和 MCP 只读边界；聚合记录见 [evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md](evaluation/reports/demo-v0.1-disposable-local-2026-09-22.md)。
+这个项目针对这些问题给出了一条完整、可运行的实现。
 
-历史上记录过 Debug APK 构建通过，但本轮未复现，公开展示前仍需要重新执行并保存当前证据。
+## 架构
 
-## 目标演示流程
+```mermaid
+flowchart LR
+    User[员工 / 管理员] --> App[Flutter 客户端]
+    App --> API[Spring Boot API<br/>JWT: tenant + user]
+    API --> Ingest[解析 → 切块 → Embedding<br/>持久化索引任务]
+    API --> Ask[问答]
+    Ask --> Retrieve[向量检索<br/>SQL 内先做 ACL 过滤]
+    Retrieve --> PG[(PostgreSQL + pgvector)]
+    Ingest --> PG
+    Ask --> LLM[OpenAI-compatible 模型<br/>本地 LM Studio 或云端]
+    Ask --> Cite[后端校验结构化输出<br/>生成引用 / 拒答]
+    API --> Ops[审计 · 指标 · 反馈]
+    MCP[只读 Tool / MCP] --> Retrieve
+```
 
-当前首先要验证 MVP 基线：
+## 三个关键设计决策
 
-1. 启动 PostgreSQL + pgvector、后端和模型服务。
-2. 上传 `sample_faq.md` 并等待文档进入 `ready`。
-3. 提问资料内问题，返回 `found=true` 和有效来源。
-4. 提问资料外问题，返回 `found=false` 且不编造。
-5. 删除文档，确认后续检索无法再命中。
+**1. 权限是检索条件，不是界面过滤。**
+租户、部门、角色、知识库成员和文档 ACL 都在 SQL 的向量检索语句里过滤。未授权的内容不会进入模型上下文，所以模型没有机会“说漏嘴”。授权→可答、撤权→拒答，这两条都有 PostgreSQL 集成测试（撤权后模型根本不会被调用），也在全新 clone 上用 curl 实测过。
 
-企业知识库 V0.1 的交付材料已整理完成；管理 UI、干净 disposable Demo 记录、公开部署和真实客户基线仍需后续补证据。
+**2. 引用由后端生成，出错一律转人工（fail-closed）。**
+模型只能返回 `answer`、`found`、`grounded` 和片段编号（JSON Schema 约束）。文件名、定位和原文片段由后端根据检索结果映射。遇到以下情况，统一返回稳定的失败原因并转人工，不会给出一个“看起来像”的答案：非法 JSON、引用编号越界、模型自称资料不足却标 `found=true`、输出被截断、模型服务超时。
 
-## FDE 能力证明目标
+**3. 用评测决定改不改，而不是凭感觉加组件。**
+每个检索方案都在同一套版本化数据集和固定配置下对比：Keyword-RRF、多样性重排、相邻块、多种切块大小、按标题切块。结果都没有稳定胜过默认方案，所以默认值一个也没改，结论和反例都保留在报告里。这比“上了 Hybrid Search 和 Reranker”更能说明问题，详见下文。
 
-完成后的 Case Study 应证明：
+## 已实现能力
 
-- 能从业务问题定义用户、权限、数据和成功指标；
-- 能设计并实现可运行的企业 AI 系统；
-- 能用 Eval、日志、延迟、Token 和反馈分析质量；
-- 能处理 Provider 超时、检索失败、权限拒绝和文档更新；
-- 能完成部署、演示、运维交接和英文技术说明；
-- 能用业务采用和工作流改善说明价值，而不是只展示框架名称。
+- **文档**：PDF / DOCX / TXT / Markdown 上传；checksum 幂等；版本化替换；停用、启用、软删除、重建索引。
+- **索引**：持久化任务队列，支持幂等入队、自动重试 3 次、管理员人工重试、进程重启后恢复。重建或替换失败时，旧版本继续提供服务。
+- **身份与权限**：JWT 携带 tenant 和 user；用户、部门、角色、知识库成员、文档 ACL 均可按 USER / DEPARTMENT / ROLE 授权；越权访问统一返回 404 并记录审计。
+- **问答**：pgvector Top-K 检索，相似度过低时直接拒答；返回结构化答案、后端引用、requestId、分段耗时、Token 用量和失败分类。
+- **运营**：审计查询、受保护的检索诊断、Prometheus 指标（含估算成本）、健康和就绪探针、用户反馈。
+- **Agent 边界**：3 个只读 Tool 和一个无状态 MCP 适配层，复用同一套身份、ACL、调用预算和审计。
+- **客户端**：Flutter 问答（答案卡、引用弹窗、反馈），知识库管理，文档 ACL 管理，索引任务面板。
+- **交付**：Docker Compose、部署与故障 Runbook、备份恢复演练、Discovery Brief、演示讲稿。
 
-## 当前限制
+## 评测结果与已知局限
 
-- 尚无前端管理页、批量导入、用户/部门停用和更细的知识库管理员权限矩阵。
-- 已有两次版本化 20 题真实 API 回归，以及历史和最新均 8/8 的检索压力集证据；V10 已增加仅管理员/审计员可读的候选排序与相似度诊断，并提供 Recall@1/3/5 评分脚本；更大语料评测、云端成本对照和独立模型评分仍未完成。
-- 尚无生产级 Hybrid Search 和 Reranker；MCP 目前是经过边界验证的无状态只读适配层，没有模型驱动 loop 或写操作。
-- 当前真实模型证据主要覆盖样例知识和索引任务；多用户真实演示、并发和长期运行仍需补证据。
-- 尚无公开可访问 Demo、Flutter 设备截图/录屏、真实客户生产部署和长期运营基线；当前已有一次隔离 API Demo 聚合记录，不能替代上述证据。
+这是 V0.1 的质量声明。质量门继续跟踪，但不阻塞 V0.1 交付。
 
-因此当前准确称呼仍是“RAG MVP / 企业知识库 V0.1 建设中”，不应提前包装成已经生产落地的 Agent 平台。
+配置：本地 LM Studio（Gemma 4 26B，关闭 Thinking）+ nomic-embed-text-v1.5，VECTOR 检索，Top-K=5，切块 700/100。语料是 7 份合成文档。数据来自 2026-09-24 同一配置下的两次会话。
+
+| 数据集 | 结果 | 说明 |
+|---|---|---|
+| answer-quality-v1（12 题，rubric-v2） | 每轮 8–10/12，**未通过质量门**（门槛：连续 3 轮都 ≥10/12） | 稳定失败的是 Q002、Q006：FAQ 的一个 chunk 混合了 4 个章节，导致这两题召回不到 |
+| golden-v1（20 题） | 17/20、15/20 | 两次会话之间有 ±2 的波动 |
+| retrieval-stress-v1（8 题） | 8/8、8/8 | 覆盖多文档、长文档和拒答题 |
+| ACL 泄漏 | 0 | 所有运行均为 0 |
+| 结构化输出 | 1 次后端 fail-closed，其余全部通过 | 失败按设计转人工 |
+| 本地性能 | 单次问答约 1.5–3.5 秒，约 1,600 tokens | 本地单机测量，不是 SLA |
+
+从评测里学到的：
+
+- 把切块改成 300/60 可以修好 Q002/Q006，并通过 answer-quality 门槛；但 golden 掉到 14/20、stress 掉到 7/8，综合持平，所以没有采用。按标题切块在离线复放阶段就被否决了。详见 [切块 A/B](evaluation/reports/chunking-ab-local-2026-09-24.md) 与 [离线复放](evaluation/reports/heading-chunking-offline-replay-local-2026-09-24.md)。
+- 在 7 份文档的语料上，Top-5 已经覆盖一半以上的 chunk，继续调检索低于噪声水平。下一步（ROADMAP 阶段 B）换成真实规模的公开语料和约 50 道题，再比较多语言 Embedding 和云端模型的质量、延迟和成本。
+
+其他已知局限：
+
+- 没有生产部署、公开 Demo 或真实客户运营数据；所有数字都来自本地合成数据。
+- 本地 LM Studio 会把部分模型输入输出写入本机日志，只能用于合成或公开数据。真实数据必须换用通过 [Provider 验收清单](docs/DEPLOYMENT_RUNBOOK.md) 的服务。
+- ACL 只支持 allow 规则，没有显式 deny 和权限缓存失效策略。chunk 没有记录生成它的 Embedding 模型，更换模型时需要全量重建。
+- MCP 只做了只读的最小适配，没有完整的 SDK 互操作验证、模型驱动的 Agent 循环或写操作。
+
+## 工程证据
+
+- 后端 125 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试），GitHub Actions CI 通过。
+- 从全新 clone 按 README 跑通：启动、上传、问答、拒答、授权与撤权、故障重试。演练中发现 8 处文档缺口和 1 个真实缺陷（重建失败会让文档下线），当天全部修复。见 [演练报告](evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md)。
+- 本地备份恢复演练，MCP 只读冒烟检查 16/16，Android 16 真机完成管理员 ACL 和索引任务的验收。
+
+## 如果你是客户
+
+可交付的形态：**团队或企业内部知识库问答 MVP**。
+
+- **包含**：文档接入（PDF/Word/Markdown）；按部门或角色的查看权限；带出处的回答；资料外问题转人工；管理端（上传、权限、索引状态）；部署文档与交接。
+- **可选**：本地模型（数据不出内网）或云端模型（成本更低、效果更稳）。云端单次问答的成本对照在 ROADMAP 阶段 B 测量。
+- **不承诺**：AI 百分之百正确。系统设计为资料不足时拒答并转人工，准确率需要用客户自己的文档和问题来评测。
+
+## 开发方式
+
+实现代码主要由 AI 编码代理（OpenAI Codex、Claude Code）编写。本人负责需求与范围、架构取舍、评测设计、代码评审、验收与发布决策。
+
+## 边界
+
+这是一个在本地合成数据上可复现的企业 RAG 项目，不是生产部署，也不包含 ROI 结论。技术栈：Java 17 / Spring Boot 3.5、PostgreSQL 16 + pgvector、Flutter（Riverpod），评测工具用 Python。

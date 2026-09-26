@@ -114,8 +114,8 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 1. A1 部门 ACL 授权/撤权，以及撤权后员工问答/引用的完整路径：自动化测试已完成（2026-09-24，124 tests 通过）；剩一次真机抽测，可并入 A5 录屏时一起完成。
 2. A2 全新 clone 演练（已完成 2026-09-24）：README/DEMO 共 8 处缺口已修复，README 命令已在第二个全新 clone 中逐字执行通过；机器已有缓存时，从 clone 到首个带引用回答不到 1 分钟。见 `evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md`。
    - 演练发现的缺陷已修复：reindex/replace 进行中或失败时，文档继续用上一版已提交的 Chunk 回答（检索不再按文档状态过滤）；有集成测试和实机复测，后端全量 125 tests 通过。
-3. A3 V0.1 质量声明：当前评测结果作为已知局限写明，质量门继续跟踪但不阻塞 V0.1。
-4. A4 重写 `PORTFOLIO.md` 与 README 开头（面向两类读者），同步 Case Study，归档 `CODEX_PROMPT.md`。
+3. A3 V0.1 质量声明（已完成 2026-09-24）：唯一口径在 `PORTFOLIO.md`「评测结果与已知局限」。
+4. A4 作品集刷新（已完成 2026-09-24）：重写 `PORTFOLIO.md`、README 开头、中英文 Case Study；`CODEX_PROMPT.md` 归档至 `docs/archive/`。
 5. A5 3–5 分钟脱敏演示视频和截图。
 
 **阶段 B：V0.2 有意义的评测**：真实规模公开语料和约 50 题数据集 → 重新建立基线 → 再按顺序做检索优化（含多语言 Embedding）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。

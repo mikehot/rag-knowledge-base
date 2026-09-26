@@ -1,5 +1,7 @@
 # 发给 Codex 的执行提示词
 
+> 已归档（2026-09-24）：这是项目最初交给 Codex 实现 MVP 时使用的提示词，仅供追溯。当前需求见根目录 `REQUIREMENTS.md`，当前计划见 `ROADMAP.md`。
+
 > 用法：把「==== 提示词开始 ====」到「==== 提示词结束 ====」之间的内容，连同 `REQUIREMENTS.md` 一起发给 Codex。Codex 能访问本机 StudioProjects。
 
 ==== 提示词开始 ====

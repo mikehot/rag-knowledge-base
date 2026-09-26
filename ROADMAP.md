@@ -50,7 +50,7 @@ An administrator uploads documents; the system parses, chunks, embeds, and index
 | M4 Evaluation baseline | tooling `verified` | golden-v1 (20), answer-quality-v1 (12), stress (8); frozen gate in `evaluation/README.md`. Current default fails the gate (9–10/12) on a 7-document synthetic fixture |
 | M5 Evaluation-driven retrieval | **paused** | Keyword-RRF, diversity, adjacent, chunk size, and heading-aware chunking all evaluated; none beats the default on this fixture. Resumes in Phase B on a realistic corpus |
 | M6 Read-only Agent tools / MCP | `in-progress` (bounded) | Three read-only tools and a stateless MCP adapter; local smoke 16/16. Real-client demo is optional Phase C |
-| M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Open: video, portfolio refresh |
+| M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Portfolio, README, and case studies refreshed (2026-09-24). Open: video |
 
 ## 6. Plan
 

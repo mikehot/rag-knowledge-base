@@ -1,44 +1,60 @@
-# Enterprise RAG Knowledge Base — Project Explanation
+# Enterprise RAG Knowledge Base — Case Study
+
+> Verified on synthetic data in a local environment. This is not a customer deployment and makes no accuracy, SLA, or ROI claims. Last updated: 2026-09-24.
 
 ## One-line summary
 
-I evolved a Java/Spring Boot RAG MVP into a governed enterprise knowledge-base slice with PostgreSQL/pgvector, tenant-aware ACLs, citations, structured output validation, durable indexing tasks, evaluation evidence, and a bounded read-only Tool/MCP surface.
+I turned a Java/Spring Boot RAG demo into a governed enterprise knowledge-base slice. Employees retrieve only the documents they are authorized to see, every answer carries backend-owned citations, uncovered questions are handed off instead of invented, and each quality decision is backed by a versioned evaluation.
 
-## Customer problem
+## The problem
 
-Employees need answers across internal documents, but an enterprise system must also answer: who is allowed to see each document, where did the answer come from, what happens when indexing or the model fails, and how can operators measure latency, tokens, feedback, and access denials?
+A RAG demo is easy. An enterprise also needs answers to five questions. Can each employee see only what they are allowed to? Where did the answer come from, and can the model fake a citation? What happens when a question is not covered? What happens when indexing or the model provider fails? And how do you show the system is good, fast, and affordable?
+
+## How it was built
+
+Most of the implementation code was written by AI coding agents (OpenAI Codex and Claude Code). I owned the scope and requirements, architecture and trade-offs, evaluation design, code review, acceptance, and release decisions. The judgment calls below come from that way of working: the agents execute, and the human decides what to build, when to stop, and how to verify a claim.
 
 ## What I built
 
-- Document ingestion for PDF, DOCX, TXT, and Markdown.
-- Versioned parsing, chunking, embeddings, pgvector retrieval, and persistent indexing tasks.
-- JWT tenant/user context, department/role/knowledge-base membership, and document ACL filtering before retrieval.
-- A strict structured-answer contract. The model returns answer metadata and source indexes; the backend validates the contract and owns final citations.
-- Fail-closed handling for retrieval misses, provider timeouts, invalid JSON, missing citations, and insufficient context.
-- Audit events, request IDs, stage timings, token/cost metrics, user feedback, health/readiness probes, and protected retrieval diagnostics.
-- Three read-only tools and a stateless MCP adapter. Identity, tenant, ACL, call budget, and audit behavior remain server-owned.
+- **Permissions as a retrieval constraint.** Tenant, department, role, knowledge-base membership, and document ACLs are all enforced inside the vector-search SQL. Unauthorized content never reaches the model context.
+- **Backend-owned citations, fail-closed.** The model returns only an answer, `found`/`grounded` flags, and source indexes, under a JSON Schema. The backend validates the output and maps each index to a filename, locator, and snippet. Invalid JSON, out-of-range indexes, contradictory flags, truncated output, and provider timeouts all return a stable failure reason and hand off to a human.
+- **Recoverable indexing.** A persistent task queue provides idempotency, retries, and restart recovery. Chunks are swapped in one transaction only after every embedding succeeds, so a failed reindex keeps the previous version serving.
+- **Operability.** Request IDs, stage timings, failure categories, token and estimated-cost metrics, audit queries, user feedback, and protected retrieval diagnostics.
+- **Bounded agent surface.** Three read-only tools and a stateless MCP adapter reuse the same identity, ACL, call budget, and audit. No write tools.
+- **Clients and delivery.** A Flutter app (Q&A, citations, ACL management, index-task panel), Docker Compose, a deployment/incident runbook, and a backup/restore rehearsal.
 
-## Evidence and limitations
+## Results
 
-As a host-local mitigation on 2026-09-24, the LM Studio `server-logs` root directory was restricted to owner-only mode `0700`; existing log files remain `0644` and are protected by the parent directory. The mode persisted across a normal quit/reopen. This is a development-host mitigation, not a product-level logging control. The item was then closed by scope decision: LM Studio is the local development/evaluation provider and receives synthetic data only; any provider for real data must pass the provider acceptance checklist in the deployment runbook (retention terms, log disable/redaction, access control, deletion path).
+| Area | Evidence |
+|---|---|
+| Access control | PostgreSQL integration tests cover grant → answerable and revoke → refused (after revoke, the model is never called); verified with curl on a fresh clone; zero ACL leakage across all evaluation runs |
+| Reliability | Provider outages return stable error codes; failed index tasks recover through admin retry; a failed reindex keeps serving the previous version (integration test plus live replay) |
+| Engineering | 125 backend tests including Testcontainers integration tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
+| Reproducibility | A fresh clone following the README verbatim reaches a cited answer in under a minute of machine time (warm caches) |
+| Quality | answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. See [PORTFOLIO.md](../PORTFOLIO.md) |
 
-On 2026-09-24, the local Docker-backed backend suite passed 123 tests with no failures, errors, or skips. The latest recorded synthetic Golden run was 16/20 and the eight-case retrieval stress run was 7/8 under its documented LM Studio Thinking-off condition. Two corrected-rubric 12-case VECTOR captures each scored 10/12, with QUALITY-002 and QUALITY-006 failing in both. ACL leakage and structured-output failures were zero in the adjacent-strategy API comparison, but that candidate scored 9/12 versus 10/12 for VECTOR and was not promoted. A conservative source-preserving offline selector made no substitutions and left lexical answer-point coverage at 75% (6/8).
+## Judgment calls
 
-These are distinct local fixtures and evaluation configurations, not one combined benchmark, independent semantic judging, CI evidence from this date, customer accuracy, production SLA, or ROI. The local Gemma structured-output probe passed 6/6 only with LM Studio Thinking disabled; Thinking-on runs have shown completion-budget exhaustion. The setting remains an operator-owned local condition, not a production guarantee. A fresh disposable API test verified that revoking an employee's document ACL removes the document from both read-only search results and the document list (zero observed ACL leakage); a synthetic failed index task recovered through the authorized retry API. A separate manual PostgreSQL dump plus uploaded-file archive restored into a fresh disposable environment; restored ACL visibility, seven successful task records, readiness, and MCP smoke (16/16) passed. On 2026-09-24, a new continuous disposable API demo also covered authorized cited answers, out-of-scope refusal, permission denial, feedback, MCP smoke (16/16), and recovery from a persisted indexing failure at attempt 3 via authorized retry at attempt 4. The first natural wording of the warranty question missed the Top-5 boundary and was refused; a more document-aligned wording retrieved the FAQ at rank 3 and answered with a citation. This is functional evidence and exposes wording sensitivity; it does not resolve the known retrieval-quality gap or pass the quality gate. A synthetic LM Studio persistence probe found both request-input and model-output markers in 4,055 newly appended bytes from one local server-log file; only appended bytes were scanned, and no raw log, prompt, response, or marker was retained. A metadata-only inventory found 68 dated local server-log files from 2026-03-19 through 2026-09-24 with file mode `0644`. This confirms persistence of at least portions of synthetic model I/O in this installed configuration. Full log-content classification, effective account reachability, redaction, and retention/rotation controls remain unverified; do not send sensitive customer data through this configuration until those controls are assessed. The Flutter ACL/task screens pass analysis and model tests. An earlier 2026-09-23 attempt to install the isolated `.verify` build was blocked by `INSTALL_FAILED_USER_RESTRICTED`; on 2026-09-24 the isolated build was installed on an Android 16/API 36 device and the administrator ACL/retry flows passed synthetic device acceptance. A subsequent isolated device run also exercised the non-system EMPLOYEE document-manager path: same-tenant USER/DEPARTMENT/ROLE candidates loaded, and USER plus Employee-role READ grant/revoke changed the synthetic reader's document-list visibility. The employee question/citation flow, department grant/revoke, and cross-tenant candidates were not exercised in that device follow-up. Default retrieval remains VECTOR Top-K=5; Hybrid Search, reranking, autonomous writes, and a model-driven Agent loop remain disabled.
+1. **Negative results count.** Keyword-RRF, diversity reranking, adjacent chunks, four chunk sizes, and heading-aware chunking were each compared on the same versioned datasets under a fixed configuration record. A 300-character chunk size fixed two known misses and passed the answer-quality gate, but golden and stress regressed. Under the pre-registered rules it was not adopted. No default changed, and every report is kept.
+2. **Knowing when to stop.** On a seven-document fixture, Top-5 already covers more than half of all chunks, and two runs of the same configuration differ by ±2. Further retrieval tuning there is below the noise floor, so it moves to a realistic public corpus.
+3. **Rehearsal beats self-testing.** Following only the README on a fresh clone surfaced eight documentation gaps and one real defect: retrieval required `status = READY`, so a single failed reindex took a document offline. It was fixed the same day, with a test that fails before the fix and passes after it.
+4. **Closing scope deliberately.** The local model server (LM Studio) persists part of its model I/O to local logs. Instead of investigating a third-party tool indefinitely, I restricted it to synthetic data and wrote a provider acceptance checklist for any provider that will handle real data.
 
-Follow-up on 2026-09-24: after the earlier installation restriction, an isolated `.verify` build was installed on an Android 16/API 36 device without replacing the everyday app. The Flutter administrator ACL flow changed a synthetic employee's document-list visibility from 5 to 6 and back to 5 after revoke. The indexing panel showed a synthetic failure at attempt 3/3, then a device-triggered safe retry succeeded at attempt 4/6 and restored the document to `ready`. A later non-system-manager device run confirmed that an EMPLOYEE document manager could load same-tenant USER, DEPARTMENT, and ROLE candidates. USER and Employee-role READ grants and revokes changed a synthetic reader's document-list visibility as expected; the department candidate was displayed, but department grant/revoke was not exercised. An employee without document MANAGE still received 404 from the scoped principal directory. One post-revocation ask persisted `found=false`, but generation ended with `STRUCTURED_OUTPUT_INVALID`; retrieval snapshots excluded the revoked FAQ while containing other employee-authorized files. A backend guard now rejects explicitly interrupted provider completions and emits only sanitized termination metadata when structured validation fails. This guard passed synthetic regression tests, but the prior live LM Studio failure has not been replayed with the new metadata, so its cause remains unknown. See the [administrator device report](../evaluation/reports/flutter-operations-acl-index-task-device-local-2026-09-24.md), [principal-directory report](../evaluation/reports/document-acl-principal-directory-local-2026-09-24.md), and [structured-output diagnostics report](../evaluation/reports/structured-output-termination-diagnostics-local-2026-09-24.md).
+## Limitations
 
-## Five-to-ten-minute talk track
+- No production deployment, public demo, or real users; every number comes from local synthetic data.
+- The quality gate is not yet passed, and the corpus is too small for trustworthy retrieval tuning.
+- The ACL model is allow-only. Chunks do not record which embedding model produced them, so changing models requires a full rebuild.
+- MCP is a minimal read-only adapter, with no third-party SDK conformance testing, agent loop, or write operations.
 
-1. Start PostgreSQL/pgvector and the OpenAI-compatible provider; explain that the UI being open is not proof that the provider API is available. Do not expose LM Studio model-I/O logs in recordings: they can contain retrieved document content.
-2. Upload `sample_faq.md` and show the durable indexing state moving to `ready`.
-3. Ask an in-scope question and show `found`, `grounded`, backend-owned sources, request ID, timings, and token usage.
-4. Ask an out-of-scope question and show the fail-closed refusal with no sources.
-5. Submit feedback and explain that metrics and diagnostics are protected by role.
-6. Run the read-only MCP smoke check and show the exact three-tool allowlist, identity-override rejection, and unauthenticated 401.
-7. In a disposable environment, demonstrate Flutter ACL grant/revoke and the indexing-task retry path without exposing credentials or customer data. Keep the observed wording-sensitive Top-5 miss visible as a limitation; the verified Android flow used a synthetic administrator and did not repeat employee ask/citation checks on-device.
-8. Close with the evidence boundary: this is a reproducible enterprise-AI project slice, not a claim of production scale or autonomous operations.
+## Next
 
-## Why the architecture matters
+See [ROADMAP.md](../ROADMAP.md): a demo video (Phase A); a realistic public corpus with about 50 questions, a new baseline, and a quality/latency/cost comparison of multilingual embeddings and cloud models (Phase B); and an optional real MCP client demo (Phase C).
 
-The project keeps Java/Spring Boot for business workflows, authorization, transactions, APIs, and deployment. Python is used for evaluation and experiments. This separates enterprise delivery concerns from model experimentation while keeping every quality or retrieval change measurable.
+## Five-minute talk track
+
+1. Start the stack from the README and explain that the provider is configuration: local LM Studio or a cloud OpenAI-compatible API.
+2. Upload `sample_faq.md`, wait for `ready`, and ask a covered question. Show `found`, the backend-owned sources, the request ID, timings, and token usage.
+3. Ask an uncovered question and show the refusal with no sources.
+4. Create an employee: before the grant the answer is refused; after a READ grant it is cited; after revoke it is refused again. Explain that the filter runs in SQL before the model is called.
+5. Close with the evaluation: what passed, what did not, and why no retrieval component was added. Do not show LM Studio model-I/O logs in any recording.

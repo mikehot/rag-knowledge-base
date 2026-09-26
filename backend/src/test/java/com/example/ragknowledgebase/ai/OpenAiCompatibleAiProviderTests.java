@@ -1,6 +1,7 @@
 package com.example.ragknowledgebase.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.ragknowledgebase.config.AppProperties;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -77,6 +78,51 @@ class OpenAiCompatibleAiProviderTests {
     }
 
     @Test
+    void sendsJsonObjectFormatWhenProviderLacksJsonSchemaSupport() throws Exception {
+        AppProperties base = properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        AppProperties.Ai ai = base.ai();
+        AppProperties jsonObject = new AppProperties(
+            base.auth(),
+            base.upload(),
+            base.rag(),
+            base.enterprise(),
+            new AppProperties.Ai(
+                ai.provider(), ai.baseUrl(), ai.apiKey(), ai.modelId(), ai.maxTokens(), ai.complexMaxTokens(),
+                ai.complexRoutingEnabled(), ai.timeoutSeconds(), ai.maxRetries(), ai.structuredOutputRetries(),
+                ai.dailyLimit(), "json_object"
+            ),
+            base.embedding()
+        );
+
+        new OpenAiCompatibleAiProvider(jsonObject, objectMapper).generate("回答问题，输出 JSON");
+
+        JsonNode format = objectMapper.readTree(requestBody.get()).path("response_format");
+        assertThat(format.path("type").asText()).isEqualTo("json_object");
+        assertThat(format.has("json_schema")).isFalse();
+    }
+
+    @Test
+    void rejectsUnknownResponseFormatAtStartup() {
+        AppProperties base = properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        AppProperties.Ai ai = base.ai();
+        AppProperties invalid = new AppProperties(
+            base.auth(),
+            base.upload(),
+            base.rag(),
+            base.enterprise(),
+            new AppProperties.Ai(
+                ai.provider(), ai.baseUrl(), ai.apiKey(), ai.modelId(), ai.maxTokens(), ai.complexMaxTokens(),
+                ai.complexRoutingEnabled(), ai.timeoutSeconds(), ai.maxRetries(), ai.structuredOutputRetries(),
+                ai.dailyLimit(), "text"
+            ),
+            base.embedding()
+        );
+
+        assertThatThrownBy(() -> new OpenAiCompatibleAiProvider(invalid, objectMapper))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void capturesLengthFinishReasonWithoutTreatingItAsValidStructuredOutput() {
         providerResponse.set("""
             {"choices":[{"finish_reason":"length","message":{"content":"{\\"answer\\":"}}],"usage":{"prompt_tokens":9,"completion_tokens":2400,"total_tokens":2409}}
@@ -139,7 +185,7 @@ class OpenAiCompatibleAiProviderTests {
                 UUID.fromString("00000000-0000-0000-0000-000000000101"),
                 true
             ),
-            new AppProperties.Ai("openai-compatible", baseUrl, "", "test-model", 2400, 3200, false, 5, 0, 0, 50),
+            new AppProperties.Ai("openai-compatible", baseUrl, "", "test-model", 2400, 3200, false, 5, 0, 0, 50, "json_schema"),
             new AppProperties.Embedding("openai-compatible", baseUrl, "", "embedding-model", 16, 5, 0)
         );
     }

@@ -76,7 +76,7 @@ Goal: evaluation numbers that mean something, plus a cloud-cost story for client
 |---|---|---|
 | B1 | Realistic public corpus | 20–50 Chinese documents with licenses that permit redistribution (e.g. public product manuals or policies), at least ~100k characters, with synthetic ACL groups; a versioned ~50-question dataset covering answers, multi-part answers, refusals, and ACL cases |
 | B2 | Re-baseline, then retrieval work | Default config measured with the frozen gate procedure. Only then, in this order, with an offline screen first: chunking → multilingual embedding → keyword/RRF → reranker |
-| B3 | Cloud provider comparison | One cloud chat and embedding model through the OpenAI-compatible config, on public data only; quality, latency, and cost per 1k questions compared with the local stack |
+| B3 | Cloud provider comparison (chat part done 2026-09-26: DeepSeek flash passes the gate; see `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`) | One cloud chat and embedding model through the OpenAI-compatible config, on public data only; quality, latency, and cost per 1k questions compared with the local stack |
 | B4 | Public demo decision | Go/no-go on a small hosted demo (cloud model, synthetic/public data, rate-limited, disposable credentials). Not required for V0.2 |
 
 ### Phase C — Optional Differentiation

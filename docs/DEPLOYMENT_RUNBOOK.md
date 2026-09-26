@@ -132,6 +132,8 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 - 排查服务启动/HTTP 状态时用 `lms log stream --source server`；不要分享 Developer Logs、model source 日志、终端记录或原始 Provider 响应，也不要把它们放进截图、录屏、工单或公开报告。
 - 应用自身不记录 Prompt、问题或文档正文；这只覆盖应用边界，不代表全链路无内容日志。
 
+**已验证的云端配置（2026-09-26）**：DeepSeek `deepseek-flash` 负责聊天，本地 nomic 负责 Embedding。DeepSeek 不支持 `json_schema`，需要设置 `AI_RESPONSE_FORMAT=json_object`；此时后端仍会完整校验回答合同。Embedding 的 Key 要显式设为空，避免把云端 Key 发给本地服务。本次只发送了合成数据，DeepSeek 自身的数据保留策略未做评估，接入真实数据前仍须通过下面的清单。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。
+
 **接入真实数据前的 Provider 验收清单**（任一项不满足即不得接入真实数据）：
 
 1. Provider 提供书面的请求/响应数据保留期限，以及是否用于训练的承诺；

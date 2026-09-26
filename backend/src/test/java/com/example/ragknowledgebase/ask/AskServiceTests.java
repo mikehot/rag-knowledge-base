@@ -793,7 +793,7 @@ class AskServiceTests {
             null,
             new AppProperties.Ai(
                 "openai-compatible", "", "", "", 1200, 3200, complexRoutingEnabled, 120, 1,
-                structuredOutputRetries, dailyLimit
+                structuredOutputRetries, dailyLimit, "json_schema"
             ),
             null
         );

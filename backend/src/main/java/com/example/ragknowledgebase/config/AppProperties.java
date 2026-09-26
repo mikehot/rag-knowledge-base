@@ -59,7 +59,8 @@ public record AppProperties(
         long timeoutSeconds,
         int maxRetries,
         int structuredOutputRetries,
-        int dailyLimit
+        int dailyLimit,
+        String responseFormat
     ) {
     }
 

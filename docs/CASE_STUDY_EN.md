@@ -31,14 +31,15 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 | Reliability | Provider outages return stable error codes; failed index tasks recover through admin retry; a failed reindex keeps serving the previous version (integration test plus live replay) |
 | Engineering | 126 backend tests including Testcontainers integration tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
 | Reproducibility | A fresh clone following the README verbatim reaches a cited answer in under a minute of machine time (warm caches) |
-| Quality | answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. See [PORTFOLIO.md](../PORTFOLIO.md) |
+| Quality | Local Gemma: answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. Cloud DeepSeek flash with local embeddings: answer-quality 10/10/10, which **passes**; golden 17/20; stress 8/8; median latency about 1–1.6 s; under $1 per 1,000 questions at list price. See [PORTFOLIO.md](../PORTFOLIO.md) |
 
 ## Judgment calls
 
 1. **Negative results count.** Keyword-RRF, diversity reranking, adjacent chunks, four chunk sizes, and heading-aware chunking were each compared on the same versioned datasets under a fixed configuration record. A 300-character chunk size fixed two known misses and passed the answer-quality gate, but golden and stress regressed. Under the pre-registered rules it was not adopted. No default changed, and every report is kept.
 2. **Knowing when to stop.** On a seven-document fixture, Top-5 already covers more than half of all chunks, and two runs of the same configuration differ by ±2. Further retrieval tuning there is below the noise floor, so it moves to a realistic public corpus.
 3. **Rehearsal beats self-testing.** Following only the README on a fresh clone surfaced eight documentation gaps and one real defect: retrieval required `status = READY`, so a single failed reindex took a document offline. It was fixed the same day, with a test that fails before the fix and passes after it.
-4. **Closing scope deliberately.** The local model server (LM Studio) persists part of its model I/O to local logs. Instead of investigating a third-party tool indefinitely, I restricted it to synthetic data and wrote a provider acceptance checklist for any provider that will handle real data.
+4. **Compatibility is only known once tested.** Connecting DeepSeek revealed that it rejects strict `json_schema` output. The output format became a setting, and full backend validation was kept. With a stronger chat model only retrieval-bound misses remained, which points the next effort at retrieval, not at a pricier model: v4-pro was three times slower than flash with identical scores.
+5. **Closing scope deliberately.** The local model server (LM Studio) persists part of its model I/O to local logs. Instead of investigating a third-party tool indefinitely, I restricted it to synthetic data and wrote a provider acceptance checklist for any provider that will handle real data.
 
 ## Limitations
 

@@ -40,6 +40,7 @@
   - Embedding：`text-embedding-nomic-embed-text-v1.5`，768 维。
   - 两个 ID 必须与 `curl -s http://localhost:1234/v1/models` 的返回完全一致。
 - LM Studio 只处理合成或公开样例数据，不要用它处理真实客户资料。
+- 也可以改用云端聊天模型。已验证的配置是 DeepSeek `deepseek-flash` 聊天加本地 Embedding，需要设置 `AI_RESPONSE_FORMAT=json_object`，见 [backend/README.md](backend/README.md#cloud-provider-examples)。
 - `docker-compose.yml` 固定了容器名 `rag-knowledge-base-db` 并使用 5432 端口；同一台机器已有另一份 checkout 的容器时，会发生冲突。
 
 ### 1. 启动

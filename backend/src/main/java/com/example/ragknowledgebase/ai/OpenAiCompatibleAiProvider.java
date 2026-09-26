@@ -19,6 +19,7 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
     private final HttpClient httpClient;
 
     public OpenAiCompatibleAiProvider(AppProperties properties, ObjectMapper objectMapper) {
+        responseFormatMode(properties.ai().responseFormat());
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
@@ -81,7 +82,15 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         );
     }
 
+    /**
+     * Some OpenAI-compatible providers (e.g. DeepSeek) reject json_schema but
+     * accept json_object. The backend still validates the full answer contract
+     * either way, so json_object only moves schema enforcement to our side.
+     */
     private Map<String, Object> structuredResponseFormat() {
+        if ("json_object".equals(responseFormatMode(properties.ai().responseFormat()))) {
+            return Map.of("type", "json_object");
+        }
         return Map.of(
             "type", "json_schema",
             "json_schema", Map.of(
@@ -103,6 +112,14 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
                 )
             )
         );
+    }
+
+    private static String responseFormatMode(String configured) {
+        String mode = configured == null || configured.isBlank() ? "json_schema" : configured.trim().toLowerCase();
+        if (!mode.equals("json_schema") && !mode.equals("json_object")) {
+            throw new IllegalStateException("AI_RESPONSE_FORMAT 仅支持 json_schema 或 json_object");
+        }
+        return mode;
     }
 
     private URI chatCompletionsUri() {

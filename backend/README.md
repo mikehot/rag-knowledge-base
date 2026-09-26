@@ -74,6 +74,7 @@ All secrets and runtime choices are environment variables.
 | `AI_TIMEOUT_SECONDS` | `120` | Local model can be slow |
 | `AI_MAX_RETRIES` | `2` | Provider/network retry count |
 | `AI_STRUCTURED_OUTPUT_RETRIES` | `1` | Bounded retry after invalid model JSON; still fails closed when exhausted |
+| `AI_RESPONSE_FORMAT` | `json_schema` | `json_schema` (strict, provider-enforced) or `json_object` for providers that reject `json_schema`, such as DeepSeek. The backend validates the full answer contract in both modes |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
 | `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text-v1.5` | Default local embedding model; must return 768 dimensions |
@@ -122,17 +123,18 @@ The regular unit and Spring context tests run against H2. PostgreSQL-specific mi
 
 ## Cloud Provider Examples
 
-OpenAI-compatible cloud:
+Verified on 2026-09-26: DeepSeek chat with the local LM Studio embedding model (768 dimensions, so the existing schema is reused). DeepSeek has no embeddings API and rejects `json_schema`, so `json_object` is required. See `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`.
 
 ```bash
-export AI_BASE_URL=https://api.deepseek.com/v1
-export AI_API_KEY=sk-...
-export AI_MODEL_ID=deepseek-chat
-export AI_EMBEDDING_BASE_URL=https://api.openai.com/v1
-export AI_EMBEDDING_API_KEY=sk-...
-export AI_EMBEDDING_MODEL_ID=text-embedding-3-small
-export AI_EMBEDDING_DIM=1536
+export AI_BASE_URL=https://api.deepseek.com
+export AI_API_KEY=...                      # load from a private file; never commit it
+export AI_MODEL_ID=deepseek-flash
+export AI_RESPONSE_FORMAT=json_object
+export AI_EMBEDDING_BASE_URL=http://localhost:1234/v1
+export AI_EMBEDDING_API_KEY=               # keep empty so the cloud key is not sent to the local server
 ```
+
+A cloud embedding model with a different dimension (for example 1536) requires `AI_EMBEDDING_DIM` to match and a fresh database, because the column is created as `vector(${AI_EMBEDDING_DIM})`.
 
 For Docker with LM Studio running on the host:
 

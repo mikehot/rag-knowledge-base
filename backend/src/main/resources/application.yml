@@ -109,6 +109,8 @@ app:
     max-retries: ${AI_MAX_RETRIES:2}
     structured-output-retries: ${AI_STRUCTURED_OUTPUT_RETRIES:1}
     daily-limit: ${AI_DAILY_LIMIT:50}
+    # json_schema (strict, default) or json_object for providers without json_schema support, e.g. DeepSeek.
+    response-format: ${AI_RESPONSE_FORMAT:json_schema}
   embedding:
     provider: ${AI_EMBEDDING_PROVIDER:openai-compatible}
     base-url: ${AI_EMBEDDING_BASE_URL:${AI_BASE_URL:http://localhost:1234/v1}}

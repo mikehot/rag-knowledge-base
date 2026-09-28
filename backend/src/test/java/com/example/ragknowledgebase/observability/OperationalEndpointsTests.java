@@ -60,6 +60,12 @@ class OperationalEndpointsTests {
     }
 
     @Test
+    void apiDocsAreDisabledOutsideLocalProfile() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
     void protectsOperationalMetricsFromAnonymousAccess() throws Exception {
         mockMvc.perform(get("/actuator/metrics"))
             .andExpect(status().isUnauthorized())

@@ -19,7 +19,11 @@ public class JwtService {
 
     public JwtService(AppProperties properties) {
         this.properties = properties;
-        this.key = Keys.hmacShaKeyFor(properties.auth().jwtSecret().getBytes(StandardCharsets.UTF_8));
+        String secret = properties.auth().jwtSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET 未配置；本地开发请使用 local profile（./mvnw spring-boot:run）");
+        }
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String createToken(AppUser user) {

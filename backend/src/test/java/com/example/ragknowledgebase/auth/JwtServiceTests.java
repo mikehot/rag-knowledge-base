@@ -1,6 +1,7 @@
 package com.example.ragknowledgebase.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.ragknowledgebase.config.AppProperties;
 import java.util.UUID;
@@ -27,12 +28,22 @@ class JwtServiceTests {
         assertThat(jwtService.parse(token + "tampered")).isEmpty();
     }
 
+    @Test
+    void refusesToStartWithoutConfiguredSecret() {
+        assertThatThrownBy(() -> new JwtService(properties("")))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
     private AppProperties properties() {
+        return properties("test-only-secret-that-is-long-enough-for-hs384-signing-key-material");
+    }
+
+    private AppProperties properties(String secret) {
         return new AppProperties(
             new AppProperties.Auth(
                 "demo",
                 "demo123456",
-                "test-only-secret-that-is-long-enough-for-hs384-signing-key-material",
+                secret,
                 3600
             ),
             null,

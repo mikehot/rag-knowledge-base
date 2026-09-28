@@ -151,6 +151,8 @@ class PostgresEnterpriseIntegrationTests {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.indexing.enabled", () -> "false");
+        registry.add("app.auth.jwt-secret", () -> "integration-only-jwt-secret-with-at-least-32-bytes");
+        registry.add("app.auth.default-password", () -> "integration-password-123");
     }
 
     @BeforeEach
@@ -665,6 +667,64 @@ class PostgresEnterpriseIntegrationTests {
         } finally {
             Files.deleteIfExists(source);
         }
+    }
+
+    @Test
+    void disabledKnowledgeBaseHidesDocumentsAndChunks() {
+        insertUser(OWNER_ID, "kb-status-owner-it");
+        insertUser(READER_ID, "kb-status-reader-it");
+        insertDocument();
+        grantKnowledgeBase("READ", READER_ID);
+        jdbcTemplate.update(
+            "INSERT INTO chunk (id, document_id, seq, locator, content, embedding) VALUES (?, ?, 1, 'chunk#1', 'kb content', ?::vector)",
+            UUID.randomUUID(),
+            DOCUMENT_ID,
+            unitVector()
+        );
+        try {
+            jdbcTemplate.update("UPDATE knowledge_base SET status = 'DISABLED' WHERE id = ?", KNOWLEDGE_BASE_ID);
+
+            assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID)).isEmpty();
+            assertThat(documentRepository.findAccessibleById(DOCUMENT_ID, TENANT_ID, READER_ID)).isEmpty();
+            assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5)).isEmpty();
+            assertThat(chunkJdbcRepository.findVisibleReadyChunks(TENANT_ID, READER_ID, 10)).isEmpty();
+
+            jdbcTemplate.update("UPDATE knowledge_base SET status = 'ACTIVE' WHERE id = ?", KNOWLEDGE_BASE_ID);
+
+            assertThat(chunkJdbcRepository.search(TENANT_ID, READER_ID, unitVectorArray(), 5))
+                .extracting("documentId")
+                .containsExactly(DOCUMENT_ID);
+        } finally {
+            jdbcTemplate.update("UPDATE knowledge_base SET status = 'ACTIVE' WHERE id = ?", KNOWLEDGE_BASE_ID);
+        }
+    }
+
+    @Test
+    void disabledUserCannotLoginAndExistingTokenStopsWorking() throws Exception {
+        insertUser(OWNER_ID, "status-admin-it");
+        assignRole(OWNER_ID, "SYSTEM_ADMIN");
+        AuthenticatedUser admin = new AuthenticatedUser(OWNER_ID, TENANT_ID, "status-admin-it");
+        UUID userId = adminService.createUser(
+            admin,
+            new CreateUserRequest("managed-status-user-it", "status-password-123", null, null, List.of("EMPLOYEE"))
+        ).id();
+        String login = "{\"username\":\"managed-status-user-it\",\"password\":\"status-password-123\"}";
+        String token = objectMapper.readTree(mockMvc.perform(post("/api/auth/login")
+                .contentType("application/json")
+                .content(login))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString()).path("data").path("token").asText();
+        mockMvc.perform(get("/api/documents").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+
+        jdbcTemplate.update("UPDATE app_user SET status = 'DISABLED' WHERE id = ?", userId);
+
+        mockMvc.perform(get("/api/documents").header("Authorization", "Bearer " + token))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/auth/login").contentType("application/json").content(login))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

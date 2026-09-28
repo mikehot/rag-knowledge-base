@@ -65,6 +65,10 @@ public class ChunkJdbcRepository {
             """ + knowledgeBaseFilter + """
               AND d.deleted_at IS NULL
               AND d.disabled_at IS NULL
+              AND EXISTS (
+                SELECT 1 FROM knowledge_base kb
+                WHERE kb.id = d.knowledge_base_id AND kb.status = 'ACTIVE'
+              )
               AND (
                 d.user_id = ?
                 OR EXISTS (
@@ -162,6 +166,10 @@ public class ChunkJdbcRepository {
             WHERE d.tenant_id = ?
               AND d.deleted_at IS NULL
               AND d.disabled_at IS NULL
+              AND EXISTS (
+                SELECT 1 FROM knowledge_base kb
+                WHERE kb.id = d.knowledge_base_id AND kb.status = 'ACTIVE'
+              )
               AND (
                 d.user_id = ?
                 OR EXISTS (

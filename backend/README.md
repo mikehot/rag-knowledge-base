@@ -20,11 +20,13 @@ cd backend
 ./mvnw spring-boot:run
 ```
 
-Swagger UI:
+`spring-boot:run` activates the `local` profile (see `pom.xml` and `application-local.yml`), which supplies the dev JWT secret, the `demo` password, and enables Swagger UI:
 
 ```text
 http://localhost:8080/swagger-ui.html
 ```
+
+Packaged runs (`java -jar`, containers) have no such defaults: `JWT_SECRET` is required (startup fails without it), the default admin is created only when `APP_DEFAULT_PASSWORD` is set, and API docs stay off unless `SPRINGDOC_ENABLED=true`.
 
 Operational endpoints:
 
@@ -52,7 +54,9 @@ All secrets and runtime choices are environment variables.
 |---|---:|---|
 | `DB_URL` | `jdbc:postgresql://localhost:5432/rag_knowledge_base` | PostgreSQL/pgvector |
 | `DB_USERNAME` / `DB_PASSWORD` | `rag` / `rag` | Local dev only |
-| `JWT_SECRET` | dev string | Replace in real deployments |
+| `JWT_SECRET` | none (dev string in `local` profile) | Required; at least 32 bytes |
+| `APP_DEFAULT_PASSWORD` | none (`demo123456` in `local` profile) | Default admin is created only when set |
+| `SPRINGDOC_ENABLED` | `false` (`true` in `local` profile) | Serve `/v3/api-docs` and Swagger UI |
 | `UPLOAD_STORAGE_DIR` | `./uploads` | Raw files |
 | `UPLOAD_MAX_FILE_SIZE_BYTES` | `20971520` | 20 MB |
 | `RAG_CHUNK_SIZE` | `700` | Character chunk target |

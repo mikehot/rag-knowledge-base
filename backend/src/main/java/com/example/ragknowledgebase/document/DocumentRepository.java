@@ -31,6 +31,10 @@ public interface DocumentRepository extends JpaRepository<KnowledgeDocument, UUI
         WHERE d.tenant_id = :tenantId
           AND d.deleted_at IS NULL
           AND d.disabled_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM knowledge_base kb
+            WHERE kb.id = d.knowledge_base_id AND kb.status = 'ACTIVE'
+          )
           AND (
             d.user_id = :userId
             OR EXISTS (
@@ -89,6 +93,10 @@ public interface DocumentRepository extends JpaRepository<KnowledgeDocument, UUI
           WHERE d.tenant_id = :tenantId
             AND d.deleted_at IS NULL
             AND d.disabled_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM knowledge_base kb
+              WHERE kb.id = d.knowledge_base_id AND kb.status = 'ACTIVE'
+            )
             AND (
               d.user_id = :userId
               OR EXISTS (

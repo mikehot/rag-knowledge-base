@@ -44,10 +44,13 @@ curl -fsS http://localhost:8080/readyz
 
 ## 3. 必须配置的运行参数
 
+`./mvnw spring-boot:run` 会自动启用 `local` profile，并使用下表中的本地默认值；打包运行（`java -jar` 或容器）时不提供这些默认值。用户被设为非 `ACTIVE` 后，登录会被拒绝，已签发的 token 在下一次请求时即失效。
+
 | 配置 | 本地默认 | 部署要求 |
 |---|---|---|
-| `JWT_SECRET` | 开发字符串 | 使用 Secret 管理器生成并轮换 |
-| `APP_DEFAULT_PASSWORD` | `demo123456` | 禁止在部署环境保留 |
+| `JWT_SECRET` | 开发字符串（仅 local profile） | **必填**，未配置时应用拒绝启动；至少 32 字节，用 Secret 管理器生成并轮换 |
+| `APP_DEFAULT_PASSWORD` | `demo123456`（仅 local profile） | 不配置时不会自动创建默认管理员；首次部署需要时再设置，用完即移除 |
+| `SPRINGDOC_ENABLED` | `true`（仅 local profile） | 默认 `false`，公开部署不要打开接口文档 |
 | `DB_PASSWORD` | `rag` | 使用 Secret，不写入镜像或 Git |
 | `AI_API_KEY` | 空 | 云 Provider 用 Secret；本地 Provider 也要限制网络 |
 | `UPLOAD_STORAGE_DIR` | `./uploads` | 使用持久化卷或对象存储，并限制访问 |

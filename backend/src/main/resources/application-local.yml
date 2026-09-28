@@ -1,0 +1,12 @@
+# Local development only. `./mvnw spring-boot:run` activates this profile (see pom.xml);
+# packaged deployments must provide JWT_SECRET and APP_DEFAULT_PASSWORD explicitly.
+app:
+  auth:
+    default-password: ${APP_DEFAULT_PASSWORD:demo123456}
+    jwt-secret: ${JWT_SECRET:dev-only-change-me-please-use-a-64-byte-secret-for-prod}
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:true}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:true}

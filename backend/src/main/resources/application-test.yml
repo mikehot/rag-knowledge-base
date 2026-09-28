@@ -10,6 +10,9 @@ spring:
     enabled: false
 
 app:
+  auth:
+    default-password: test-password-123
+    jwt-secret: test-only-jwt-secret-with-at-least-32-bytes-0123456789
   indexing:
     enabled: false
   enterprise:

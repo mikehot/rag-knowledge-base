@@ -27,8 +27,10 @@ spring:
 
 springdoc:
   api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
 
 logging:
@@ -67,8 +69,10 @@ management:
 app:
   auth:
     default-username: ${APP_DEFAULT_USERNAME:demo}
-    default-password: ${APP_DEFAULT_PASSWORD:demo123456}
-    jwt-secret: ${JWT_SECRET:dev-only-change-me-please-use-a-64-byte-secret-for-prod}
+    # No built-in fallbacks: JWT_SECRET is required, and the default admin is created only when
+    # APP_DEFAULT_PASSWORD is set. Local development values live in application-local.yml.
+    default-password: ${APP_DEFAULT_PASSWORD:}
+    jwt-secret: ${JWT_SECRET:}
     token-expires-seconds: ${JWT_EXPIRES_SECONDS:86400}
   upload:
     storage-dir: ${UPLOAD_STORAGE_DIR:./uploads}

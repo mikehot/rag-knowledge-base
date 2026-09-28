@@ -14,9 +14,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
+    private final AppUserRepository userRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, AppUserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -27,15 +29,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            jwtService.parse(header.substring(7)).ifPresent(user -> {
-                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                    user,
-                    null,
-                    java.util.List.of()
-                );
-                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(auth);
-            });
+            // A valid signature is not enough: the user must still exist, be ACTIVE and belong to the tenant.
+            jwtService.parse(header.substring(7))
+                .filter(user -> userRepository.existsByIdAndTenantIdAndStatus(user.userId(), user.tenantId(), "ACTIVE"))
+                .ifPresent(user -> {
+                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        java.util.List.of()
+                    );
+                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                });
         }
         filterChain.doFilter(request, response);
     }

@@ -33,12 +33,17 @@ public class AuthService {
     @PostConstruct
     @Transactional
     public void ensureDefaultUser() {
-        AppUser user = userRepository.findByUsername(properties.auth().defaultUsername())
+        var existing = userRepository.findByUsername(properties.auth().defaultUsername());
+        String defaultPassword = properties.auth().defaultPassword();
+        if (existing.isEmpty() && (defaultPassword == null || defaultPassword.isBlank())) {
+            return;
+        }
+        AppUser user = existing
             .orElseGet(() -> userRepository.save(new AppUser(
                 UUID.randomUUID(),
                 properties.enterprise().defaultTenantId(),
                 properties.auth().defaultUsername(),
-                passwordEncoder.encode(properties.auth().defaultPassword())
+                passwordEncoder.encode(defaultPassword)
             )));
         if (properties.enterprise().initializeDefaultAccess()) {
             accessProvisioner.ensureAccess(user);
@@ -49,7 +54,8 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         AppUser user = userRepository.findByUsername(request.username())
             .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())
+            || !"ACTIVE".equals(user.getStatus())) {
             throw new BusinessException(401, "用户名或密码错误");
         }
         return new LoginResponse(jwtService.createToken(user), properties.auth().tokenExpiresSeconds());

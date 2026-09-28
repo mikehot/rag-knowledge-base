@@ -31,7 +31,7 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 | Reliability | Provider outages return stable error codes; failed index tasks recover through admin retry; a failed reindex keeps serving the previous version (integration test plus live replay) |
 | Engineering | 126 backend tests including Testcontainers integration tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
 | Reproducibility | A fresh clone following the README verbatim reaches a cited answer in under a minute of machine time (warm caches) |
-| Quality | Local Gemma: answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. Cloud DeepSeek flash with local embeddings: answer-quality 10/10/10, which **passes**; golden 17/20; stress 8/8; median latency about 1–1.6 s; under $1 per 1,000 questions at list price. See [PORTFOLIO.md](../PORTFOLIO.md) |
+| Quality | Local Gemma: answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. Cloud DeepSeek flash with local embeddings: answer-quality 10/10/10, which **passes**; golden 17/20; stress 8/8; median latency about 1–1.6 s; an estimated under $1 per 1,000 questions at list price. See [PORTFOLIO.md](../PORTFOLIO.md) |
 
 ## Judgment calls
 

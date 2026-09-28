@@ -1,5 +1,9 @@
 # RAG Knowledge Base
 
+[![CI](https://github.com/mikehot/rag-knowledge-base/actions/workflows/ci.yml/badge.svg)](https://github.com/mikehot/rag-knowledge-base/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+中文 | [English](README.en.md)
+
 企业知识库问答系统：员工只能检索被授权的文档，每个回答都带出处，资料里没有的问题转人工而不是编造。技术栈为 Spring Boot + PostgreSQL/pgvector + Flutter，附带评测、审计和部署手册。
 
 *An enterprise knowledge-base Q&A system where employees only retrieve documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented.*
@@ -117,3 +121,7 @@ ask_as_employee    # 撤权后：再次拒答
 - Prompt、文档正文、Tool 参数和模型原始响应默认不进入日志。
 - 权限过滤发生在数据库检索阶段，以零越权泄漏作为验收条件。
 - 本地 LM Studio 只处理合成或公开数据；真实数据须使用通过 Runbook Provider 验收清单的服务。
+
+## License
+
+[MIT](LICENSE)

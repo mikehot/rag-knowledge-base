@@ -2,7 +2,7 @@
 
 > **English summary.** An enterprise knowledge-base Q&A system (Spring Boot, PostgreSQL + pgvector, Flutter). Employees retrieve only documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented. The project includes evaluation, audit, and deployment runbooks. It was built with AI coding agents (Codex, Claude Code), with scope, architecture, evaluation, review, and acceptance owned by me. Full write-up: [docs/CASE_STUDY_EN.md](docs/CASE_STUDY_EN.md).
 >
-> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/) 为准。最后更新：2026-09-24。
+> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/README.md) 为准。最后更新：2026-09-24。
 
 ## 快速入口
 

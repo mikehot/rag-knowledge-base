@@ -17,7 +17,7 @@
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25（字节码目标 17）、PostgreSQL 16 + pgvector、LM Studio 上传/命中/拒答/删除闭环通过 |
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。2026-09-24 新增 PostgreSQL 集成测试覆盖文档级 DEPARTMENT 授权→列表/详情/向量检索可见、问答带引用→撤权→三处不可见、问答拒答无引用且模型未被调用；非管理者撤权 404 并记审计。缺：部门授权的一次真机抽测 |
-| 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 126 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
+| 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 138 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；本地模型未过质量门，DeepSeek flash 通过 | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
 | 5. 检索优化决策 | 暂停（阶段 B 在真实语料上恢复） | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
@@ -102,6 +102,15 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - **观测**：告警阈值尚无真实 7 天基线；审计事件无保留/脱敏策略。
 - **Embedding 迁移**：Chunk 未记录生成它的 Embedding 模型；更换模型时，重建完成前旧向量仍参与检索，需要全量重建并暂停问答。
 - **检索**：无生产级全文检索或 Reranker；现有实验均默认关闭，且无成本结论。
+- **代码审查（2026-09-28）**：对后端做了聚焦安全、事务和并发的审查，10 项发现全部修复，后端全量 138 tests 通过。
+  1. 索引改为在事务外计算 Embedding，提交时锁住文档行并重新检查；实体加 `@DynamicUpdate`；旧版本任务标记为“已被取代”。
+  2. 删除文件改到事务提交后执行。
+  3. 检索和文档列表要求所属知识库为 ACTIVE。
+  4. 登录和 JWT 校验用户状态。
+  5. 不再内置 JWT 密钥和管理员密码，本地默认值移到 `application-local.yml`；接口文档默认关闭。
+  6. 问答不再全程持有事务。
+  7. 每日限额改为原子计数（Flyway V14 `ask_daily_usage`）。
+  8. 不存在的地址返回 404 而不是 500。
 - **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（Embedding 仍在本地）。增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持 `json_schema` 的服务。flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。尚未测试云端 Embedding。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
 - **交付**：无干净环境全流程演练记录、脱敏录屏、公开 Demo；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。

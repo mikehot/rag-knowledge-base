@@ -12,7 +12,6 @@ import com.example.ragknowledgebase.document.ChunkJdbcRepository;
 import com.example.ragknowledgebase.document.ChunkSearchResult;
 import com.example.ragknowledgebase.observability.OperationalMetrics;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +19,8 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AskService {
@@ -49,6 +49,8 @@ public class AskService {
     private final KeywordRrfRetriever keywordRrfRetriever;
     private final DocumentDiversityRetriever documentDiversityRetriever;
     private final AdjacentChunkRetriever adjacentChunkRetriever;
+    private final AskDailyUsageRepository dailyUsageRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public AskService(
         AppProperties properties,
@@ -57,7 +59,9 @@ public class AskService {
         AiProvider aiProvider,
         AskLogRepository askLogRepository,
         AskRetrievalHitRepository retrievalHitRepository,
-        OperationalMetrics operationalMetrics
+        OperationalMetrics operationalMetrics,
+        AskDailyUsageRepository dailyUsageRepository,
+        PlatformTransactionManager transactionManager
     ) {
         this.properties = properties;
         this.embeddingProvider = embeddingProvider;
@@ -70,14 +74,15 @@ public class AskService {
         this.keywordRrfRetriever = new KeywordRrfRetriever();
         this.documentDiversityRetriever = new DocumentDiversityRetriever();
         this.adjacentChunkRetriever = new AdjacentChunkRetriever();
+        this.dailyUsageRepository = dailyUsageRepository;
+        // ask() is deliberately not transactional: no DB connection is held during model calls.
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
     public AskResponse ask(AuthenticatedUser user, AskRequest request) {
         return ask(user, request, RetrievalMode.VECTOR);
     }
 
-    @Transactional
     public AskResponse ask(AuthenticatedUser user, AskRequest request, RetrievalMode retrievalMode) {
         if ((retrievalMode == RetrievalMode.KEYWORD_RRF || retrievalMode == RetrievalMode.VECTOR_DIVERSITY)
             && !properties.rag().hybridExperimentEnabled()) {
@@ -369,11 +374,7 @@ public class AskService {
         if (dailyLimit <= 0) {
             return;
         }
-        OffsetDateTime startOfDay = LocalDate.now(ZoneId.systemDefault())
-            .atStartOfDay(ZoneId.systemDefault())
-            .toOffsetDateTime();
-        long used = askLogRepository.countByUserIdAndCreatedAtAfter(userId, startOfDay);
-        if (used >= dailyLimit) {
+        if (!dailyUsageRepository.tryReserve(userId, LocalDate.now(ZoneId.systemDefault()), dailyLimit)) {
             throw new BusinessException(429, "今日提问次数已达上限，请明天再试");
         }
     }
@@ -406,9 +407,11 @@ public class AskService {
             properties.rag().topK(),
             properties.rag().similarityThreshold()
         );
-        askLogRepository.save(askLog);
-        askLogRepository.flush();
-        retrievalHitRepository.saveAll(askLog.getId(), user.tenantId(), retrievalHits);
+        transactionTemplate.executeWithoutResult(status -> {
+            askLogRepository.save(askLog);
+            askLogRepository.flush();
+            retrievalHitRepository.saveAll(askLog.getId(), user.tenantId(), retrievalHits);
+        });
         operationalMetrics.recordAsk(response, resultStatus);
         return response;
     }

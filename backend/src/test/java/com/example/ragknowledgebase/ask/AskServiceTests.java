@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -20,7 +21,7 @@ import com.example.ragknowledgebase.config.AppProperties;
 import com.example.ragknowledgebase.document.ChunkJdbcRepository;
 import com.example.ragknowledgebase.document.ChunkSearchResult;
 import com.example.ragknowledgebase.observability.OperationalMetrics;
-import java.time.OffsetDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 class AskServiceTests {
@@ -55,10 +58,17 @@ class AskServiceTests {
     @Mock
     private OperationalMetrics operationalMetrics;
 
+    @Mock
+    private AskDailyUsageRepository dailyUsageRepository;
+
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private AskService askService;
 
     @BeforeEach
     void setUp() {
+        lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         askService = new AskService(
             properties(0),
             embeddingProvider,
@@ -66,7 +76,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
     }
 
@@ -137,7 +149,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         String question = "请同时说明配网步骤以及远程开门条件。";
         float[] embedding = new float[] {0.1f, 0.2f};
@@ -205,7 +219,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         String question = "保修期限是多少？";
         float[] embedding = new float[] {0.1f, 0.2f};
@@ -245,7 +261,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         String question = "保修期限是多少？";
         float[] embedding = new float[] {0.1f, 0.2f};
@@ -299,7 +317,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         String question = "保修期限是多少？";
         float[] embedding = new float[] {0.1f, 0.2f};
@@ -484,7 +504,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         float[] embedding = new float[] {0.1f, 0.2f};
         ChunkSearchResult hit = new ChunkSearchResult(
@@ -523,7 +545,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         float[] embedding = new float[] {0.1f, 0.2f};
         ChunkSearchResult hit = new ChunkSearchResult(
@@ -562,7 +586,9 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
         float[] embedding = new float[] {0.1f, 0.2f};
         ChunkSearchResult hit = new ChunkSearchResult(
@@ -740,10 +766,11 @@ class AskServiceTests {
             aiProvider,
             askLogRepository,
             retrievalHitRepository,
-            operationalMetrics
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
         );
-        when(askLogRepository.countByUserIdAndCreatedAtAfter(any(UUID.class), any(OffsetDateTime.class)))
-            .thenReturn(2L);
+        when(dailyUsageRepository.tryReserve(any(UUID.class), any(LocalDate.class), eq(2))).thenReturn(false);
 
         assertThatThrownBy(() -> askService.ask(USER, new AskRequest("还能提问吗？")))
             .isInstanceOf(BusinessException.class)

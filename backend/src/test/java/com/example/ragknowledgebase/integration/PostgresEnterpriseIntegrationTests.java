@@ -28,6 +28,7 @@ import com.example.ragknowledgebase.ai.AiProviderResponse;
 import com.example.ragknowledgebase.ai.EmbeddingProvider;
 import com.example.ragknowledgebase.ask.AskFeedbackRating;
 import com.example.ragknowledgebase.ask.AskFeedbackRequest;
+import com.example.ragknowledgebase.ask.AskDailyUsageRepository;
 import com.example.ragknowledgebase.ask.AskFeedbackService;
 import com.example.ragknowledgebase.auth.AccessControlService;
 import com.example.ragknowledgebase.auth.AuthenticatedUser;
@@ -139,6 +140,9 @@ class PostgresEnterpriseIntegrationTests {
     @Autowired
     private DocumentProcessor documentProcessor;
 
+    @Autowired
+    private AskDailyUsageRepository dailyUsageRepository;
+
     @MockitoBean
     private AiProvider aiProvider;
 
@@ -247,7 +251,7 @@ class PostgresEnterpriseIntegrationTests {
             String.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(13);
+        assertThat(successfulMigrations).isEqualTo(14);
         assertThat(embeddingType).isEqualTo("vector(768)");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
@@ -725,6 +729,28 @@ class PostgresEnterpriseIntegrationTests {
             .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/auth/login").contentType("application/json").content(login))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void dailyAskLimitHoldsUnderConcurrentReservations() throws Exception {
+        insertUser(READER_ID, "daily-limit-reader-it");
+        java.time.LocalDate today = java.time.LocalDate.now();
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        try {
+            List<java.util.concurrent.Future<Boolean>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < 20; i++) {
+                results.add(pool.submit(() -> dailyUsageRepository.tryReserve(READER_ID, today, 5)));
+            }
+            long granted = 0;
+            for (var result : results) {
+                if (result.get()) {
+                    granted++;
+                }
+            }
+            assertThat(granted).isEqualTo(5);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

@@ -96,7 +96,8 @@ flowchart LR
 
 ## 工程证据
 
-- 后端 126 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试），GitHub Actions CI 通过。
+- 后端 138 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试），GitHub Actions CI 通过。
+- 2026-09-28 对后端做了一次聚焦安全、事务和并发的代码审查，10 项发现全部修复，每项都有对应测试：索引期间的并发停用或删除会被覆盖、同一文档被重复处理、停用的知识库仍可检索、默认密钥和密码、停用用户的 token 仍然有效、问答全程占用数据库连接、每日限额可被并发绕过等。
 - 从全新 clone 按 README 跑通：启动、上传、问答、拒答、授权与撤权、故障重试。演练中发现 8 处文档缺口和 1 个真实缺陷（重建失败会让文档下线），当天全部修复。见 [演练报告](evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md)。
 - 本地备份恢复演练，MCP 只读冒烟检查 16/16，Android 16 真机完成管理员 ACL 和索引任务的验收。
 

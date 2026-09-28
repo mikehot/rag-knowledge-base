@@ -127,7 +127,7 @@ public class DocumentService {
         chunkRepository.deleteByDocumentId(document.getId());
         document.softDelete();
         documentRepository.save(document);
-        fileStorageService.delete(document.getFilePath());
+        deleteStoredFileAfterCommit(document.getFilePath());
         return new DeleteDocumentResponse(true);
     }
 
@@ -221,6 +221,19 @@ public class DocumentService {
         } catch (NoSuchAlgorithmException ex) {
             throw new BusinessException(500, "文件校验失败，请重试");
         }
+    }
+
+    private void deleteStoredFileAfterCommit(String storedPath) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            fileStorageService.delete(storedPath);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                fileStorageService.delete(storedPath);
+            }
+        });
     }
 
     private void deleteStoredFileOnRollback(String storedPath) {

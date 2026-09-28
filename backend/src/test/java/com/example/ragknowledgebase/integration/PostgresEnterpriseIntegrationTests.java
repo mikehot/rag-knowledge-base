@@ -623,6 +623,51 @@ class PostgresEnterpriseIntegrationTests {
     }
 
     @Test
+    void documentDisabledDuringEmbeddingStaysDisabledAndKeepsPreviousChunks() throws Exception {
+        Path source = Files.createTempFile("concurrent-disable", ".md");
+        try {
+            Files.writeString(source, "New content that must not be committed.");
+            insertUser(OWNER_ID, "concurrent-owner-it");
+            insertUser(READER_ID, "concurrent-reader-it");
+            insertDocument(source.toString());
+            grantKnowledgeBase("READ", READER_ID);
+            jdbcTemplate.update(
+                """
+                    INSERT INTO chunk (id, document_id, seq, locator, content, embedding)
+                    VALUES (?, ?, 1, 'chunk#1', 'previous version', ?::vector)
+                    """,
+                UUID.randomUUID(),
+                DOCUMENT_ID,
+                unitVector()
+            );
+            // Another connection disables the document and commits while embeddings are computed.
+            when(embeddingProvider.embed(anyList())).thenAnswer(invocation -> {
+                jdbcTemplate.update(
+                    "UPDATE document SET disabled_at = now(), permission_version = permission_version + 1 WHERE id = ?",
+                    DOCUMENT_ID
+                );
+                List<String> inputs = invocation.getArgument(0);
+                return inputs.stream().map(input -> unitVectorArray()).toList();
+            });
+
+            assertThatThrownBy(() -> documentProcessor.processOrThrow(DOCUMENT_ID, null, 1))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("文档已停用");
+
+            assertThat(jdbcTemplate.queryForObject(
+                "SELECT disabled_at IS NOT NULL FROM document WHERE id = ?",
+                Boolean.class,
+                DOCUMENT_ID
+            )).isTrue();
+            assertThat(jdbcTemplate.queryForList("SELECT content FROM chunk WHERE document_id = ?", String.class, DOCUMENT_ID))
+                .containsExactly("previous version");
+            assertThat(documentRepository.findAccessible(TENANT_ID, READER_ID)).isEmpty();
+        } finally {
+            Files.deleteIfExists(source);
+        }
+    }
+
+    @Test
     void aclPrincipalDirectoryRequiresDocumentManageAndStaysInTenant() throws Exception {
         insertUser(OWNER_ID, "acl-directory-owner-it");
         insertUser(READER_ID, "acl-directory-reader-it");
@@ -1004,7 +1049,8 @@ class PostgresEnterpriseIntegrationTests {
 
         assertThat(documentService.delete(admin, DOCUMENT_ID).deleted()).isTrue();
         assertThat(countChunks(DOCUMENT_ID)).isZero();
-        assertThat(Files.exists(rawFile)).isFalse();
+        // The stored file is removed only after commit; this test transaction rolls back.
+        assertThat(Files.exists(rawFile)).isTrue();
         assertThat(documentRepository.findAccessible(TENANT_ID, OWNER_ID)).isEmpty();
     }
 

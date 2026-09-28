@@ -3,11 +3,17 @@ package com.example.ragknowledgebase.document;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface DocumentRepository extends JpaRepository<KnowledgeDocument, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from KnowledgeDocument d where d.id = :id")
+    Optional<KnowledgeDocument> findByIdForUpdate(@Param("id") UUID id);
+
     List<KnowledgeDocument> findByTenantIdAndKnowledgeBaseIdAndDeletedAtIsNullAndDisabledAtIsNull(
         UUID tenantId,
         UUID knowledgeBaseId

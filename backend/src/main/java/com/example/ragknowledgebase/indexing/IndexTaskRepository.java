@@ -163,8 +163,22 @@ public class IndexTaskRepository {
     }
 
     @Transactional
-    public void markFailed(UUID taskId, String errorMessage) {
+    public void markSuperseded(UUID taskId) {
         jdbcTemplate.update(
+            """
+                UPDATE index_task
+                SET status = 'SUCCEEDED', error_msg = 'SUPERSEDED_BY_NEWER_VERSION', finished_at = now(),
+                    duration_ms = (extract(epoch FROM (now() - started_at)) * 1000)::bigint,
+                    updated_at = now()
+                WHERE id = ? AND status = 'RUNNING'
+                """,
+            taskId
+        );
+    }
+
+    @Transactional
+    public boolean markFailed(UUID taskId, String errorMessage) {
+        return jdbcTemplate.update(
             """
                 UPDATE index_task
                 SET status = 'FAILED', error_msg = ?, finished_at = now(),
@@ -174,7 +188,7 @@ public class IndexTaskRepository {
                 """,
             errorMessage,
             taskId
-        );
+        ) == 1;
     }
 
     @Transactional

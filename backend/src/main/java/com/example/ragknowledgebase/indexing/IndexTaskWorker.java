@@ -1,6 +1,7 @@
 package com.example.ragknowledgebase.indexing;
 
 import com.example.ragknowledgebase.document.DocumentProcessor;
+import com.example.ragknowledgebase.document.SupersededIndexTaskException;
 import com.example.ragknowledgebase.observability.OperationalMetrics;
 import org.springframework.stereotype.Service;
 
@@ -36,19 +37,22 @@ public class IndexTaskWorker {
         IndexTaskRecord task = claimed.get();
         long startedAt = System.nanoTime();
         try {
-            documentProcessor.processOrThrow(task.documentId(), task.rollbackContent());
+            documentProcessor.processOrThrow(task.documentId(), task.rollbackContent(), task.contentVersion());
             taskRepository.markSucceeded(task.id());
             operationalMetrics.recordIndexTask("succeeded", elapsedMs(startedAt));
+        } catch (SupersededIndexTaskException ex) {
+            taskRepository.markSuperseded(task.id());
+            operationalMetrics.recordIndexTask("superseded", elapsedMs(startedAt));
         } catch (Exception ex) {
             String message = messageOf(ex);
             if (task.attemptCount() < task.maxAttempts()) {
                 taskRepository.scheduleRetry(task.id(), message, 30L * task.attemptCount());
                 operationalMetrics.recordIndexTask("retry_scheduled", elapsedMs(startedAt));
             } else {
-                try {
-                    documentProcessor.fail(task.documentId(), task.rollbackContent(), message);
-                } finally {
-                    taskRepository.markFailed(task.id(), message);
+                // Only the worker that still owns the RUNNING task may mark the document failed;
+                // a duplicate claim of the same task must not override a successful run.
+                if (taskRepository.markFailed(task.id(), message)) {
+                    documentProcessor.fail(task.documentId(), task.rollbackContent(), message, task.contentVersion());
                 }
                 operationalMetrics.recordIndexTask("failed", elapsedMs(startedAt));
             }

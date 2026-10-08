@@ -54,15 +54,15 @@ TOKEN=$(curl -s "$BASE_URL/api/auth/login" -H 'Content-Type: application/json' \
 DOC_ID=$(curl -s "$BASE_URL/api/documents/upload" -H "Authorization: Bearer $TOKEN" \
   -F 'file=@sample_faq.md' | jq -r .data.documentId)
 
-# 等待索引完成（通常几秒）
+# Wait for indexing to finish (usually a few seconds)
 until curl -s "$BASE_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $TOKEN" \
   | jq -e '.data.status == "ready"' >/dev/null; do sleep 2; done
 
-# 资料内：found=true，sources 来自后端检索
+# In-scope: found=true, sources from backend retrieval
 curl -s "$BASE_URL/api/ask" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"question":"设备保修期是多久？"}' | jq '.data | {found, answer, sources: [.sources[].filename], latencyMs}'
 
-# 资料外：found=false，不编造
+# Out-of-scope: found=false, no hallucination
 curl -s "$BASE_URL/api/ask" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"question":"公司明年的股权计划是什么？"}' | jq '.data | {found, sources, failureReason}'
 ```
@@ -81,14 +81,14 @@ ask_as_employee() {
     -d '{"question":"设备保修期是多久？"}' | jq -c '.data | {found, sources: [.sources[].filename]}'
 }
 
-ask_as_employee    # 未授权：found=false，无引用；GET /api/documents 为空
+ask_as_employee    # Unauthorized: found=false, no sources; GET /api/documents returns empty
 
 ACL_ID=$(curl -s "$BASE_URL/api/documents/$DOC_ID/acl" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"principalType\":\"USER\",\"principalId\":\"$EMP_ID\",\"permission\":\"READ\"}" | jq -r .data.id)
-ask_as_employee    # 已授权：found=true，引用 sample_faq.md
+ask_as_employee    # Authorized: found=true, cites sample_faq.md
 
 curl -s -X DELETE "$BASE_URL/api/documents/$DOC_ID/acl/$ACL_ID" -H "Authorization: Bearer $TOKEN" >/dev/null
-ask_as_employee    # 撤权后：再次拒答
+ask_as_employee    # After revocation: refuses again
 ```
 
 Grants can also target a `DEPARTMENT` or `ROLE`. The filter runs in SQL at retrieval time, so unauthorized content never enters the model context.

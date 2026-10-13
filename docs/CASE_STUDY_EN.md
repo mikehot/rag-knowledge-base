@@ -45,7 +45,7 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 
 - No production deployment, public demo, or real users; every number comes from local synthetic data.
 - The quality gate is not yet passed, and the corpus is too small for trustworthy retrieval tuning.
-- The ACL model is allow-only. Chunks do not record which embedding model produced them, so changing models requires a full rebuild.
+- The ACL model is allow-only. Switching the embedding model requires a full rebuild: documents not yet rebuilt are not searchable meanwhile (questions hand off instead of using stale vectors), and there is no shadow rebuild or dual write.
 - MCP is a minimal read-only adapter, with no third-party SDK conformance testing, agent loop, or write operations.
 
 ## Next

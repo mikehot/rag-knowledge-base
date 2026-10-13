@@ -19,7 +19,7 @@
 | 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。2026-09-24 新增 PostgreSQL 集成测试覆盖文档级 DEPARTMENT 授权→列表/详情/向量检索可见、问答带引用→撤权→三处不可见、问答拒答无引用且模型未被调用；非管理者撤权 404 并记审计。缺：部门授权的一次真机抽测 |
 | 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 138 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；本地模型未过质量门，DeepSeek flash 通过 | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
-| 5. 检索优化决策 | 暂停（阶段 B 在真实语料上恢复） | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
+| 5. 检索优化决策 | 阶段 B 进行中（2026-10-13 已在 28 文档/57 题真实语料上重建基线与对照，见 `evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md`）。下表为此前合成夹具上的结论 | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
 | 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练、脱敏录屏 |
 
@@ -100,7 +100,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - **权限变更审计**：2026-09-26 起，文档 ACL、知识库成员、用户角色的授予与撤销（以及带角色创建用户）都写入 `ALLOW` 审计，内容为主体与权限，并与变更同事务提交；重复授权等失败操作不留记录，没有实际变化的角色分配也不记录。由集成测试 `permissionChangesWriteAllowAuditEventsInTheSameTransaction` 覆盖。
 - **ACL**：部门授权/撤权与撤权后问答已由集成测试 `departmentDocumentAclGrantAndRevokeGateRetrievalAndCitedAnswers` 覆盖（模型被 mock，验证的是权限与检索链路，不是模型行为）；部门授权尚无真机抽测；只有 allow 型 ACL，无显式 deny、继承冲突和权限缓存失效策略；用户/部门停用、批量导入未做。
 - **观测**：告警阈值尚无真实 7 天基线；审计事件无保留/脱敏策略。
-- **Embedding 迁移**：Chunk 未记录生成它的 Embedding 模型；更换模型时，重建完成前旧向量仍参与检索，需要全量重建并暂停问答。
+- **Embedding 迁移（2026-10-13 已实现）**：V15 为 chunk 增加 `embedding_model` 与生成列 `embedding_dim`，向量列改为不限维度，768/1024 各一个部分 HNSW 索引；检索只比较配置模型的向量，状态与重建进度见 `GET /api/admin/embeddings`，启动时对「他模型向量」告警；嵌入提供方默认接受模型自身维度（`AI_EMBEDDING_DIM=0`）。已验证：V14→V15 带数据升级、跨维度共存、索引计划、本机在线切换演练（28 文档重建 12 秒，重建后评测 44/45，重建前提问转人工）。缺口：切换窗口内未重建文档不可检索（无双写/影子重建）；只有 768/1024 维有索引；升级时既有行按当时配置的模型归属，升级前未重建就改过模型的库会被错误标记；`bge-m3` 仍不是默认。
 - **检索**：无生产级全文检索或 Reranker；现有实验均默认关闭，且无成本结论。
 - **代码审查（2026-09-28）**：对后端做了聚焦安全、事务和并发的审查，10 项发现全部修复，后端全量 138 tests 通过。
   1. 索引改为在事务外计算 Embedding，提交时锁住文档行并重新检查；实体加 `@DynamicUpdate`；旧版本任务标记为“已被取代”。
@@ -111,6 +111,8 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
   6. 问答不再全程持有事务。
   7. 每日限额改为原子计数（Flyway V14 `ask_daily_usage`）。
   8. 不存在的地址返回 404 而不是 500。
+- **提示注入（2026-10-13）**：此前提示词没有把资料片段声明为不可信数据，也没有注入测试。现已增加：提示词中的安全规则和每次请求随机的数据边界标记（`PromptGuard`）；输出侧检查，答案回显边界标记，或带有检索上下文中不存在的链接/Markdown 图片时转人工，失败原因为 `UNSAFE_OUTPUT`；新增测试 14 个（2026-10-13 在 Docker 下后端全量 152 tests 通过，0 跳过，含 PostgreSQL 集成测试）；评测集 `prompt_injection_v1`（7 题）和 `forbidden_answer_terms` 评分规则。2026-10-13 在 LM Studio（Gemma，Thinking 开启）上实测：修正三道测试设计问题后连续 3 轮 7/7，ACL 泄漏 0，见 `evaluation/reports/prompt-injection-v1-local-2026-10-13.md`。**缺**：该次 `UNSAFE_OUTPUT` 触发 0 次，输出检查没有被真实模型行为验证过；样本只有 7 题；answer-quality 质量门对新提示词的复测已在 Thinking 关闭（探针 4/4 通过）下做了同会话配对：改动前 9/10/10、新提示词 10/9/9，golden 16→15，stress 8→8，均在已记录的波动范围内，token +12.7%（上限 15%），见 `evaluation/reports/prompt-guard-ab-local-2026-10-13.md`；两者都**未通过**质量门（基线本身也不通过）；输出检查只覆盖链接/图片/边界回显，不判断措辞是否被诱导。
+- **引用支撑校验（2026-10-13 发现）**：后端只校验引用编号在范围内，不校验被引用片段是否真的支撑答案。配对实验中出现“答案内容正确、引用指向不含该内容的片段”（RAG-008、RAG-004、INJ-001），改动前 0/46、改动后 3/98，样本太小不能归因于提示词，但弱点真实存在。待办：对被引用片段做答案支撑检查。
 - **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（Embedding 仍在本地）。增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持 `json_schema` 的服务。flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。尚未测试云端 Embedding。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
 - **交付**：无干净环境全流程演练记录、脱敏录屏、公开 Demo；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。
@@ -129,7 +131,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 4. A4 作品集刷新（已完成 2026-09-24）：重写 `PORTFOLIO.md`、README 开头、中英文 Case Study；`CODEX_PROMPT.md` 归档至 `docs/archive/`。
 5. A5 3–5 分钟脱敏演示视频和截图。
 
-**阶段 B：V0.2 有意义的评测**：真实规模公开语料和约 50 题数据集 → 重新建立基线 → 再按顺序做检索优化（含多语言 Embedding）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
+**阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块可多答 3–4 题但 token +30–44%（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
 
 **阶段 C（可选）**：真实 MCP 客户端演示；英文技术文章。
 

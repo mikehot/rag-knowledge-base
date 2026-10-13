@@ -19,7 +19,9 @@ spring:
     validate-migration-naming: true
     clean-disabled: true
     placeholders:
-      embedding_dim: ${AI_EMBEDDING_DIM:768}
+      # V1 creates the column with this width; V15 removes the fixed dimension, so the value is inert.
+      embedding_dim: 768
+      embedding_model: ${AI_EMBEDDING_MODEL_ID:text-embedding-nomic-embed-text-v1.5}
   servlet:
     multipart:
       max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
@@ -87,7 +89,8 @@ app:
     chunk-overlap: ${RAG_CHUNK_OVERLAP:100}
     top-k: ${RAG_TOP_K:5}
     similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.35}
-    embedding-dim: ${AI_EMBEDDING_DIM:768}
+    # 0 accepts the embedding model's own dimension; set it to pin and enforce one.
+    embedding-dim: ${AI_EMBEDDING_DIM:0}
     hybrid-experiment-enabled: ${RAG_HYBRID_EXPERIMENT_ENABLED:false}
     hybrid-candidate-k: ${RAG_HYBRID_CANDIDATE_K:50}
     hybrid-keyword-weight: ${RAG_HYBRID_KEYWORD_WEIGHT:2.0}

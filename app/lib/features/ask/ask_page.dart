@@ -298,6 +298,7 @@ class _AnswerMeta extends StatelessWidget {
     'GENERATION_ERROR' => '模型失败',
     'STRUCTURED_OUTPUT_INVALID' => '回答格式异常',
     'CITATION_MISSING' => '引用缺失',
+    'UNSAFE_OUTPUT' => '回答无法核实',
     _ => '处理失败',
   };
 }

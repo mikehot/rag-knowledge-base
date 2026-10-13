@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
+    /** pgvector HNSW indexes support at most this many dimensions. */
+    private static final int MAX_DIMENSIONS = 2000;
+
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -85,8 +88,17 @@ public class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
             for (int i = 0; i < vector.size(); i++) {
                 values[i] = (float) vector.get(i).asDouble();
             }
-            if (values.length != properties.rag().embeddingDim()) {
-                throw new AiCallException("Embedding 维度不匹配，当前配置为 " + properties.rag().embeddingDim());
+            // The dimension belongs to the model and is stored with every chunk. It is only enforced
+            // when the operator pinned one (AI_EMBEDDING_DIM > 0); the default accepts the model's own.
+            int expected = properties.rag().embeddingDim();
+            if (values.length < 1 || values.length > MAX_DIMENSIONS
+                || (expected > 0 && values.length != expected)) {
+                throw new AiCallException(expected > 0
+                    ? "Embedding 维度不匹配，当前配置为 " + expected
+                    : "Embedding 维度不受支持: " + values.length);
+            }
+            if (!embeddings.isEmpty() && embeddings.get(0).length != values.length) {
+                throw new AiCallException("Embedding 同一批次返回了不同维度");
             }
             embeddings.add(values);
         }

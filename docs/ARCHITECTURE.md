@@ -64,7 +64,7 @@ sequenceDiagram
     W->>Q: SUCCEEDED or retry/FAILED
 ```
 
-任务以 `documentId:contentVersion` 作为幂等边界，支持有限自动重试、人工重试和进程重启恢复。替换或重建索引只有在新版本全部 Embedding 成功后，才在同一事务中切换 Chunk；在此之前（处理中或失败），文档继续用上一版已提交的 Chunk 回答，检索不依赖文档状态，只排除停用和删除的文档。已知限制：Chunk 未记录 Embedding 模型；更换 Embedding 模型时，重建完成前旧向量仍参与检索，需要全量重建，并在完成前暂停问答。
+任务以 `documentId:contentVersion` 作为幂等边界，支持有限自动重试、人工重试和进程重启恢复。替换或重建索引只有在新版本全部 Embedding 成功后，才在同一事务中切换 Chunk；在此之前（处理中或失败），文档继续用上一版已提交的 Chunk 回答，检索不依赖文档状态，只排除停用和删除的文档。Chunk 记录生成它的 Embedding 模型和向量维度（V15），检索只比较当前配置模型生成的向量；更换模型后，尚未重建的文档在重建完成前不可检索（转人工，不用旧向量回答），重建进度见 `GET /api/admin/embeddings`。已知限制：切换窗口内这些文档不可用；只有 768/1024 维建了 HNSW 索引。
 
 ### 问答与引用
 

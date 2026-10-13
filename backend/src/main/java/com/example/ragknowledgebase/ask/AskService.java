@@ -50,7 +50,7 @@ public class AskService {
     private final AskRetrievalHitRepository retrievalHitRepository;
     private final OperationalMetrics operationalMetrics;
     private final QuestionComplexityClassifier questionComplexityClassifier;
-    private final PromptGuard promptGuard = new PromptGuard();
+    private final PromptGuard promptGuard;
     private final CitationSupport citationSupport = new CitationSupport();
     private final KeywordRrfRetriever keywordRrfRetriever;
     private final DocumentDiversityRetriever documentDiversityRetriever;
@@ -70,6 +70,9 @@ public class AskService {
         PlatformTransactionManager transactionManager
     ) {
         this.properties = properties;
+        this.promptGuard = PromptGuard.keyedBy(
+            properties.auth() == null ? null : properties.auth().jwtSecret()
+        );
         this.embeddingProvider = embeddingProvider;
         this.chunkRepository = chunkRepository;
         this.aiProvider = aiProvider;
@@ -166,7 +169,7 @@ public class AskService {
                 );
                 resultStatus = AskResultStatus.NOT_FOUND;
             } else {
-                String boundary = promptGuard.newBoundary();
+                String boundary = promptGuard.boundaryFor(question, hits);
                 String prompt = buildPrompt(question, hits, boundary);
                 stage = Stage.GENERATION;
                 stageStarted = System.nanoTime();
@@ -514,6 +517,7 @@ public class AskService {
             .append("用户问题在 ").append(promptGuard.dataOpen(boundary, QUESTION_LABEL))
             .append(" 与 ").append(promptGuard.dataClose(boundary, QUESTION_LABEL)).append(" 之间。\n\n")
             .append("如果问题包含多个部分（例如‘以及’、‘分别’、‘同时’、‘综合’），请先在内部拆成编号清单，再按编号逐项回答。每一项必须给出资料中的具体动作、条件、数字或时间；不能用‘确认’、‘注意检查’等空泛短语代替具体检查项。回答结束前，逐项核对用户问题中的每个动作和对象都已经覆盖，资料中明确的数字、时间、条件或双方责任必须完整保留，不要只回答其中一半。\n\n")
+            .append("如果资料中同一条规则按不同情形给出不同结果（例如“质量问题……，非质量问题……”“X1……，X1 Pro……”），回答涉及该规则时必须把每一种情形的结果都写出来，即使问题只提到其中一种情形。\n\n")
             .append("【资料片段】\n")
             .append(promptGuard.dataOpen(boundary, CHUNK_LABEL)).append("\n");
         for (int i = 0; i < hits.size(); i++) {

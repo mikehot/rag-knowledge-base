@@ -33,4 +33,5 @@ Dated evidence from local, disposable environments on synthetic data. Every repo
 - Prompt-guard quality/cost A/B: [prompt-guard-ab-local-2026-10-13](prompt-guard-ab-local-2026-10-13.md) (no regression detectable on 3 runs; +12.7% tokens; found a citation-support gap)
 - Realistic corpus (28 docs, 57 questions): [corpus-v1-baseline-and-retrieval-ab-local-2026-10-13](corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md) (baseline 24–25/45; retrieval is chunk-level-bound; no existing mode beats VECTOR)
 - Embedding comparison: [embedding-bge-m3-vs-nomic-local-2026-10-13](embedding-bge-m3-vs-nomic-local-2026-10-13.md) (corpus-v1 answerable 25/45 → 44/45 with bge-m3 at +8% tokens; synthetic golden 15 → 19/20; answer-quality gate still not passed)
+- Citation support: [citation-support-local-2026-10-13](citation-support-local-2026-10-13.md) (replay over 521 answers: 3 repaired, 0 harmful, 0 unsupported; also corrects the run-to-run variation claim)
 

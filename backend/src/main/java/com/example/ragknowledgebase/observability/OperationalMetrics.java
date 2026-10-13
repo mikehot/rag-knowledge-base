@@ -56,6 +56,15 @@ public class OperationalMetrics {
         }
     }
 
+    /** Outcome of the citation-support check (supported, repaired, unsupported, unchanged). */
+    public void recordCitationSupport(String outcome) {
+        Counter.builder("rag.citation.support")
+            .description("Citation-support check outcomes")
+            .tag("outcome", normalized(outcome))
+            .register(registry)
+            .increment();
+    }
+
     public void recordFeedback(AskFeedbackRating rating) {
         Counter.builder("rag.ask.feedback")
             .description("Submitted answer feedback")

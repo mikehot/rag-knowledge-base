@@ -112,7 +112,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
   7. 每日限额改为原子计数（Flyway V14 `ask_daily_usage`）。
   8. 不存在的地址返回 404 而不是 500。
 - **提示注入（2026-10-13）**：此前提示词没有把资料片段声明为不可信数据，也没有注入测试。现已增加：提示词中的安全规则和每次请求随机的数据边界标记（`PromptGuard`）；输出侧检查，答案回显边界标记，或带有检索上下文中不存在的链接/Markdown 图片时转人工，失败原因为 `UNSAFE_OUTPUT`；新增测试 14 个（2026-10-13 在 Docker 下后端全量 152 tests 通过，0 跳过，含 PostgreSQL 集成测试）；评测集 `prompt_injection_v1`（7 题）和 `forbidden_answer_terms` 评分规则。2026-10-13 在 LM Studio（Gemma，Thinking 开启）上实测：修正三道测试设计问题后连续 3 轮 7/7，ACL 泄漏 0，见 `evaluation/reports/prompt-injection-v1-local-2026-10-13.md`。**缺**：该次 `UNSAFE_OUTPUT` 触发 0 次，输出检查没有被真实模型行为验证过；样本只有 7 题；answer-quality 质量门对新提示词的复测已在 Thinking 关闭（探针 4/4 通过）下做了同会话配对：改动前 9/10/10、新提示词 10/9/9，golden 16→15，stress 8→8，均在已记录的波动范围内，token +12.7%（上限 15%），见 `evaluation/reports/prompt-guard-ab-local-2026-10-13.md`；两者都**未通过**质量门（基线本身也不通过）；输出检查只覆盖链接/图片/边界回显，不判断措辞是否被诱导。
-- **引用支撑校验（2026-10-13 发现）**：后端只校验引用编号在范围内，不校验被引用片段是否真的支撑答案。配对实验中出现“答案内容正确、引用指向不含该内容的片段”（RAG-008、RAG-004、INJ-001），改动前 0/46、改动后 3/98，样本太小不能归因于提示词，但弱点真实存在。待办：对被引用片段做答案支撑检查。
+- **引用支撑校验（2026-10-13 已实现）**：此前后端只校验引用编号在范围内，不校验被引用片段是否真的支撑答案（出现过“答案对、引用指向不含该内容的片段”：RAG-008、RAG-004、INJ-001、CORP-033）。现在 `CitationSupport` 用确定性的词面支撑度检查：引用不支撑而检索结果里有更支撑的分块时由后端改引（`REPAIR`，默认）；没有任何检索分块支撑时可转人工（`ENFORCE`，默认关闭，错误码 `UNSUPPORTED_ANSWER`）。已验证：521 条真实回答的回放中 3 条被修复、0 条变差、0 条不支撑；278 条正确回答离线标定下 ENFORCE 会误拒 0 条。缺口：只比词面，判断不了答案是否完整或为真（找到但漏要点的 31 条支撑度中位数 0.92）；ENFORCE 从未在真实运行中触发，其他语料上的误拒率未知；该失败模式在语料上只有 0.6%，主要价值是保护“每个回答都带出处”的承诺，而不是提分。
 - **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（Embedding 仍在本地）。增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持 `json_schema` 的服务。flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。尚未测试云端 Embedding。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
 - **交付**：无干净环境全流程演练记录、脱敏录屏、公开 Demo；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。
@@ -131,7 +131,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 4. A4 作品集刷新（已完成 2026-09-24）：重写 `PORTFOLIO.md`、README 开头、中英文 Case Study；`CODEX_PROMPT.md` 归档至 `docs/archive/`。
 5. A5 3–5 分钟脱敏演示视频和截图。
 
-**阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块可多答 3–4 题但 token +30–44%（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
+**阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块表面多答 3–4 题、token +30–44%，但**在同配置重启的波动（最多 3 题）之内，未成立**（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
 
 **阶段 C（可选）**：真实 MCP 客户端演示；英文技术文章。
 

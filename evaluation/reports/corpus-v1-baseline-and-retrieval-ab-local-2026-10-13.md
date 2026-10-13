@@ -22,8 +22,12 @@ First evaluation on a corpus large enough to show differences: 28 documents (24 
 | ACL leakage, schema failures | 0, 0 |
 | By category | single-fact 9/14, multi-part 15/28, cross-document 0/3 |
 
-The same run twice gives identical results here, so differences of 2–3 cases between configurations are
-not run-to-run noise; they still come from one model and one question set.
+**Correction (2026-10-13, later the same day).** This report originally said that repeating a run gave
+identical results, so 2–3 case differences were not noise. That held only for two consecutive runs on one
+backend process. Across backend restarts, an unchanged bge-m3 configuration (Top-K=5, 700/100) scored 44, 44,
+44, 43, and 41 answerable questions, and the nomic default 24–25. Treat differences of up to **3 cases as
+within run-to-run variation**: the Top-K=8 (+4) and 1000/150 (+3) gains below are not established, while
+Keyword-RRF (−7) and the embedding change (+19) are far outside it.
 
 ### Where the failures are
 
@@ -63,9 +67,9 @@ real corpus, the earlier conclusion drawn on the 7-document fixture.
 
 ## Reading
 
-- Smaller chunks are worse here (the 300/60 result on the old fixture does not carry over). The best
-  settings (K=8 or 1000/150) buy 3–4 cases for 30–44% more tokens. **Both break the frozen "tokens must not
-  rise more than 15%" rule**, so no default was changed; this is a cost/quality trade-off for the owner.
+- Smaller chunks (−5) look worse here (the 300/60 result on the old fixture does not carry over). K=8 (+4)
+  and 1000/150 (+3) cost 30–44% more tokens for a gain that is within the run-to-run variation described
+  above. **Both break the frozen "tokens must not rise more than 15%" rule**, so no default was changed.
 - Even the best setting leaves 12 of 45 questions without complete evidence in the Top-5 (recall plateau
   about 0.78–0.80). More candidates or larger chunks do not fix this; the likely lever is a multilingual
   embedding model and a reranker. `nomic-embed-text-v1.5` is mainly English-trained (background knowledge,

@@ -870,6 +870,100 @@ class AskServiceTests {
         verify(aiProvider, never()).generate(anyString());
     }
 
+    @Test
+    void repairsACitationThatPointsAtAChunkWithoutTheAnswerFacts() {
+        ChunkSearchResult wrong = hitOf("rest.md", "chunk#6", "用人单位应当保证劳动者每周至少休息一日。节日期间应当依法安排劳动者休假：元旦；春节。");
+        ChunkSearchResult right = hitOf("maternity.md", "chunk#8", "女职工生育享受不少于九十天的产假。");
+        stubHits("产假多少天？", wrong, right);
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"女职工生育享受不少于九十天的产假。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            40
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest("产假多少天？"));
+
+        assertThat(response.found()).isTrue();
+        assertThat(response.sources()).extracting(AskSourceResponse::filename).containsExactly("maternity.md");
+        verify(operationalMetrics).recordCitationSupport("REPAIRED");
+    }
+
+    @Test
+    void leavesCitationsAloneWhenTheCitationSupportCheckIsOff() {
+        askService = askServiceWithCitationMode("OFF");
+        ChunkSearchResult wrong = hitOf("rest.md", "chunk#6", "用人单位应当保证劳动者每周至少休息一日。节日期间应当依法安排劳动者休假：元旦；春节。");
+        ChunkSearchResult right = hitOf("maternity.md", "chunk#8", "女职工生育享受不少于九十天的产假。");
+        stubHits("产假多少天？", wrong, right);
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(
+            "{\"answer\":\"女职工生育享受不少于九十天的产假。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}",
+            40
+        ));
+
+        AskResponse response = askService.ask(USER, new AskRequest("产假多少天？"));
+
+        assertThat(response.sources()).extracting(AskSourceResponse::filename).containsExactly("rest.md");
+        verify(operationalMetrics, never()).recordCitationSupport(anyString());
+    }
+
+    @Test
+    void keepsAnUnsupportedAnswerInRepairModeButHandsItOffWhenEnforced() {
+        ChunkSearchResult only = hitOf("rest.md", "chunk#6", "用人单位应当保证劳动者每周至少休息一日。");
+        stubHits("食堂有什么福利？", only);
+        String invented =
+            "{\"answer\":\"公司食堂每周三提供免费水果拼盘，请前往三楼领取。\",\"found\":true,\"grounded\":true,\"sourceIndexes\":[1]}";
+        when(aiProvider.generate(anyString())).thenReturn(new AiProviderResponse(invented, 40));
+
+        AskResponse repaired = askService.ask(USER, new AskRequest("食堂有什么福利？"));
+
+        assertThat(repaired.found()).isTrue();
+        assertThat(repaired.sources()).hasSize(1);
+
+        askService = askServiceWithCitationMode("ENFORCE");
+        AskResponse enforced = askService.ask(USER, new AskRequest("食堂有什么福利？"));
+
+        assertThat(enforced.found()).isFalse();
+        assertThat(enforced.failureReason()).isEqualTo(AskFailureReason.UNSUPPORTED_ANSWER);
+        assertThat(enforced.answer()).isEqualTo("检索到的资料不能支撑这个回答，建议转人工。");
+        assertThat(enforced.sources()).isEmpty();
+    }
+
+    private AskService askServiceWithCitationMode(String mode) {
+        AppProperties base = properties(0);
+        AppProperties.Rag rag = base.rag();
+        AppProperties withMode = new AppProperties(
+            null,
+            null,
+            new AppProperties.Rag(
+                rag.chunkSize(), rag.chunkOverlap(), rag.topK(), rag.similarityThreshold(), rag.embeddingDim(),
+                rag.hybridExperimentEnabled(), rag.hybridCandidateK(), rag.hybridKeywordWeight(), rag.hybridRrfK(),
+                rag.contextSelectionExperimentEnabled(), mode
+            ),
+            null,
+            base.ai(),
+            null
+        );
+        return new AskService(
+            withMode,
+            embeddingProvider,
+            chunkRepository,
+            aiProvider,
+            askLogRepository,
+            retrievalHitRepository,
+            operationalMetrics,
+            dailyUsageRepository,
+            transactionManager
+        );
+    }
+
+    private ChunkSearchResult hitOf(String filename, String locator, String content) {
+        return new ChunkSearchResult(UUID.randomUUID(), DOCUMENT_ID, filename, locator, content, 0.9);
+    }
+
+    private void stubHits(String question, ChunkSearchResult... hits) {
+        float[] embedding = new float[] {0.1f, 0.2f};
+        when(embeddingProvider.embed(List.of(question))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5)).thenReturn(List.of(hits));
+    }
+
     private void stubSingleHit(String content, String question) {
         float[] embedding = new float[] {0.1f, 0.2f};
         ChunkSearchResult hit = new ChunkSearchResult(

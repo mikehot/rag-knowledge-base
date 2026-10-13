@@ -13,8 +13,35 @@ class PromptGuardTests {
     private final PromptGuard guard = new PromptGuard();
 
     @Test
-    void generatesDistinctBoundariesPerRequest() {
-        assertThat(guard.newBoundary()).matches("[0-9a-f]{16}").isNotEqualTo(guard.newBoundary());
+    void boundaryIsStableForTheSameRequestAndLooksLikeSixteenHexCharacters() {
+        List<ChunkSearchResult> hits = List.of(hit("保修期为一年。"));
+
+        String first = guard.boundaryFor("保修期多久？", hits);
+
+        assertThat(first).matches("[0-9a-f]{16}");
+        assertThat(guard.boundaryFor("保修期多久？", hits)).isEqualTo(first);
+    }
+
+    @Test
+    void boundaryChangesWithTheQuestionOrTheRetrievedEvidence() {
+        List<ChunkSearchResult> hits = List.of(hit("保修期为一年。"));
+
+        String base = guard.boundaryFor("保修期多久？", hits);
+
+        assertThat(guard.boundaryFor("退货期多久？", hits)).isNotEqualTo(base);
+        assertThat(guard.boundaryFor("保修期多久？", List.of(hit("保修期为一年。")))).isNotEqualTo(base);
+    }
+
+    @Test
+    void boundaryDependsOnTheServerSecretSoDocumentAuthorsCannotPredictIt() {
+        List<ChunkSearchResult> hits = List.of(hit("保修期为一年。"));
+        String keyed = PromptGuard.keyedBy("secret-a").boundaryFor("q", hits);
+
+        assertThat(PromptGuard.keyedBy("secret-a").boundaryFor("q", hits)).isEqualTo(keyed);
+        assertThat(PromptGuard.keyedBy("secret-b").boundaryFor("q", hits)).isNotEqualTo(keyed);
+        // Without a configured secret the key is random per process, still a valid boundary.
+        assertThat(PromptGuard.keyedBy(null).boundaryFor("q", hits)).matches("[0-9a-f]{16}");
+        assertThat(new PromptGuard().boundaryFor("q", hits)).isNotEqualTo(new PromptGuard().boundaryFor("q", hits));
     }
 
     @Test

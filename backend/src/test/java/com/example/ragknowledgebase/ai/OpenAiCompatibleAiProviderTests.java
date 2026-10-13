@@ -175,6 +175,40 @@ class OpenAiCompatibleAiProviderTests {
         assertThat(body.path("max_tokens").asInt()).isEqualTo(3200);
     }
 
+    @Test
+    void omitsTemperatureUnlessConfiguredSoTheProviderDefaultApplies() throws Exception {
+        OpenAiCompatibleAiProvider provider = new OpenAiCompatibleAiProvider(
+            properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1"),
+            objectMapper
+        );
+
+        provider.generate("回答问题");
+
+        assertThat(objectMapper.readTree(requestBody.get()).has("temperature")).isFalse();
+    }
+
+    @Test
+    void sendsTheConfiguredTemperature() throws Exception {
+        AppProperties base = properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        AppProperties.Ai ai = base.ai();
+        AppProperties withTemperature = new AppProperties(
+            base.auth(), base.upload(), base.rag(), base.enterprise(),
+            new AppProperties.Ai(
+                ai.provider(), ai.baseUrl(), ai.apiKey(), ai.modelId(), ai.maxTokens(), ai.complexMaxTokens(),
+                ai.complexRoutingEnabled(), ai.timeoutSeconds(), ai.maxRetries(), ai.structuredOutputRetries(),
+                ai.dailyLimit(), ai.responseFormat(), 0.0
+            ),
+            base.embedding()
+        );
+        OpenAiCompatibleAiProvider provider = new OpenAiCompatibleAiProvider(withTemperature, objectMapper);
+
+        provider.generate("回答问题");
+
+        JsonNode body = objectMapper.readTree(requestBody.get());
+        assertThat(body.has("temperature")).isTrue();
+        assertThat(body.path("temperature").asDouble()).isZero();
+    }
+
     private AppProperties properties(String baseUrl) {
         return new AppProperties(
             new AppProperties.Auth("demo", "demo123456", "test-secret", 86400),

@@ -68,6 +68,7 @@ All secrets and runtime choices are environment variables.
 | `RAG_HYBRID_KEYWORD_WEIGHT` | `2.0` | Keyword weight in the gated RRF comparison |
 | `RAG_HYBRID_RRF_K` | `60` | RRF smoothing constant for the gated comparison |
 | `RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED` | `false` | Dedicated gate for `vector-adjacent`; retrieves only Top-K+2 ACL-visible vector candidates and keeps the selected context at Top-K |
+| `AI_TEMPERATURE` | empty | Sampling temperature sent with every chat request. Empty keeps the provider's default; `0` makes runs closer to repeatable and is recommended for evaluation (see `evaluation/reports/run-to-run-variation-local-2026-10-13.md`). It narrowed but did not eliminate variation |
 | `RAG_CITATION_SUPPORT_MODE` | `REPAIR` | `OFF`, `REPAIR`, or `ENFORCE`. After an answer is validated, the backend checks that the cited chunks contain what it says: `REPAIR` cites the retrieved chunks that do, `ENFORCE` also hands off when none does (`UNSUPPORTED_ANSWER`). See `evaluation/reports/citation-support-local-2026-10-13.md` |
 | `AI_EMBEDDING_DIM` | `0` | `0` accepts the embedding model's own dimension; a positive value pins and enforces one. The dimension is stored with every chunk |
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |

@@ -51,13 +51,17 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
     }
 
     private AiProviderResponse request(String prompt, long maxTokens) throws Exception {
-        String requestBody = objectMapper.writeValueAsString(Map.of(
-            "model", properties.ai().modelId(),
-            "messages", List.of(Map.of("role", "user", "content", prompt)),
-            "response_format", structuredResponseFormat(),
-            "max_tokens", maxTokens > 0 ? maxTokens : properties.ai().maxTokens(),
-            "stream", false
-        ));
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("model", properties.ai().modelId());
+        body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        body.put("response_format", structuredResponseFormat());
+        body.put("max_tokens", maxTokens > 0 ? maxTokens : properties.ai().maxTokens());
+        body.put("stream", false);
+        Double temperature = properties.ai().temperature();
+        if (temperature != null) {
+            body.put("temperature", temperature);
+        }
+        String requestBody = objectMapper.writeValueAsString(body);
         HttpRequest.Builder builder = HttpRequest.newBuilder(chatCompletionsUri())
             .timeout(Duration.ofSeconds(properties.ai().timeoutSeconds()))
             .header("Content-Type", "application/json")

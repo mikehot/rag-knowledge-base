@@ -85,8 +85,34 @@ public record AppProperties(
         int maxRetries,
         int structuredOutputRetries,
         int dailyLimit,
-        String responseFormat
+        String responseFormat,
+        Double temperature
     ) {
+        /** Two constructors exist, so Spring Boot is told which one binds configuration. */
+        @ConstructorBinding
+        public Ai {
+        }
+
+        /** Keeps call sites that predate the temperature setting compiling; null means the provider default. */
+        public Ai(
+            String provider,
+            String baseUrl,
+            String apiKey,
+            String modelId,
+            long maxTokens,
+            long complexMaxTokens,
+            boolean complexRoutingEnabled,
+            long timeoutSeconds,
+            int maxRetries,
+            int structuredOutputRetries,
+            int dailyLimit,
+            String responseFormat
+        ) {
+            this(
+                provider, baseUrl, apiKey, modelId, maxTokens, complexMaxTokens, complexRoutingEnabled,
+                timeoutSeconds, maxRetries, structuredOutputRetries, dailyLimit, responseFormat, null
+            );
+        }
     }
 
     public record Embedding(

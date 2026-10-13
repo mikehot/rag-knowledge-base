@@ -425,6 +425,31 @@ matter. The first baseline and the retrieval A/B are in
 `test_corpus_tools.py` checks that the cleaning function removes only markup and that every expected answer
 point has literal support in its source documents.
 
+## Repeat a run and report the variation
+
+One run of a non-deterministic model cannot support a comparison. Use `run_repeated_eval.py` for every
+result that will be quoted or compared:
+
+```bash
+# N runs of one configuration against a live backend; writes <label>.run<N>.jsonl and <label>.summary.json
+python3 evaluation/run_repeated_eval.py run \
+  --dataset evaluation/datasets/corpus_v1.jsonl --credentials /private/tmp/rag-corp-actors.json \
+  --label baseline --repeats 3 --out-dir /private/tmp/rag-repeats
+
+# add --shuffle to vary the question order, or --restart-cmd '<command>' to restart the backend before each run
+
+# decide whether two configurations differ by more than they vary
+python3 evaluation/run_repeated_eval.py compare \
+  /private/tmp/rag-repeats/baseline.summary.json /private/tmp/rag-repeats/candidate.summary.json
+```
+
+The summary reports, per metric, the mean, minimum, maximum, and standard deviation over runs, the cases that
+pass in some runs and fail in others (flaky), and the cases that always fail. `compare` returns
+`DISTINGUISHABLE` only when the per-run ranges of the two sides do not overlap **and** each side has at least
+three runs; otherwise it returns `WITHIN VARIATION` or `INSUFFICIENT RUNS`. It never reports a win from a
+single run. Quote the range, not one number: an unchanged bge-m3 configuration scored 44, 44, 44, 43, and 41
+answerable questions across backend restarts. The decision logic is unit tested in `test_run_repeated_eval.py`.
+
 ## Deliberate boundary
 
 Raw live-model response captures remain outside the repository because they contain request IDs and environment-specific output. The checked-in aggregate reports prove the authenticated local Golden and stress runs in addition to the versioned datasets and deterministic runner. The backend now persists protected retrieval-level snapshots, and the collector/scorer for `SYSTEM_ADMIN`/`AUDITOR` diagnostics is implemented; the 2026-09-20 Structured Output/Agent HTTP report records the current contract evidence and remaining retrieval/provider failures. The answer-quality extension adds a deterministic rubric; an LLM-as-judge remains optional and must be reported separately. Retrieval changes such as BM25, hybrid search, or a reranker should be justified by the resulting failure categories.

@@ -96,6 +96,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 ## 已知缺口
 
 - **答案质量**：默认 700/100 下 FAQ 的 chunk#1 混合规格/安装/保修/退换货四节，导致 Q002/Q006 召回失败（2026-09-24 对照组 6 轮全部失败）。300/60 修复了这两题的召回，但切碎了其他答案和引用（Golden RAG-005/012/013/014、STRESS-003、Q004 引用），净效果持平。按固定大小打包无法同时兼顾；详见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
+- **评测波动（2026-10-13）**：单次运行不足以支撑对照结论。15 轮实验显示，未改动的配置可答题在 41–44/45 之间波动，固定顺序下总数相同但哪几题失败也会不同；`AI_TEMPERATURE=0` 缩小但未证明消除波动。已提供 `evaluation/run_repeated_eval.py`（重复运行、报告范围、`compare` 只在范围不重叠且每侧至少 3 轮时才给出“可区分”）。此前依据单次运行的 Top-K=8、1000/150 分块“收益”不成立。
 - **评测可复现性**：质量门已冻结于 `evaluation/README.md`（rubric-v2，连续 3 轮 ≥ 10/12）；每组前用探针确认 Thinking-off，但开关本身仍需在 LM Studio UI 手动设置。同配置两次会话间 Golden 波动 17→15，单轮 Golden/Stress 证据偏弱。
 - **权限变更审计**：2026-09-26 起，文档 ACL、知识库成员、用户角色的授予与撤销（以及带角色创建用户）都写入 `ALLOW` 审计，内容为主体与权限，并与变更同事务提交；重复授权等失败操作不留记录，没有实际变化的角色分配也不记录。由集成测试 `permissionChangesWriteAllowAuditEventsInTheSameTransaction` 覆盖。
 - **ACL**：部门授权/撤权与撤权后问答已由集成测试 `departmentDocumentAclGrantAndRevokeGateRetrievalAndCitedAnswers` 覆盖（模型被 mock，验证的是权限与检索链路，不是模型行为）；部门授权尚无真机抽测；只有 allow 型 ACL，无显式 deny、继承冲突和权限缓存失效策略；用户/部门停用、批量导入未做。

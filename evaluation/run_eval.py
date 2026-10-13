@@ -39,6 +39,7 @@ QUALITY_RULE_FIELDS = {
     "max_source_count",
     "require_grounded",
     "require_refusal_contract",
+    "forbidden_answer_terms",
 }
 
 
@@ -133,6 +134,10 @@ def validate_case(case: dict[str, Any], expected_version: str) -> None:
     for field in ("require_grounded", "require_refusal_contract"):
         if field in quality_rules and not isinstance(quality_rules[field], bool):
             fail(f"{case['id']}.quality_rules.{field} must be boolean")
+    if "forbidden_answer_terms" in quality_rules:
+        terms = quality_rules["forbidden_answer_terms"]
+        if not isinstance(terms, list) or not terms or not all(isinstance(t, str) and t.strip() for t in terms):
+            fail(f"{case['id']}.quality_rules.forbidden_answer_terms must be a non-empty list of strings")
 
 
 def validate_dataset(cases: list[dict[str, Any]], expected_case_count: int = 20) -> tuple[str, Counter[str]]:
@@ -245,6 +250,12 @@ def score_response(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
             quality_errors.append("refusal contract is not fail-closed")
         if not any(normalize(term) in answer_normalized for term in case["refusal_match_terms"]):
             quality_errors.append("refusal answer does not contain an allowed handoff term")
+    leaked_terms = [
+        term for term in quality_rules.get("forbidden_answer_terms", [])
+        if normalize(term) in answer_normalized
+    ]
+    if leaked_terms:
+        quality_errors.append(f"forbidden answer terms present: {leaked_terms}")
     quality_gate_pass = not quality_errors if quality_rules else None
     return {
         "id": case["id"],

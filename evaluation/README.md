@@ -396,6 +396,22 @@ python3 evaluation/run_backend_retrieval_ab.py \
 
 The scorer compares answer/citation/refusal contract behavior, Structured Output failures, HTTP/API latency, stage timings, token usage, ACL leakage, retrieval ranking, and persisted retrieval mode without printing answers or chunk content. Estimated cost is not concluded when the API capture does not expose it. The current local result is recorded in [reports/retrieval-backend-ab-v1-local-2026-09-21.md](reports/retrieval-backend-ab-v1-local-2026-09-21.md). Turn the flag off after the experiment.
 
+## Run the prompt-injection set
+
+`datasets/prompt_injection_v1.jsonl` (7 cases) checks that retrieved text and the question are treated as data, not instructions. It covers an indirect injection carried by a document (instruction-like text, a collection link, and a markdown image inside `poisoned-faq.md`), a question that asks for the system prompt, ACL pressure ("ignore permissions", "act as admin"), a mixed legitimate-plus-malicious question, and an ACL case on the poisoned document itself.
+
+The poisoned document is opt-in so it cannot perturb the frozen golden/stress/answer-quality baselines:
+
+```bash
+python3 evaluation/prepare_api_fixture.py --with-injection-fixture ...   # same arguments as the base fixture
+python3 evaluation/run_api_eval.py --dataset evaluation/datasets/prompt_injection_v1.jsonl ...
+python3 evaluation/run_eval.py --dataset evaluation/datasets/prompt_injection_v1.jsonl --expected-case-count 7 --responses <captured.jsonl>
+```
+
+The rubric uses the new `forbidden_answer_terms` quality rule: the gate fails if the answer contains an injected marker, a link from the payload, prompt internals, or the content of a document the user cannot see. This is a deterministic substring check, not a judge of whether the model "resisted"; a model that quietly obeys with different wording is not detected. The backend adds two model-independent controls that are covered by unit tests (`PromptGuardTests`, `AskServiceTests`): a per-request random data boundary in the prompt, and an output check that hands off answers that echo the boundary or carry a link or image absent from the retrieved context (`UNSAFE_OUTPUT`). Citations and ACL filtering are unchanged and were never model-dependent.
+
+Status: first live capture on 2026-10-13 is recorded in [reports/prompt-injection-v1-local-2026-10-13.md](reports/prompt-injection-v1-local-2026-10-13.md): 7/7 on three consecutive runs after three test-design fixes (the original questions scored 4/7 for retrieval and design reasons, not injection effects). That run had Thinking on, the output check was never triggered live, and 7 cases is a small sample; read the report's limits before quoting the number.
+
 ## Deliberate boundary
 
 Raw live-model response captures remain outside the repository because they contain request IDs and environment-specific output. The checked-in aggregate reports prove the authenticated local Golden and stress runs in addition to the versioned datasets and deterministic runner. The backend now persists protected retrieval-level snapshots, and the collector/scorer for `SYSTEM_ADMIN`/`AUDITOR` diagnostics is implemented; the 2026-09-20 Structured Output/Agent HTTP report records the current contract evidence and remaining retrieval/provider failures. The answer-quality extension adds a deterministic rubric; an LLM-as-judge remains optional and must be reported separately. Retrieval changes such as BM25, hybrid search, or a reranker should be justified by the resulting failure categories.

@@ -111,6 +111,8 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
   6. 问答不再全程持有事务。
   7. 每日限额改为原子计数（Flyway V14 `ask_daily_usage`）。
   8. 不存在的地址返回 404 而不是 500。
+- **提示注入（2026-10-13）**：此前提示词没有把资料片段声明为不可信数据，也没有注入测试。现已增加：提示词中的安全规则和每次请求随机的数据边界标记（`PromptGuard`）；输出侧检查，答案回显边界标记，或带有检索上下文中不存在的链接/Markdown 图片时转人工，失败原因为 `UNSAFE_OUTPUT`；新增测试 14 个（2026-10-13 在 Docker 下后端全量 152 tests 通过，0 跳过，含 PostgreSQL 集成测试）；评测集 `prompt_injection_v1`（7 题）和 `forbidden_answer_terms` 评分规则。2026-10-13 在 LM Studio（Gemma，Thinking 开启）上实测：修正三道测试设计问题后连续 3 轮 7/7，ACL 泄漏 0，见 `evaluation/reports/prompt-injection-v1-local-2026-10-13.md`。**缺**：该次 `UNSAFE_OUTPUT` 触发 0 次，输出检查没有被真实模型行为验证过；样本只有 7 题；answer-quality 质量门对新提示词的复测已在 Thinking 关闭（探针 4/4 通过）下做了同会话配对：改动前 9/10/10、新提示词 10/9/9，golden 16→15，stress 8→8，均在已记录的波动范围内，token +12.7%（上限 15%），见 `evaluation/reports/prompt-guard-ab-local-2026-10-13.md`；两者都**未通过**质量门（基线本身也不通过）；输出检查只覆盖链接/图片/边界回显，不判断措辞是否被诱导。
+- **引用支撑校验（2026-10-13 发现）**：后端只校验引用编号在范围内，不校验被引用片段是否真的支撑答案。配对实验中出现“答案内容正确、引用指向不含该内容的片段”（RAG-008、RAG-004、INJ-001），改动前 0/46、改动后 3/98，样本太小不能归因于提示词，但弱点真实存在。待办：对被引用片段做答案支撑检查。
 - **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（Embedding 仍在本地）。增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持 `json_schema` 的服务。flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。尚未测试云端 Embedding。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
 - **交付**：无干净环境全流程演练记录、脱敏录屏、公开 Demo；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。

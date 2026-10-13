@@ -29,3 +29,6 @@ Dated evidence from local, disposable environments on synthetic data. Every repo
 
 - Structured output: [structured-output-probe-v1-local-2026-09-22](structured-output-probe-v1-local-2026-09-22.md), [structured-output-gemma-recheck-local-2026-09-23](structured-output-gemma-recheck-local-2026-09-23.md), [gemma-thinking-off-end-to-end-local-2026-09-23](gemma-thinking-off-end-to-end-local-2026-09-23.md), [structured-output-termination-diagnostics-local-2026-09-24](structured-output-termination-diagnostics-local-2026-09-24.md)
 - Provider data boundary: [provider-log-boundary-review-local-2026-09-24](provider-log-boundary-review-local-2026-09-24.md) (closed by scope decision)
+- Prompt injection: [prompt-injection-v1-local-2026-10-13](prompt-injection-v1-local-2026-10-13.md) (7/7 on three runs after test-design fixes; Thinking on; output check not triggered live)
+- Prompt-guard quality/cost A/B: [prompt-guard-ab-local-2026-10-13](prompt-guard-ab-local-2026-10-13.md) (no regression detectable on 3 runs; +12.7% tokens; found a citation-support gap)
+

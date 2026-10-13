@@ -81,6 +81,8 @@ flowchart LR
 | 本地性能 | 单次问答约 1.5–3.5 秒，约 1,600 tokens | 本地单机测量，不是 SLA |
 | **云端对照：DeepSeek flash + 本地 Embedding**（2026-09-26） | answer-quality 10/10/10，**通过质量门**；golden 17/20；stress 8/8；中位延迟 1.0–1.6 秒；约 1,650 tokens/题 | 剩下的失败全部是检索导致的（Q002/Q006 等）；本地 Gemma 偶尔漏答的 Q001 在这里全部通过。按官方价格估算，每千次问答约 $0.25–2，实际接近下限。见 [云端对照报告](evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md) |
 
+**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45，资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Keyword-RRF 在这份语料上更差（18/45），Top-K=8 或 1000/150 分块能多答 3–4 题但 token 增加 30–44%，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。
+
 从评测里学到的：
 
 - 把切块改成 300/60 可以修好 Q002/Q006，并通过 answer-quality 门槛；但 golden 掉到 14/20、stress 掉到 7/8，综合持平，所以没有采用。按标题切块在离线复放阶段就被否决了。详见 [切块 A/B](evaluation/reports/chunking-ab-local-2026-09-24.md) 与 [离线复放](evaluation/reports/heading-chunking-offline-replay-local-2026-09-24.md)。

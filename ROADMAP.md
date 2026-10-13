@@ -48,7 +48,7 @@ An administrator uploads documents; the system parses, chunks, embeds, and index
 | M2 Identity, ACL, document lifecycle | `in-progress` | Tenant/department/role/document ACL enforced in SQL; lifecycle and index tasks; device evidence for USER/ROLE grant/revoke. Department grant/revoke and the post-revoke ask/citation path are covered by a PostgreSQL integration test (2026-09-24). Permission changes are audited in the same transaction (2026-09-26). Open: one device spot check |
 | M3 Structured answers, audit, observability, feedback | `verified` | Structured-output contract, fail-closed handling, requestId/timings, audit, metrics, feedback; 138 backend tests |
 | M4 Evaluation baseline | tooling `verified` | golden-v1 (20), answer-quality-v1 (12), stress (8); frozen gate in `evaluation/README.md`. Current default fails the gate (9–10/12) on a 7-document synthetic fixture |
-| M5 Evaluation-driven retrieval | **paused** | Keyword-RRF, diversity, adjacent, chunk size, and heading-aware chunking all evaluated; none beats the default on this fixture. Resumes in Phase B on a realistic corpus |
+| M5 Evaluation-driven retrieval | `in-progress` (Phase B) | Resumed 2026-10-13 on a 28-document / 57-question corpus. Baseline 24–25/45; no existing mode beats the default; the bottleneck is chunk-level retrieval (evidence in Top-5 → 86% correct, otherwise 0/17). Next: multilingual embedding, then a reranker |
 | M6 Read-only Agent tools / MCP | `in-progress` (bounded) | Three read-only tools and a stateless MCP adapter; local smoke 16/16. Real-client demo is optional Phase C |
 | M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Portfolio, README, and case studies refreshed (2026-09-24). Open: video |
 
@@ -74,7 +74,7 @@ Goal: evaluation numbers that mean something, plus a cloud-cost story for client
 
 | # | Work | Done when |
 |---|---|---|
-| B1 | Realistic public corpus | 20–50 Chinese documents with licenses that permit redistribution (e.g. public product manuals or policies), at least ~100k characters, with synthetic ACL groups; a versioned ~50-question dataset covering answers, multi-part answers, refusals, and ACL cases |
+| B1 | Realistic public corpus | 20–50 Chinese documents with licenses that permit redistribution (e.g. public product manuals or policies), at least ~100k characters, with synthetic ACL groups; a versioned ~50-question dataset covering answers, multi-part answers, refusals, and ACL cases  **Done 2026-10-13:** 28 documents (24 Kubernetes zh-cn pages under CC BY 4.0, 4 statutes), about 245k characters, 3 ACL groups, `corpus-v1` with 57 questions |
 | B2 | Re-baseline, then retrieval work | Default config measured with the frozen gate procedure. Only then, in this order, with an offline screen first: chunking → multilingual embedding → keyword/RRF → reranker |
 | B3 | Cloud provider comparison (chat part done 2026-09-26: DeepSeek flash passes the gate; see `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`) | One cloud chat and embedding model through the OpenAI-compatible config, on public data only; quality, latency, and cost per 1k questions compared with the local stack |
 | B4 | Public demo decision | Go/no-go on a small hosted demo (cloud model, synthetic/public data, rate-limited, disposable credentials). Not required for V0.2 |

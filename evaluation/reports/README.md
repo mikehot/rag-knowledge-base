@@ -31,4 +31,5 @@ Dated evidence from local, disposable environments on synthetic data. Every repo
 - Provider data boundary: [provider-log-boundary-review-local-2026-09-24](provider-log-boundary-review-local-2026-09-24.md) (closed by scope decision)
 - Prompt injection: [prompt-injection-v1-local-2026-10-13](prompt-injection-v1-local-2026-10-13.md) (7/7 on three runs after test-design fixes; Thinking on; output check not triggered live)
 - Prompt-guard quality/cost A/B: [prompt-guard-ab-local-2026-10-13](prompt-guard-ab-local-2026-10-13.md) (no regression detectable on 3 runs; +12.7% tokens; found a citation-support gap)
+- Realistic corpus (28 docs, 57 questions): [corpus-v1-baseline-and-retrieval-ab-local-2026-10-13](corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md) (baseline 24–25/45; retrieval is chunk-level-bound; no existing mode beats VECTOR)
 

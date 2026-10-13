@@ -412,6 +412,19 @@ The rubric uses the new `forbidden_answer_terms` quality rule: the gate fails if
 
 Status: first live capture on 2026-10-13 is recorded in [reports/prompt-injection-v1-local-2026-10-13.md](reports/prompt-injection-v1-local-2026-10-13.md): 7/7 on three consecutive runs after three test-design fixes (the original questions scored 4/7 for retrieval and design reasons, not injection effects). That run had Thinking on, the output check was never triggered live, and 7 cases is a small sample; read the report's limits before quoting the number.
 
+## Run the realistic-corpus set
+
+`datasets/corpus_v1.jsonl` (57 cases) runs against the 28-document corpus in `corpus/`: 45 answerable questions
+(single-fact, multi-part, cross-document), 4 out-of-scope refusals, and 8 ACL-filtered refusals across three
+access groups. Provision it with `prepare_corpus_fixture.py` (see `corpus/README.md`) on a disposable
+database. Score it like the other sets, and report **chunk-level evidence** next to pass rate: whether every
+expected answer point appears in a Top-K chunk, because document-level recall hides the failures that
+matter. The first baseline and the retrieval A/B are in
+[reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md](reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md).
+
+`test_corpus_tools.py` checks that the cleaning function removes only markup and that every expected answer
+point has literal support in its source documents.
+
 ## Deliberate boundary
 
 Raw live-model response captures remain outside the repository because they contain request IDs and environment-specific output. The checked-in aggregate reports prove the authenticated local Golden and stress runs in addition to the versioned datasets and deterministic runner. The backend now persists protected retrieval-level snapshots, and the collector/scorer for `SYSTEM_ADMIN`/`AUDITOR` diagnostics is implemented; the 2026-09-20 Structured Output/Agent HTTP report records the current contract evidence and remaining retrieval/provider failures. The answer-quality extension adds a deterministic rubric; an LLM-as-judge remains optional and must be reported separately. Retrieval changes such as BM25, hybrid search, or a reranker should be justified by the resulting failure categories.

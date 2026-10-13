@@ -81,7 +81,7 @@ flowchart LR
 | 本地性能 | 单次问答约 1.5–3.5 秒，约 1,600 tokens | 本地单机测量，不是 SLA |
 | **云端对照：DeepSeek flash + 本地 Embedding**（2026-09-26） | answer-quality 10/10/10，**通过质量门**；golden 17/20；stress 8/8；中位延迟 1.0–1.6 秒；约 1,650 tokens/题 | 剩下的失败全部是检索导致的（Q002/Q006 等）；本地 Gemma 偶尔漏答的 Q001 在这里全部通过。按官方价格估算，每千次问答约 $0.25–2，实际接近下限。见 [云端对照报告](evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md) |
 
-**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45，资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Keyword-RRF 在这份语料上更差（18/45），Top-K=8 或 1000/150 分块能多答 3–4 题但 token 增加 30–44%，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。换成多语言 Embedding（bge-m3，MIT，约 635 MB）后可答题从 25/45 升到 44/45，token 仅增加 8%，拒答和 ACL 泄漏指标不变；在原合成夹具上 golden 从 15 升到 19/20。尚未设为默认：向量维度从 768 变为 1024，需要迁移和全量重嵌入。详见 [Embedding 对照报告](evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。
+**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45，资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Keyword-RRF 在这份语料上更差（18/45），Top-K=8 或 1000/150 分块能多答 3–4 题但 token 增加 30–44%，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。换成多语言 Embedding（bge-m3，MIT，约 635 MB）后可答题从 25/45 升到 44/45，token 仅增加 8%，拒答和 ACL 泄漏指标不变；在原合成夹具上 golden 从 15 升到 19/20。切换所需的迁移、重建流程和进度端点已实现并在本机演练过（28 份文档重建约 12 秒）；默认仍是 nomic，bge-m3 是文档化的中文推荐配置。详见 [Embedding 对照报告](evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。
 
 从评测里学到的：
 
@@ -93,7 +93,7 @@ flowchart LR
 - 没有生产部署、公开 Demo 或真实客户运营数据；所有数字都来自本地合成数据。
 - “兼容 OpenAI 接口”并不代表结构化输出也兼容：DeepSeek 不支持 `json_schema`，已增加 `AI_RESPONSE_FORMAT=json_object` 选项，后端校验不变。
 - 本地 LM Studio 会把部分模型输入输出写入本机日志，只能用于合成或公开数据。真实数据必须换用通过 [Provider 验收清单](docs/DEPLOYMENT_RUNBOOK.md) 的服务。
-- ACL 只支持 allow 规则，没有显式 deny 和权限缓存失效策略。chunk 没有记录生成它的 Embedding 模型，更换模型时需要全量重建。
+- ACL 只支持 allow 规则，没有显式 deny 和权限缓存失效策略。切换 Embedding 模型需要一次全量重建：重建完成前未重建的文档不可检索（会转人工，不会用旧向量作答），没有影子重建或双写。
 - MCP 只做了只读的最小适配，没有完整的 SDK 互操作验证、模型驱动的 Agent 循环或写操作。
 
 ## 工程证据

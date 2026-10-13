@@ -66,7 +66,29 @@ pick the embedding, and tuning on them would overfit.
   real users paraphrase more. The 44/45 should be read as an upper-end figure for this question style.
 - The data is Kubernetes documentation and statutes, not a customer's documents.
 
-## What adopting it would require
+## Switch rehearsal (added after the migration work)
+
+The model switch was implemented (Flyway V15: per-chunk `embedding_model` and generated `embedding_dim`,
+dimensionless `vector` column, partial HNSW indexes for 768 and 1024) and rehearsed on a live stack:
+
+| Step | Observation |
+|---|---|
+| Database built with nomic, 28 documents | status: 28/28 on `text-embedding-nomic-embed-text-v1.5`, 419 chunks, 768 d |
+| Restart configured for bge-m3, nothing rebuilt | startup warning for 419 foreign chunks; status: 28 documents waiting; a question hands off with `RETRIEVAL_MISS` instead of answering from old vectors |
+| `batch-reindex` | 28 tasks, complete in 12 s; status: 419 chunks, all `text-embedding-bge-m3` 1024 d |
+| corpus-v1 after the rebuild | 44/45 answerable, 12/12 refusals, 0 ACL leakage, identical to a database built with bge-m3 from scratch |
+
+The rehearsal also found that the embedding provider enforced the configured dimension (default 768) and
+rejected bge-m3 vectors; the default is now "accept the model's own dimension" with an optional pin.
+Backend tests: 166 pass (upgrade from V14 with data, mixed dimensions, index plans, status, provider).
+
+## What adopting it required (now done) and what remains
+
+Done: per-chunk model and dimension, dimensionless column with per-dimension indexes, search restricted to the
+configured model, status endpoint, startup warning, runbook procedure. Remaining: no shadow rebuild (documents
+are unsearchable until reindexed), indexes only for 768/1024, and the default stays nomic.
+
+## What adopting it would have required (original assessment)
 
 - The `chunk.embedding` column is `vector(768)` on existing databases (the dimension is a Flyway placeholder
   evaluated once at V1). Switching needs a migration, a full re-embed, and a pause in answering during the

@@ -55,7 +55,7 @@ curl -fsS http://localhost:8080/readyz
 | `AI_API_KEY` | 空 | 云 Provider 用 Secret；本地 Provider 也要限制网络 |
 | `UPLOAD_STORAGE_DIR` | `./uploads` | 使用持久化卷或对象存储，并限制访问 |
 | `AI_*_MODEL_ID` | 本地模型 ID | 以 Provider `/v1/models` 实际返回值为准 |
-| `AI_EMBEDDING_DIM` | `768` | 必须与现有 pgvector 列和模型维度一致 |
+| `AI_EMBEDDING_DIM` | `0` | `0` 接受模型自身维度；设为正数则固定并校验。维度随每个 Chunk 记录，切换模型见 §5「切换 Embedding 模型」 |
 
 不要提交真实 API Key、JWT、密码、客户资料、Prompt、模型原始响应或 Embedding dump。
 
@@ -99,6 +99,26 @@ PGPASSFILE=/secure/secrets/postgres.pass pg_dump --format=custom \
 3. 启动同版本应用，检查 Flyway 当前版本和 `readyz`。
 4. 验证文档列表、ACL、问答引用和索引任务。
 5. 通过评测集或演示脚本执行最小回归后再切换流量。
+
+### 切换 Embedding 模型
+
+向量只在同一模型的空间内可比。每个 Chunk 记录了生成它的模型和维度（Flyway V15），检索只比较「当前配置的模型」生成的向量，因此切换模型是一次可观测、可回退的重建，而不是静默的混用。
+
+1. 查看当前状态：`GET /api/admin/embeddings`（`SYSTEM_ADMIN` / `AUDITOR`），记录 `configuredModel` 和各模型的 Chunk 数。
+2. 确认新模型在 Provider 中可用（`/v1/models`），向量维度不超过 2000。如需强制校验维度，设置 `AI_EMBEDDING_DIM`。
+3. 修改 `AI_EMBEDDING_MODEL_ID`（必要时还有 `AI_EMBEDDING_BASE_URL`）并重启后端。启动日志会出现告警：`N stored chunks were embedded with a model other than ...`。
+4. **从这一刻起，尚未重建的文档不可检索**：针对它们的提问返回 `RETRIEVAL_MISS` 并转人工，不会用旧向量回答。建议在低峰执行，并提前通知。
+5. 触发重建：`POST /api/admin/knowledge-bases/{knowledgeBaseId}/index-tasks/batch-reindex`。新 Chunk 全部生成成功后才在同一事务中替换旧 Chunk；失败的文档保留旧向量，可用「重试」接口再次执行。
+6. 轮询 `GET /api/admin/embeddings`，直到 `rebuildComplete=true` 且 `documentsWaitingForRebuild=0`。
+7. 用评测集或演示脚本做最小回归，再恢复对外服务。
+
+回滚：把 `AI_EMBEDDING_MODEL_ID` 改回并重启。仍保留旧模型向量的文档立即恢复可检索；已经重建为新模型的文档需要再重建一次。
+
+提示：
+- 本机演练（28 份文档、419 个分块，bge-m3）重建用时约 12 秒；大知识库按文档数线性估算，并受 Provider 吞吐限制。
+- 只有 768 和 1024 维建了 HNSW 索引；其他维度仍可检索（顺序扫描），数据量大时请补一个与 `idx_chunk_embedding_1024` 同形状的部分索引。
+- 现有行在 V15 升级时被标记为升级时配置的模型。如果升级前曾改过模型却没有重建，请在升级后对全部文档重建一次。
+- 模型 ID 不要包含单引号（迁移把它写进列默认值）。
 
 ### 迁移与回滚
 

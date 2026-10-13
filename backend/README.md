@@ -68,7 +68,7 @@ All secrets and runtime choices are environment variables.
 | `RAG_HYBRID_KEYWORD_WEIGHT` | `2.0` | Keyword weight in the gated RRF comparison |
 | `RAG_HYBRID_RRF_K` | `60` | RRF smoothing constant for the gated comparison |
 | `RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED` | `false` | Dedicated gate for `vector-adjacent`; retrieves only Top-K+2 ACL-visible vector candidates and keeps the selected context at Top-K |
-| `AI_EMBEDDING_DIM` | `768` | Must match embedding model |
+| `AI_EMBEDDING_DIM` | `0` | `0` accepts the embedding model's own dimension; a positive value pins and enforces one. The dimension is stored with every chunk |
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |
 | `AI_MODEL_ID` | `google/gemma-4-26b-a4b-qat` | Chat model; verify the identifier in `GET http://localhost:1234/v1/models` |
 | `AI_API_KEY` | empty | Optional for local providers |
@@ -81,7 +81,7 @@ All secrets and runtime choices are environment variables.
 | `AI_RESPONSE_FORMAT` | `json_schema` | `json_schema` (strict, provider-enforced) or `json_object` for providers that reject `json_schema`, such as DeepSeek. The backend validates the full answer contract in both modes |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
-| `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text-v1.5` | Default local embedding model; must return 768 dimensions |
+| `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text-v1.5` | Embedding model; also recorded per chunk. `text-embedding-bge-m3` (1024 d) is recommended for Chinese documents, see below. Must not contain a single quote |
 | `INDEX_TASKS_ENABLED` | `true` | Enable after-commit dispatch and persistent queue polling |
 | `INDEX_TASK_POLL_DELAY_MS` | `15000` | Delay between recovery/queue polls |
 
@@ -101,14 +101,18 @@ curl -s http://localhost:1234/v1/models
 
 The configured model IDs must match the returned `id` values exactly. For the current local fixture they are `google/gemma-4-26b-a4b-qat` and `text-embedding-nomic-embed-text-v1.5`; the latter must return 768 dimensions. If the GUI reports an unexpected exit but the CLI server starts and `/v1/models` responds, the desktop UI process and the local API service are separate failure surfaces.
 
-## Embedding Dimension
+## Embedding Model and Dimension
 
-`chunk.embedding` is created as `vector(${AI_EMBEDDING_DIM})`. If you change embedding model or dimension after data exists, recreate the database or rebuild the `chunk` table and re-upload documents. pgvector will reject vectors with a different dimension.
+Every chunk records the embedding model that produced its vector and the vector's dimension (`chunk.embedding_model`, generated `chunk.embedding_dim`, Flyway V15). Search compares only vectors produced by the configured model, so a model change never mixes vector spaces or fails on a dimension mismatch. The column is a dimensionless `vector`; HNSW indexes exist for 768 and 1024 dimensions (other dimensions work through a sequential scan until an index of the same shape is added).
+
+Switching the model is an operational procedure, not a code change: configure the new model, restart, then rebuild with `POST /api/admin/knowledge-bases/{id}/index-tasks/batch-reindex` and follow `GET /api/admin/embeddings` until `rebuildComplete` is true. Documents not yet rebuilt are not searchable meanwhile (questions about them hand off instead of answering from stale vectors). See the runbook for the steps and rollback.
+
+For Chinese documents `text-embedding-bge-m3` (MIT, 1024 dimensions, about 635 MB at Q8_0) answered 44/45 of the corpus-v1 questions against 25/45 for `text-embedding-nomic-embed-text-v1.5` at +8% tokens; see `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`. The nomic model remains the default so existing deployments and the Quick Start do not change.
 
 ## Database Migrations and ACL
 
 - Flyway owns schema changes in `src/main/resources/db/migration`.
-- V1 creates the original RAG schema and `vector(${AI_EMBEDDING_DIM})` column.
+- V1 creates the original RAG schema and the `chunk.embedding` vector column (fixed at 768 dimensions; V15 removes the fixed dimension).
 - V2 adds tenant, department, role, knowledge-base membership, document lifecycle metadata, and document ACL tables.
 - V5 adds persistent indexing tasks for upload, replacement, single reindex, and batch reindex.
 - V6-V8 add ask observability, feedback, and operational audit/metric fields; V9 repairs the `app_user.created_at` default for older baseline databases; V10 stores protected Top-K retrieval snapshots for diagnostics; V11 records the retrieval mode used by each ask.
@@ -138,7 +142,7 @@ export AI_EMBEDDING_BASE_URL=http://localhost:1234/v1
 export AI_EMBEDDING_API_KEY=               # keep empty so the cloud key is not sent to the local server
 ```
 
-A cloud embedding model with a different dimension (for example 1536) requires `AI_EMBEDDING_DIM` to match and a fresh database, because the column is created as `vector(${AI_EMBEDDING_DIM})`.
+A cloud embedding model with another dimension (for example 1536) needs no schema change: set `AI_EMBEDDING_MODEL_ID`, rebuild, and, if you want retrieval to use an HNSW index, add a partial index of the same shape as `idx_chunk_embedding_1024` for that dimension (HNSW supports at most 2000).
 
 For Docker with LM Studio running on the host:
 

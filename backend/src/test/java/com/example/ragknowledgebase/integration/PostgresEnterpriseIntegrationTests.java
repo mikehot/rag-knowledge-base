@@ -251,8 +251,17 @@ class PostgresEnterpriseIntegrationTests {
             String.class
         );
 
-        assertThat(successfulMigrations).isEqualTo(14);
-        assertThat(embeddingType).isEqualTo("vector(768)");
+        assertThat(successfulMigrations).isEqualTo(15);
+        // V15 removed the fixed dimension so vectors from different embedding models can coexist.
+        assertThat(embeddingType).isEqualTo("vector");
+        assertThat(jdbcTemplate.queryForList(
+            """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'chunk'
+                  AND column_name IN ('embedding_model', 'embedding_dim')
+                """,
+            String.class
+        )).containsExactlyInAnyOrder("embedding_model", "embedding_dim");
         assertThat(roleCount).isEqualTo(4);
         assertThat(knowledgeBaseCount).isEqualTo(1);
         assertThat(defaultAccessCount).isGreaterThanOrEqualTo(1);

@@ -30,6 +30,7 @@ public class AskService {
     private static final String STRUCTURED_OUTPUT_FALLBACK = "暂时无法生成可验证的回答，建议转人工。";
     private static final String CITATION_FALLBACK = "回答缺少可验证引用，建议转人工。";
     private static final String UNSAFE_OUTPUT_FALLBACK = "回答包含无法在资料中核实的内容，建议转人工。";
+    private static final String UNSUPPORTED_ANSWER_FALLBACK = "检索到的资料不能支撑这个回答，建议转人工。";
     private static final String CHUNK_LABEL = "DATA";
     private static final String QUESTION_LABEL = "QUESTION";
     private static final List<String> INCOMPLETE_ANSWER_MARKERS = List.of(
@@ -50,6 +51,7 @@ public class AskService {
     private final OperationalMetrics operationalMetrics;
     private final QuestionComplexityClassifier questionComplexityClassifier;
     private final PromptGuard promptGuard = new PromptGuard();
+    private final CitationSupport citationSupport = new CitationSupport();
     private final KeywordRrfRetriever keywordRrfRetriever;
     private final DocumentDiversityRetriever documentDiversityRetriever;
     private final AdjacentChunkRetriever adjacentChunkRetriever;
@@ -204,6 +206,19 @@ public class AskService {
                         return record(user, question, response, resultStatus, retrievalHits, retrievalMode);
                     }
                 }
+                CitationSupportMode supportMode = CitationSupportMode.from(properties.rag().citationSupportMode());
+                CitationSupport.Result citation = null;
+                if (supportMode != CitationSupportMode.OFF
+                    && structuredAnswer.found()
+                    && hasUsableAnswer(structuredAnswer)
+                    && hasValidCitations(structuredAnswer, hits)) {
+                    citation = citationSupport.evaluate(
+                        structuredAnswer.answer(),
+                        hits.stream().map(ChunkSearchResult::content).toList(),
+                        structuredAnswer.sourceIndexes()
+                    );
+                    operationalMetrics.recordCitationSupport(citation.outcome().name());
+                }
                 if (!structuredAnswer.found()) {
                     response = response(
                         requestId,
@@ -265,14 +280,36 @@ public class AskService {
                         generationMs
                     );
                     resultStatus = AskResultStatus.FAILED;
+                } else if (citation != null
+                    && citation.outcome() == CitationSupport.Outcome.UNSUPPORTED
+                    && supportMode == CitationSupportMode.ENFORCE) {
+                    // No retrieved chunk contains what the answer says; do not present it with sources.
+                    response = response(
+                        requestId,
+                        totalStarted,
+                        UNSUPPORTED_ANSWER_FALLBACK,
+                        false,
+                        false,
+                        List.of(),
+                        tokenUsage,
+                        AskFailureReason.UNSUPPORTED_ANSWER,
+                        embeddingMs,
+                        retrievalMs,
+                        generationMs
+                    );
+                    resultStatus = AskResultStatus.FAILED;
                 } else {
+                    // A better supporting chunk may have been retrieved than the one the model cited.
+                    List<Integer> citedIndexes = citation != null && citation.outcome() == CitationSupport.Outcome.REPAIRED
+                        ? citation.indexes()
+                        : structuredAnswer.sourceIndexes();
                     response = response(
                         requestId,
                         totalStarted,
                         structuredAnswer.answer(),
                         true,
                         structuredAnswer.grounded(),
-                        sourcesOf(hits, structuredAnswer.sourceIndexes()),
+                        sourcesOf(hits, citedIndexes),
                         tokenUsage,
                         null,
                         embeddingMs,

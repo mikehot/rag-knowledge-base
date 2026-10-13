@@ -299,6 +299,7 @@ class _AnswerMeta extends StatelessWidget {
     'STRUCTURED_OUTPUT_INVALID' => '回答格式异常',
     'CITATION_MISSING' => '引用缺失',
     'UNSAFE_OUTPUT' => '回答无法核实',
+    'UNSUPPORTED_ANSWER' => '资料不支持该回答',
     _ => '处理失败',
   };
 }

@@ -2,6 +2,7 @@ package com.example.ragknowledgebase.config;
 
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(
@@ -37,8 +38,32 @@ public record AppProperties(
         int hybridCandidateK,
         double hybridKeywordWeight,
         int hybridRrfK,
-        boolean contextSelectionExperimentEnabled
+        boolean contextSelectionExperimentEnabled,
+        String citationSupportMode
     ) {
+        /** The record has two constructors, so Spring Boot is told which one binds configuration. */
+        @ConstructorBinding
+        public Rag {
+        }
+
+        /** Keeps call sites that predate the citation-support mode compiling; the mode defaults to REPAIR. */
+        public Rag(
+            int chunkSize,
+            int chunkOverlap,
+            int topK,
+            double similarityThreshold,
+            int embeddingDim,
+            boolean hybridExperimentEnabled,
+            int hybridCandidateK,
+            double hybridKeywordWeight,
+            int hybridRrfK,
+            boolean contextSelectionExperimentEnabled
+        ) {
+            this(
+                chunkSize, chunkOverlap, topK, similarityThreshold, embeddingDim, hybridExperimentEnabled,
+                hybridCandidateK, hybridKeywordWeight, hybridRrfK, contextSelectionExperimentEnabled, "REPAIR"
+            );
+        }
     }
 
     public record Enterprise(

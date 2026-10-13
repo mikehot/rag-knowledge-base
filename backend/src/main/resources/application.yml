@@ -96,6 +96,8 @@ app:
     hybrid-keyword-weight: ${RAG_HYBRID_KEYWORD_WEIGHT:2.0}
     hybrid-rrf-k: ${RAG_HYBRID_RRF_K:60}
     context-selection-experiment-enabled: ${RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED:false}
+    # OFF | REPAIR | ENFORCE: what to do when cited chunks do not support the answer (see CitationSupport).
+    citation-support-mode: ${RAG_CITATION_SUPPORT_MODE:REPAIR}
   enterprise:
     default-tenant-id: 00000000-0000-0000-0000-000000000001
     default-knowledge-base-id: 00000000-0000-0000-0000-000000000101

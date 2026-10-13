@@ -4,7 +4,7 @@ from pathlib import Path
 
 from corpus_tools import clean_k8s_markdown, corpus_documents
 
-DATASET = Path("evaluation/datasets/corpus_v1.jsonl")
+DATASETS = [Path("evaluation/datasets/corpus_v1.jsonl"), Path("evaluation/datasets/corpus_v2.jsonl")]
 
 
 def norm(text: str) -> str:
@@ -36,7 +36,8 @@ class CleanK8sMarkdownTests(unittest.TestCase):
 class CorpusDatasetGroundTruthTests(unittest.TestCase):
     def test_every_expected_answer_point_is_literally_supported_by_its_sources(self):
         documents = {d["name"]: norm(d["text"]) for d in corpus_documents()}
-        for line in DATASET.read_text(encoding="utf-8").splitlines():
+        lines = [line for dataset in DATASETS for line in dataset.read_text(encoding="utf-8").splitlines()]
+        for line in lines:
             case = json.loads(line)
             for name in case["expected_source_documents"] + case["forbidden_documents"]:
                 self.assertIn(name, documents, f"{case['id']} references unknown document {name}")
@@ -54,6 +55,21 @@ class CorpusDatasetGroundTruthTests(unittest.TestCase):
         self.assertEqual(28, len(documents))
         self.assertEqual({"it-ops", "hr", "legal"}, {d["group"] for d in documents})
         self.assertGreater(sum(len(d["text"]) for d in documents), 200_000)
+
+
+class CorpusV2ParaphraseTests(unittest.TestCase):
+    def test_v2_only_changes_the_wording_of_each_v1_question(self):
+        v1 = {json.loads(l)["id"]: json.loads(l) for l in DATASETS[0].read_text(encoding="utf-8").splitlines()}
+        v2 = [json.loads(l) for l in DATASETS[1].read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(v1), len(v2))
+        for case in v2:
+            original = v1[case["source_case"]]
+            self.assertNotEqual(original["question"], case["question"], case["id"])
+            for field in ("expected_answer_points", "expected_source_documents", "forbidden_documents",
+                          "acting_user", "expected_behavior", "quality_rules", "refusal_match_terms"):
+                self.assertEqual(original[field], case[field], f"{case['id']}.{field}")
+            self.assertEqual("corpus-v2", case["dataset_version"])
+            self.assertIn(case["style"], {"colloquial", "scenario", "keywords", "abbreviation"})
 
 
 if __name__ == "__main__":

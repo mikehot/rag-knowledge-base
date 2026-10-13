@@ -92,17 +92,29 @@ class CompareTests(unittest.TestCase):
         self.assertEqual("WITHIN VARIATION", verdict["verdict"])
         self.assertGreater(verdict["mean_difference_b_minus_a"], 0)
 
-    def test_non_overlapping_ranges_are_distinguishable(self):
-        verdict = rr.compare(summary("nomic", [25, 25, 24]), summary("bge", [44, 44, 41]))
+    def test_non_overlapping_ranges_are_distinguishable_when_a_backend_was_restarted(self):
+        base = summary("nomic", [25, 25, 24])
+        cand = summary("bge", [44, 44, 41])
+        cand["restart_before_each_run"] = True
+
+        verdict = rr.compare(base, cand)
 
         self.assertEqual("DISTINGUISHABLE", verdict["verdict"])
         self.assertIn("B is higher", verdict["reason"])
 
+    def test_without_any_restart_a_clear_gap_is_only_distinguishable_within_one_session(self):
+        verdict = rr.compare(summary("a", [44, 44, 44]), summary("b", [43, 43, 43]))
+
+        self.assertEqual("DISTINGUISHABLE (single session)", verdict["verdict"])
+        self.assertIn("only cover one session", verdict["reason"])
+
     def test_the_lower_side_can_be_the_distinguishable_one(self):
-        verdict = rr.compare(summary("rrf", [18, 18, 19]), summary("vector", [25, 25, 24]))
+        restarted = summary("vector", [25, 25, 24])
+        restarted["restart_before_each_run"] = True
+        verdict = rr.compare(summary("rrf", [18, 18, 19]), restarted)
 
         self.assertEqual("DISTINGUISHABLE", verdict["verdict"])
-        verdict_swapped = rr.compare(summary("vector", [25, 25, 24]), summary("rrf", [18, 18, 19]))
+        verdict_swapped = rr.compare(restarted, summary("rrf", [18, 18, 19]))
         self.assertIn("A is higher", verdict_swapped["reason"])
 
     def test_fewer_than_three_runs_never_gives_a_verdict(self):

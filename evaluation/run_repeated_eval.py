@@ -117,12 +117,17 @@ def compare(a: dict[str, Any], b: dict[str, Any], metric: str = "answerable_ok")
     if min(runs_a, runs_b) < MIN_RUNS_FOR_VERDICT:
         verdict = "INSUFFICIENT RUNS"
         reason = f"need at least {MIN_RUNS_FOR_VERDICT} runs per side, have {runs_a} and {runs_b}"
-    elif sb["min"] > sa["max"]:
+    elif sb["min"] > sa["max"] or sa["min"] > sb["max"]:
+        higher = "B" if sb["min"] > sa["max"] else "A"
+        hi, lo = (sb, sa) if higher == "B" else (sa, sb)
         verdict = "DISTINGUISHABLE"
-        reason = f"B is higher: its worst run ({sb['min']}) beats A's best run ({sa['max']})"
-    elif sa["min"] > sb["max"]:
-        verdict = "DISTINGUISHABLE"
-        reason = f"A is higher: its worst run ({sa['min']}) beats B's best run ({sb['max']})"
+        reason = f"{higher} is higher: its worst run ({hi['min']}) beats the other side's best run ({lo['max']})"
+        restarted = a.get("restart_before_each_run") or b.get("restart_before_each_run")
+        if not restarted:
+            # With a deterministic prompt the runs of one backend process are often identical, so a zero-width
+            # range proves stability inside a session, not across sessions.
+            verdict = "DISTINGUISHABLE (single session)"
+            reason += "; neither side restarted the backend, so these ranges only cover one session"
     else:
         verdict = "WITHIN VARIATION"
         reason = f"ranges overlap: A {sa['min']}-{sa['max']}, B {sb['min']}-{sb['max']}"
@@ -269,8 +274,14 @@ def run_command(args: argparse.Namespace) -> int:
 def compare_command(args: argparse.Namespace) -> int:
     a = json.loads(args.a.read_text(encoding="utf-8"))
     b = json.loads(args.b.read_text(encoding="utf-8"))
+    if a["dataset_version"] != b["dataset_version"] and not args.across_datasets:
+        raise ValueError(
+            f"datasets differ: {a['dataset_version']} vs {b['dataset_version']} "
+            "(pass --across-datasets to compare, e.g., a dataset with its paraphrase; per-case lists are skipped)"
+        )
     if a["dataset_version"] != b["dataset_version"]:
-        raise ValueError(f"datasets differ: {a['dataset_version']} vs {b['dataset_version']}")
+        for side in (a, b):
+            side["aggregate"]["case_pass_rate"] = {}  # case ids do not line up across datasets
     for metric in args.metric:
         result = compare(a, b, metric)
         print(
@@ -310,6 +321,8 @@ def main() -> int:
     cmp_.add_argument("a", type=Path)
     cmp_.add_argument("b", type=Path)
     cmp_.add_argument("--metric", action="append", choices=METRICS, default=None)
+    cmp_.add_argument("--across-datasets", action="store_true",
+                      help="allow comparing summaries of different datasets (aggregates only)")
 
     args = parser.parse_args()
     if args.command == "compare" and not args.metric:

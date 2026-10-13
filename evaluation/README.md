@@ -429,8 +429,13 @@ expected answer point appears in a Top-K chunk, because document-level recall hi
 matter. The first baseline and the retrieval A/B are in
 [reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md](reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md).
 
-`test_corpus_tools.py` checks that the cleaning function removes only markup and that every expected answer
-point has literal support in its source documents.
+`datasets/corpus_v2.jsonl` is the same 57 questions in everyday wording (colloquial, scenario, keyword, abbreviation) with identical
+answer points, sources, and actors; use it to check that a result does not depend on wording that mirrors the documents. Compare a
+dataset with its paraphrase using `run_repeated_eval.py compare --across-datasets` (aggregates only). See
+[reports/corpus-v2-paraphrase-local-2026-10-13.md](reports/corpus-v2-paraphrase-local-2026-10-13.md).
+
+`test_corpus_tools.py` checks that the cleaning function removes only markup, that every expected answer
+point has literal support in its source documents, and that v2 differs from v1 only in the question text.
 
 ## Repeat a run and report the variation
 
@@ -455,7 +460,7 @@ pass in some runs and fail in others (flaky), and the cases that always fail. `c
 `DISTINGUISHABLE` only when the per-run ranges of the two sides do not overlap **and** each side has at least
 three runs; otherwise it returns `WITHIN VARIATION` or `INSUFFICIENT RUNS`. It never reports a win from a
 single run. Quote the range, not one number: an unchanged bge-m3 configuration scored 44, 44, 44, 43, and 41
-answerable questions across backend restarts. The decision logic is unit tested in `test_run_repeated_eval.py`.
+answerable questions across backend restarts. Because a deterministic prompt makes runs inside one backend process identical, a clear gap between two such summaries is reported as `DISTINGUISHABLE (single session)`; include `--restart-cmd` runs before treating it as a difference between configurations. The decision logic is unit tested in `test_run_repeated_eval.py`.
 
 ## Deliberate boundary
 

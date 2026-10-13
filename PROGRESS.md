@@ -1,6 +1,6 @@
 # PROGRESS
 
-> Last evidence review: 2026-09-24
+> Last evidence review: 2026-10-13
 > Source of truth for implemented and verified status. Planned capabilities live in `REQUIREMENTS.md` and `ROADMAP.md`.
 > 2026-09-24 之前的逐条证据、命令和日期记录已原样迁至 [`docs/PROGRESS_HISTORY.md`](docs/PROGRESS_HISTORY.md)；详细数据以 `evaluation/reports/` 为准。本文件只保留当前状态、缺口和下一步。
 
@@ -98,6 +98,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - **答案质量**：默认 700/100 下 FAQ 的 chunk#1 混合规格/安装/保修/退换货四节，导致 Q002/Q006 召回失败（2026-09-24 对照组 6 轮全部失败）。300/60 修复了这两题的召回，但切碎了其他答案和引用（Golden RAG-005/012/013/014、STRESS-003、Q004 引用），净效果持平。按固定大小打包无法同时兼顾；详见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
 - **评测波动（2026-10-13）**：单次运行不足以支撑对照结论。15 轮实验显示，未改动的配置可答题在 41–44/45 之间波动，固定顺序下总数相同但哪几题失败也会不同；`AI_TEMPERATURE=0` 缩小但未证明消除波动。已提供 `evaluation/run_repeated_eval.py`（重复运行、报告范围、`compare` 只在范围不重叠且每侧至少 3 轮时才给出“可区分”）。此前依据单次运行的 Top-K=8、1000/150 分块“收益”不成立。
 - **质量门（2026-10-13）**：对 `bge-m3` + `AI_TEMPERATURE=0` + Thinking 关闭的配置**通过**：answer-quality 连续 8 轮每轮 11/12（含 3 轮每次重启后端），ACL 泄漏 0、schema 失败 0，golden 19/20、stress 8/8，token +12.7%；对**默认配置（nomic）仍不通过**。Q006 的根因：nomic 下是召回不到，bge-m3 下是“边缘样例的答案不完整”；每次请求的随机边界标记会在 `temperature=0` 下翻转它（基线完整率约 54%）。已改为由服务端密钥对（问题+检索分块）做 HMAC 的确定性边界，并在提示词里加入“同一规则按不同情形给出不同结果时必须全部写出”的规则（边缘样例 24/24，held-out 语料无变差）。缺口：QUALITY-001、RAG-013 每轮失败，原因是子串评分对措辞敏感（答案含事实，评分规则未改以保持 rubric-v2）；此前同模型同配置曾在另一个会话失败（9/10/10），各项修改的单独贡献未隔离；单机、单模型。
+- **改写题集 corpus-v2（2026-10-13）**：同样 57 题改成日常说法（colloquial 36、scenario 14、keyword 4、abbreviation 3；与原题字符二元组 Jaccard 均值 0.25），答案要点与来源不变。可答题单进程 43/43/43、跨重启 43/43/43（v1 为 44/44/44 与 44/45/43），`compare --across-datasets` 为 WITHIN VARIATION；检索证据 45/45 不变；拒答 12/12、ACL 泄漏 0。失败：CORP2-001（“留几份”被读成副本数）、CORP2-045（只覆盖一篇法律，漏“向主管部门报告”）；v1 的 CORP-023 是两部法律说法不同造成的数据集歧义（未改，以免产生新数据集版本）。同一进程内结果现在完全可重复，跨重启仍有最多 2 题的差异，原因未隔离（怀疑模型服务的批处理或缓存状态）。缺口：改写由同一作者完成，无错别字，关键词式只有 4 条。
 - **评测可复现性**：质量门已冻结于 `evaluation/README.md`（rubric-v2，连续 3 轮 ≥ 10/12）；每组前用探针确认 Thinking-off，但开关本身仍需在 LM Studio UI 手动设置。同配置两次会话间 Golden 波动 17→15，单轮 Golden/Stress 证据偏弱。
 - **权限变更审计**：2026-09-26 起，文档 ACL、知识库成员、用户角色的授予与撤销（以及带角色创建用户）都写入 `ALLOW` 审计，内容为主体与权限，并与变更同事务提交；重复授权等失败操作不留记录，没有实际变化的角色分配也不记录。由集成测试 `permissionChangesWriteAllowAuditEventsInTheSameTransaction` 覆盖。
 - **ACL**：部门授权/撤权与撤权后问答已由集成测试 `departmentDocumentAclGrantAndRevokeGateRetrievalAndCitedAnswers` 覆盖（模型被 mock，验证的是权限与检索链路，不是模型行为）；部门授权尚无真机抽测；只有 allow 型 ACL，无显式 deny、继承冲突和权限缓存失效策略；用户/部门停用、批量导入未做。

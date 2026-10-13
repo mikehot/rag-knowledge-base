@@ -1,6 +1,6 @@
 # Enterprise RAG Knowledge Base — Case Study
 
-> Verified on synthetic data in a local environment. This is not a customer deployment and makes no accuracy, SLA, or ROI claims. Last updated: 2026-09-24.
+> Verified on synthetic data in a local environment. This is not a customer deployment and makes no accuracy, SLA, or ROI claims. Last updated: 2026-10-13.
 
 ## One-line summary
 
@@ -20,6 +20,8 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 - **Backend-owned citations, fail-closed.** The model returns only an answer, `found`/`grounded` flags, and source indexes, under a JSON Schema. The backend validates the output and maps each index to a filename, locator, and snippet. Invalid JSON, out-of-range indexes, contradictory flags, truncated output, and provider timeouts all return a stable failure reason and hand off to a human.
 - **Recoverable indexing.** A persistent task queue provides idempotency, retries, and restart recovery. Chunks are swapped in one transaction only after every embedding succeeds, so a failed reindex keeps the previous version serving.
 - **Operability.** Request IDs, stage timings, failure categories, token and estimated-cost metrics, audit queries, user feedback, and protected retrieval diagnostics.
+- **Defence around the model output.** Retrieved text and the question are untrusted data inside a boundary keyed by a server secret; answers that echo it or carry links absent from the evidence are handed off, and the backend checks that the cited chunks actually support the answer and repairs the citation when they do not.
+- **Switchable embeddings.** Every chunk records the model and dimension that produced its vector; search compares only the configured model, and a switch is a rebuild with a progress endpoint.
 - **Bounded agent surface.** Three read-only tools and a stateless MCP adapter reuse the same identity, ACL, call budget, and audit. No write tools.
 - **Clients and delivery.** A Flutter app (Q&A, citations, ACL management, index-task panel), Docker Compose, a deployment/incident runbook, and a backup/restore rehearsal.
 
@@ -29,9 +31,9 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 |---|---|
 | Access control | PostgreSQL integration tests cover grant → answerable and revoke → refused (after revoke, the model is never called); every permission change is audited (who, when, what) in the same transaction as the change; verified with curl on a fresh clone; zero ACL leakage across all evaluation runs |
 | Reliability | Provider outages return stable error codes; failed index tasks recover through admin retry; a failed reindex keeps serving the previous version (integration test plus live replay) |
-| Engineering | 138 backend tests including Testcontainers integration tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
+| Engineering | 182 backend tests including Testcontainers integration tests, 30 evaluation unit tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
 | Reproducibility | A fresh clone following the README verbatim reaches a cited answer in under a minute of machine time (warm caches) |
-| Quality | Local Gemma: answer-quality 8–10/12 per capture, which **does not pass** my own gate (3 consecutive captures ≥ 10/12); golden 15–17/20; stress 8/8. Cloud DeepSeek flash with local embeddings: answer-quality 10/10/10, which **passes**; golden 17/20; stress 8/8; median latency about 1–1.6 s; an estimated under $1 per 1,000 questions at list price. See [PORTFOLIO.md](../PORTFOLIO.md) |
+| Quality | Local Gemma with bge-m3 embeddings and `AI_TEMPERATURE=0`: answer-quality 8 consecutive captures at 11/12, which **passes** my own gate; golden 19/20; stress 8/8. The **shipped default (nomic) still fails** it (8–10/12). On a 28-document, 57-question Chinese corpus: 44/45 answerable, 12/12 refusals, zero ACL leakage; the same configuration varies between 41 and 44 across runs. Cloud DeepSeek flash with local embeddings: answer-quality 10/10/10, median latency about 1–1.6 s, an estimated under $1 per 1,000 questions at list price. Scope and limits: [PORTFOLIO.md](../PORTFOLIO.md). |
 
 ## Judgment calls
 
@@ -41,16 +43,19 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 4. **Compatibility is only known once tested.** Connecting DeepSeek revealed that it rejects strict `json_schema` output. The output format became a setting, and full backend validation was kept. With a stronger chat model only retrieval-bound misses remained, which points the next effort at retrieval, not at a pricier model: v4-pro was three times slower than flash with identical scores.
 5. **Closing scope deliberately.** The local model server (LM Studio) persists part of its model I/O to local logs. Instead of investigating a third-party tool indefinitely, I restricted it to synthetic data and wrote a provider acceptance checklist for any provider that will handle real data.
 
+6. **A single run is not evidence.** Two reported gains (Top-K=8, 1000/150 chunks) came from one run each; an unchanged configuration was later seen spanning 41–44 answerable questions. A repeat-run tool now reports the spread, `compare` only says "distinguishable" when per-run ranges do not overlap and each side has at least three runs, and the two conclusions were withdrawn.
+7. **A meaningless random string changed answers.** The per-request random boundary token in the prompt was enough, at temperature 0, to flip a borderline question between complete and incomplete (about 54% complete). The boundary is now an HMAC of the question and retrieved chunk ids under a server secret: still unpredictable to a document author, but identical input gives an identical prompt.
+
 ## Limitations
 
-- No production deployment, public demo, or real users; every number comes from local synthetic data.
-- The quality gate is not yet passed, and the corpus is too small for trustworthy retrieval tuning.
+- No production deployment, public demo, demo video, or real users; every number comes from local synthetic and public-document data.
+- The quality gate passes only for bge-m3 with `AI_TEMPERATURE=0`, not for the shipped default; the questions were written by one author and scored by substring rules; cross-document questions still fail.
 - The ACL model is allow-only. Switching the embedding model requires a full rebuild: documents not yet rebuilt are not searchable meanwhile (questions hand off instead of using stale vectors), and there is no shadow rebuild or dual write.
 - MCP is a minimal read-only adapter, with no third-party SDK conformance testing, agent loop, or write operations.
 
 ## Next
 
-See [ROADMAP.md](../ROADMAP.md): a demo video (Phase A); a realistic public corpus with about 50 questions, a new baseline, and a quality/latency/cost comparison of multilingual embeddings and cloud models (Phase B); and an optional real MCP client demo (Phase C).
+See [ROADMAP.md](../ROADMAP.md): a demo video and public demo; a real MCP client with a bounded agent loop in Python; cross-document retrieval coverage; and the decision whether bge-m3 becomes the default (it changes the Quick Start and adds a 635 MB model download).
 
 ## Five-minute talk track
 

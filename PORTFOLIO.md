@@ -2,14 +2,14 @@
 
 > **English summary.** An enterprise knowledge-base Q&A system (Spring Boot, PostgreSQL + pgvector, Flutter). Employees retrieve only documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented. The project includes evaluation, audit, and deployment runbooks. It was built with AI coding agents (Codex, Claude Code), with scope, architecture, evaluation, review, and acceptance owned by me. Full write-up: [docs/CASE_STUDY_EN.md](docs/CASE_STUDY_EN.md).
 >
-> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/README.md) 为准。最后更新：2026-09-24。
+> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/README.md) 为准。最后更新：2026-10-13。
 
 ## 快速入口
 
 | 你想… | 去这里 |
 |---|---|
 | 5 分钟在本机跑起来 | [README Quick Start](README.md#quick-start)（已在全新 clone 上逐字验证） |
-| 看演示 | 演示视频制作中（ROADMAP A5）；可执行讲稿见 [docs/DEMO.md](docs/DEMO.md) |
+| 看演示 | **尚无演示视频或公开 Demo**（ROADMAP A5、B4）；可执行讲稿见 [docs/DEMO.md](docs/DEMO.md) |
 | 看架构和权限边界 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 看评测方法和结果 | 下文「评测结果与已知局限」、[evaluation/README.md](evaluation/README.md) |
 | 看项目复盘 | [中文 Case Study](docs/CASE_STUDY.md) / [English](docs/CASE_STUDY_EN.md) |
@@ -61,13 +61,15 @@ flowchart LR
 - **身份与权限**：JWT 携带 tenant 和 user；用户、部门、角色、知识库成员、文档 ACL 均可按 USER / DEPARTMENT / ROLE 授权；越权访问统一返回 404 并记录拒绝审计；权限变更（文档 ACL、知识库成员、用户角色的授予与撤销）记录谁在何时改了什么，且与变更本身在同一事务提交。
 - **问答**：pgvector Top-K 检索，相似度过低时直接拒答；返回结构化答案、后端引用、requestId、分段耗时、Token 用量和失败分类。
 - **运营**：审计查询、受保护的检索诊断、Prometheus 指标（含估算成本）、健康和就绪探针、用户反馈。
+- **模型输出的防护**：资料片段与问题按不可信数据处理，放在由服务端密钥派生的边界内；回显边界或带出资料中没有的链接/图片的回答转人工；后端检查被引用的分块是否真的支撑答案，不支撑时改引真正支撑的分块。
+- **可切换的 Embedding**：每个分块记录生成它的模型和维度，检索只比较当前配置模型的向量；切换模型是一次带进度端点的重建。
 - **Agent 边界**：3 个只读 Tool 和一个无状态 MCP 适配层，复用同一套身份、ACL、调用预算和审计。
 - **客户端**：Flutter 问答（答案卡、引用弹窗、反馈），知识库管理，文档 ACL 管理，索引任务面板。
 - **交付**：Docker Compose、部署与故障 Runbook、备份恢复演练、Discovery Brief、演示讲稿。
 
 ## 评测结果与已知局限
 
-这是 V0.1 的质量声明。质量门继续跟踪，但不阻塞 V0.1 交付。
+下表是 2026-09-24 在 7 份合成文档上、本地 nomic 配置下的结果（V0.1 的质量声明）；2026-10-13 的真实语料与 bge-m3 结果在表后。**请先读表后的两段更新，再引用任何数字。**
 
 配置：本地 LM Studio（Gemma 4 26B，关闭 Thinking）+ nomic-embed-text-v1.5，VECTOR 检索，Top-K=5，切块 700/100。语料是 7 份合成文档。数据来自 2026-09-24 同一配置下的两次会话。
 
@@ -83,7 +85,7 @@ flowchart LR
 
 **质量门（2026-10-13）**：对 bge-m3 + `temperature=0` 的配置通过（answer-quality 连续 8 轮每轮 11/12，ACL 泄漏 0，golden 19/20，stress 8/8，token +12.7%），默认配置（nomic）仍不通过。过程中发现每次请求的随机边界标记会在 `temperature=0` 下翻转边缘样例的答案，已改为确定性的 HMAC 边界。详见 [质量门与 Q006 报告](evaluation/reports/quality-006-and-gate-local-2026-10-13.md)。
 
-**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45（nomic；相同配置在不同后端重启间曾相差最多 3 题），资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Keyword-RRF 在这份语料上更差（18/45），Top-K=8 或 1000/150 分块表面多答 3–4 题、token 增加 30–44%，但落在同配置重启的波动（最多 3 题）内，结论不成立，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。换成多语言 Embedding（bge-m3，MIT，约 635 MB）后可答题从 25/45 升到 44/45，token 仅增加 8%，拒答和 ACL 泄漏指标不变；在原合成夹具上 golden 从 15 升到 19/20。切换所需的迁移、重建流程和进度端点已实现并在本机演练过（28 份文档重建约 12 秒）；默认仍是 nomic，bge-m3 是文档化的中文推荐配置。详见 [Embedding 对照报告](evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。
+**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45（nomic；相同配置在不同后端重启间曾相差最多 3 题），资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Keyword-RRF 在这份语料上更差（18/45），Top-K=8 或 1000/150 分块表面多答 3–4 题、token 增加 30–44%，但落在同配置重启的波动（最多 3 题）内，结论不成立，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。换成多语言 Embedding（bge-m3，MIT，约 635 MB）后可答题从 25/45 升到 44/45，token 仅增加 8%，拒答和 ACL 泄漏指标不变；在原合成夹具上 golden 从 15 升到 19/20。切换所需的迁移、重建流程和进度端点已实现并在本机演练过（28 份文档重建约 12 秒）；默认仍是 nomic，bge-m3 是文档化的中文推荐配置。详见 [Embedding 对照报告](evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。把同样 57 题改成日常说法（corpus-v2）后，可答题 43/45，落在跨重启波动（43–45）之内，检索证据仍然 45/45 完整；剩下的失败是问法歧义（“留几份”被读成副本数）和跨文档答案只覆盖一篇，见 [改写题集报告](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md)。
 
 从评测里学到的：
 
@@ -100,7 +102,7 @@ flowchart LR
 
 ## 工程证据
 
-- 后端 138 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试），GitHub Actions CI 通过。
+- 后端 182 个测试（含 Testcontainers 上的 PostgreSQL/pgvector 集成测试，如 V14→V15 带数据升级、跨维度共存、索引计划），GitHub Actions CI 通过；评测 Python 单元测试 30 个。
 - 2026-09-28 对后端做了一次聚焦安全、事务和并发的代码审查，10 项发现全部修复，每项都有对应测试：索引期间的并发停用或删除会被覆盖、同一文档被重复处理、停用的知识库仍可检索、默认密钥和密码、停用用户的 token 仍然有效、问答全程占用数据库连接、每日限额可被并发绕过等。
 - 从全新 clone 按 README 跑通：启动、上传、问答、拒答、授权与撤权、故障重试。演练中发现 8 处文档缺口和 1 个真实缺陷（重建失败会让文档下线），当天全部修复。见 [演练报告](evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md)。
 - 本地备份恢复演练，MCP 只读冒烟检查 16/16，Android 16 真机完成管理员 ACL 和索引任务的验收。

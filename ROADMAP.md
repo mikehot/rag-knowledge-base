@@ -2,7 +2,7 @@
 
 > Version: v3.0
 >
-> Last updated: 2026-09-24
+> Last updated: 2026-10-13
 > Previous version (with per-milestone experiment logs): [docs/ROADMAP_V2_ARCHIVE.md](docs/ROADMAP_V2_ARCHIVE.md)
 > Verified status lives in [PROGRESS.md](PROGRESS.md); requirements in [REQUIREMENTS.md](REQUIREMENTS.md).
 
@@ -46,11 +46,11 @@ An administrator uploads documents; the system parses, chunks, embeds, and index
 |---|---|---|
 | M1 Reproducible RAG baseline | `verified` | Upload → index → cited answer → refusal → delete, on JDK 25 + pgvector + LM Studio |
 | M2 Identity, ACL, document lifecycle | `in-progress` | Tenant/department/role/document ACL enforced in SQL; lifecycle and index tasks; device evidence for USER/ROLE grant/revoke. Department grant/revoke and the post-revoke ask/citation path are covered by a PostgreSQL integration test (2026-09-24). Permission changes are audited in the same transaction (2026-09-26). Open: one device spot check |
-| M3 Structured answers, audit, observability, feedback | `verified` | Structured-output contract, fail-closed handling, requestId/timings, audit, metrics, feedback; 138 backend tests |
-| M4 Evaluation baseline | tooling `verified` | golden-v1 (20), answer-quality-v1 (12), stress (8); frozen gate in `evaluation/README.md`. Current default fails the gate (9–10/12) on a 7-document synthetic fixture |
+| M3 Structured answers, audit, observability, feedback | `verified` | Structured-output contract, fail-closed handling, requestId/timings, audit, metrics, feedback; 182 backend tests (2026-10-13) |
+| M4 Evaluation baseline | `verified` for the recommended configuration | golden-v1 (20), answer-quality-v1 (12), stress (8), corpus-v1 (57); frozen gate in `evaluation/README.md`. The gate **passes** for bge-m3 + `AI_TEMPERATURE=0` (8 consecutive captures at 11/12, 2026-10-13) and **fails** for the shipped default (nomic, 8–10/12) |
 | M5 Evaluation-driven retrieval | `in-progress` (Phase B) | Resumed 2026-10-13 on a 28-document / 57-question corpus. Baseline 24–25/45; no existing mode beats the default; the bottleneck is chunk-level retrieval (evidence in Top-5 → 86% correct, otherwise 0/17). Multilingual embedding tested 2026-10-13: bge-m3 lifts corpus-v1 to 44/45 at +8% tokens (not yet default: needs a 1024-d migration, re-embedding, and an embedding-model column). Reranker is no longer the priority |
 | M6 Read-only Agent tools / MCP | `in-progress` (bounded) | Three read-only tools and a stateless MCP adapter; local smoke 16/16. Real-client demo is optional Phase C |
-| M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Portfolio, README, and case studies refreshed (2026-09-24). Open: video |
+| M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Portfolio, README, and case studies refreshed again 2026-10-13 to match the evidence. Open: video and public demo |
 
 ## 6. Plan
 

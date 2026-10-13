@@ -10,7 +10,19 @@
 
 - **作品集说明（先看这个）**：[PORTFOLIO.md](PORTFOLIO.md)，包含设计决策、评测结果与已知局限，以及可交付范围。
 - **5 分钟跑起来**：下方 [Quick Start](#quick-start)。
-- **当前状态**：V0.1 收尾中（见 [ROADMAP.md](ROADMAP.md) 阶段 A）。核心链路已实现并验证：权限过滤检索、带引用回答、拒答、持久化索引与故障恢复、审计与指标、只读 Tool/MCP。验证证据见 [PROGRESS.md](PROGRESS.md)。
+- **当前状态**：V0.2（评测与检索质量阶段）。核心链路已实现并验证：权限过滤检索、带引用回答（后端检查引用是否真的支撑答案）、拒答、提示注入防护、持久化索引与故障恢复、审计与指标、只读 Tool/MCP、可切换且可重建的 Embedding 模型。质量门对「bge-m3 + `AI_TEMPERATURE=0`」配置通过，对默认配置（nomic）**不通过**；尚无演示视频和公开 Demo。验证证据见 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports](evaluation/reports/README.md)。
+
+## 评测一览（本地、合成与公开数据）
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| 真实语料 corpus-v1（28 份文档，57 题） | 可答题 **44/45**（bge-m3），拒答 12/12，ACL 泄漏 0 | 换用 nomic 为 25/45；题目由单人基于文档编写 |
+| 同一配置的波动 | 41–44/45 | 单次运行不能支撑对照，见 [波动报告](evaluation/reports/run-to-run-variation-local-2026-10-13.md) |
+| answer-quality 质量门 | bge-m3 + `temperature=0` 通过（连续 8 轮 11/12）；默认配置不通过 | [Q006 与质量门](evaluation/reports/quality-006-and-gate-local-2026-10-13.md) |
+| 改写后的题集 corpus-v2（同样 57 题，日常说法） | 可答题 43/45（跨重启 v1 为 43–45），检索证据仍 45/45 完整 | 失败来自问法歧义与跨文档答案不完整，不是检索；[报告](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md) |
+| 引用支撑检查 | 521 条回放中修复 3 条、0 条变差 | 主要保护「每个回答都带出处」，不是提分 |
+
+局限见 [PORTFOLIO.md](PORTFOLIO.md)：单机、单模型、规则（子串）评分、题目由单人编写；没有生产部署或真实用户数据。
 
 ## 文档导航
 

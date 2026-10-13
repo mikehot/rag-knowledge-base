@@ -8,14 +8,16 @@ An enterprise knowledge-base Q&A system where employees only retrieve documents 
 
 - **Start here:** [PORTFOLIO.md](PORTFOLIO.md) (design decisions, evaluation results, and known limitations) and the [English case study](docs/CASE_STUDY_EN.md).
 - **Run it in five minutes:** [Quick Start](#quick-start) below. It was verified verbatim on a fresh clone.
-- **Status:** V0.1 is wrapping up; see [ROADMAP.md](ROADMAP.md). Verified evidence is in [PROGRESS.md](PROGRESS.md) and [evaluation/reports](evaluation/reports/README.md).
+- **Status:** V0.2 (evaluation and retrieval quality); see [ROADMAP.md](ROADMAP.md). Verified evidence is in [PROGRESS.md](PROGRESS.md) and [evaluation/reports](evaluation/reports/README.md). There is no demo video or public demo yet.
 
 ## Highlights
 
 - **Permissions are a retrieval constraint.** Tenant, department, role, knowledge-base, and document ACLs are enforced inside the vector-search SQL, so unauthorized content never reaches the model. Every permission change is audited in the same transaction.
 - **Backend-owned citations, fail-closed.** The model returns only an answer, flags, and source indexes. The backend validates the contract and builds the citations. Invalid or truncated output, provider errors, and timeouts hand off to a human with a stable failure reason.
 - **Recoverable indexing.** A persistent task queue provides idempotency, retries, and restart recovery. A failed reindex keeps serving the previous version.
-- **Evaluation-driven decisions.** Versioned datasets and a frozen quality gate decide changes. With local Gemma the gate is not passed. With DeepSeek flash as the chat model (embeddings stay local) it passes 10/10/10 at a median of about 1–1.6 s and an estimated under $1 per 1,000 questions at list price.
+- **Evaluation-driven decisions, with the spread attached.** Versioned datasets, a frozen quality gate, and a repeat-run tool that reports run-to-run variation decide changes. On a 28-document, 57-question Chinese corpus the recommended configuration (bge-m3 embeddings, `AI_TEMPERATURE=0`) answers 44 of 45 answerable questions and refuses all 12 out-of-scope or unauthorized ones; the same configuration varies by up to 3 cases between runs, so single-run differences are not claimed. The quality gate passes for that configuration and does **not** pass for the shipped default (nomic).
+- **Defence in depth around the model.** Retrieved text is treated as untrusted data inside a keyed boundary; answers that echo it or carry links absent from the evidence are handed off, and the backend checks that the cited chunks actually support the answer and repairs the citation when they do not.
+- **Switchable embeddings.** Every chunk records the model that produced its vector; a model switch is a rebuild with a progress endpoint, never a silent mix of vector spaces.
 - **Bounded agent surface.** Three read-only tools and a stateless MCP adapter share the same identity, ACL, budget, and audit.
 
 Most of the implementation was written with AI coding agents (OpenAI Codex, Claude Code). Scope, architecture, evaluation design, review, and acceptance are owned by the author.

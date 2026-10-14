@@ -97,6 +97,8 @@ Grants can also target a `DEPARTMENT` or `ROLE`. The filter runs in SQL at retri
 
 For the full demo (feedback, read-only tools/MCP, failure recovery, Flutter client), see [docs/DEMO.md](docs/DEMO.md).
 
+The demo video has **not been recorded yet**. A storyboard and a scene-by-scene driver for the Python agent side are in [rag-agent-python/docs/DEMO_VIDEO.md](https://github.com/mikehot/rag-agent-python/blob/main/docs/DEMO_VIDEO.md) (they do not cover document upload or admin ACL changes; those are in `docs/DEMO.md`).
+
 ## Documentation
 
 | Document | Contents |

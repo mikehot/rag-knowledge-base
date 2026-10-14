@@ -132,7 +132,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
    - 演练发现的缺陷已修复：reindex/replace 进行中或失败时，文档继续用上一版已提交的 Chunk 回答（检索不再按文档状态过滤）；有集成测试和实机复测，后端全量 125 tests 通过。
 3. A3 V0.1 质量声明（已完成 2026-09-24）：唯一口径在 `PORTFOLIO.md`「评测结果与已知局限」。
 4. A4 作品集刷新（已完成 2026-09-24）：重写 `PORTFOLIO.md`、README 开头、中英文 Case Study；`CODEX_PROMPT.md` 归档至 `docs/archive/`。
-5. A5 3–5 分钟脱敏演示视频和截图。
+5. A5 3–5 分钟脱敏演示视频和截图：**尚未录制**。分镜与逐幕驱动脚本已在 [rag-agent-python/docs/DEMO_VIDEO.md](https://github.com/mikehot/rag-agent-python/blob/main/docs/DEMO_VIDEO.md) 备好并于 2026-10-14 完整干跑通过（7 幕，约 15 秒算力，屏幕上不出现 token 或密码）；它覆盖权限可见性、带出处回答、无权限检索 0 片段、越权主题拒答、跨文档对比、身份冒充提示词和证据局限，**不覆盖文档上传和管理员 ACL 授权/撤权**（见 `docs/DEMO.md` §1、§6），这两段和 A1 真机抽测仍需拍摄。
 
 **阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块表面多答 3–4 题、token +30–44%，但**在同配置重启的波动（最多 3 题）之内，未成立**（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
 

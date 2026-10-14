@@ -98,6 +98,10 @@ app:
     context-selection-experiment-enabled: ${RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED:false}
     # OFF | REPAIR | ENFORCE: what to do when cited chunks do not support the answer (see CitationSupport).
     citation-support-mode: ${RAG_CITATION_SUPPORT_MODE:REPAIR}
+    # Characters of each chunk returned by the MCP/agent search_knowledge tool. The default keeps the
+    # tool's output small; a client that reasons over the result needs the whole chunk (chunk-size is
+    # 700 by default), otherwise evidence late in a chunk is cut off even when the chunk was retrieved.
+    agent-snippet-chars: ${RAG_AGENT_SNIPPET_CHARS:360}
   enterprise:
     default-tenant-id: 00000000-0000-0000-0000-000000000001
     default-knowledge-base-id: 00000000-0000-0000-0000-000000000101

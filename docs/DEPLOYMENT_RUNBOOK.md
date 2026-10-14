@@ -56,6 +56,7 @@ curl -fsS http://localhost:8080/readyz
 | `UPLOAD_STORAGE_DIR` | `./uploads` | 使用持久化卷或对象存储，并限制访问 |
 | `AI_*_MODEL_ID` | 本地模型 ID | 以 Provider `/v1/models` 实际返回值为准 |
 | `AI_EMBEDDING_DIM` | `0` | `0` 接受模型自身维度；设为正数则固定并校验。维度随每个 Chunk 记录，切换模型见 §5「切换 Embedding 模型」 |
+| `RAG_AGENT_SNIPPET_CHARS` | `360` | MCP/Agent 工具 `search_knowledge` 每个片段返回的字符数。默认值让工具输出保持很小；需要基于结果推理的客户端要拿到完整 Chunk（默认 `chunk-size` 为 700），否则片段后半部分的证据即使被检索到也看不见。调大会增加工具输出体积，属于产品决策 |
 
 不要提交真实 API Key、JWT、密码、客户资料、Prompt、模型原始响应或 Embedding dump。
 

@@ -120,6 +120,43 @@ class AgentToolServiceTests {
     }
 
     @Test
+    void truncatesSnippetsToTheConfiguredLengthAndKeepsTheDefaultAt360() {
+        String content = "甲".repeat(500);
+        float[] embedding = new float[] {0.1f, 0.2f};
+        ChunkSearchResult hit = new ChunkSearchResult(
+            UUID.randomUUID(), DOCUMENT_ID, "faq.md", "chunk#1", content, 0.9
+        );
+        when(accessControlService.canReadKnowledgeBase(USER, KNOWLEDGE_BASE_ID)).thenReturn(true);
+        when(embeddingProvider.embed(List.of("长文？"))).thenReturn(List.of(embedding));
+        when(chunkRepository.search(TENANT_ID, USER_ID, embedding, 5, KNOWLEDGE_BASE_ID))
+            .thenReturn(List.of(hit));
+        AgentToolExecutionResponse defaultLimit = service.execute(USER, request(call(
+            "search_knowledge", object("query", "长文？", "knowledgeBaseId", KNOWLEDGE_BASE_ID.toString())
+        )));
+        assertThat(defaultLimit.results().get(0).data().path("sources").get(0).path("snippet").asText())
+            .hasSize(363)
+            .endsWith("...");
+
+        AgentToolService wide = new AgentToolService(
+            new AppProperties(
+                null,
+                null,
+                new AppProperties.Rag(700, 100, 5, 0.35, 768, false, 50, 2.0, 60, false, "REPAIR", 800),
+                null,
+                null,
+                null
+            ),
+            embeddingProvider, chunkRepository, documentService, accessControlService, auditService,
+            objectMapper
+        );
+        AgentToolExecutionResponse full = wide.execute(USER, request(call(
+            "search_knowledge", object("query", "长文？", "knowledgeBaseId", KNOWLEDGE_BASE_ID.toString())
+        )));
+        assertThat(full.results().get(0).data().path("sources").get(0).path("snippet").asText())
+            .isEqualTo(content);
+    }
+
+    @Test
     void refusesCrossTenantOrUnreadableKnowledgeBaseBeforeEmbedding() {
         when(accessControlService.canReadKnowledgeBase(USER, KNOWLEDGE_BASE_ID)).thenReturn(false);
 

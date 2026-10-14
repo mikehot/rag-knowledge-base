@@ -39,11 +39,33 @@ public record AppProperties(
         double hybridKeywordWeight,
         int hybridRrfK,
         boolean contextSelectionExperimentEnabled,
-        String citationSupportMode
+        String citationSupportMode,
+        int agentSnippetChars
     ) {
         /** The record has two constructors, so Spring Boot is told which one binds configuration. */
         @ConstructorBinding
         public Rag {
+        }
+
+        /** Keeps call sites that predate the agent snippet length compiling; it defaults to 360. */
+        public Rag(
+            int chunkSize,
+            int chunkOverlap,
+            int topK,
+            double similarityThreshold,
+            int embeddingDim,
+            boolean hybridExperimentEnabled,
+            int hybridCandidateK,
+            double hybridKeywordWeight,
+            int hybridRrfK,
+            boolean contextSelectionExperimentEnabled,
+            String citationSupportMode
+        ) {
+            this(
+                chunkSize, chunkOverlap, topK, similarityThreshold, embeddingDim, hybridExperimentEnabled,
+                hybridCandidateK, hybridKeywordWeight, hybridRrfK, contextSelectionExperimentEnabled,
+                citationSupportMode, 360
+            );
         }
 
         /** Keeps call sites that predate the citation-support mode compiling; the mode defaults to REPAIR. */
@@ -61,7 +83,7 @@ public record AppProperties(
         ) {
             this(
                 chunkSize, chunkOverlap, topK, similarityThreshold, embeddingDim, hybridExperimentEnabled,
-                hybridCandidateK, hybridKeywordWeight, hybridRrfK, contextSelectionExperimentEnabled, "REPAIR"
+                hybridCandidateK, hybridKeywordWeight, hybridRrfK, contextSelectionExperimentEnabled, "REPAIR", 360
             );
         }
     }

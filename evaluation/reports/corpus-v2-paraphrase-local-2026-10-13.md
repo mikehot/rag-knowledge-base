@@ -67,3 +67,32 @@ The embedding handled the rewording without losing evidence. All the movement is
 - Same documents, one chat model, one embedding model, one machine.
 - Three runs per setting; differences of one or two cases are inside the observed variation.
 - CORP-023's expected answer was not changed to avoid creating a new dataset version mid-comparison.
+
+## Addendum, 2026-10-14: the same configuration scored 38/45 on a fresh stack
+
+The next day the stack was rebuilt from scratch with `scripts/eval_stack.sh` (new database, same fixture,
+same code at `f376f4a`, same chat model, embedding model, `AI_TEMPERATURE=0`, Thinking off) and corpus-v2
+was run again.
+
+| | 2026-10-13 | 2026-10-14 |
+|---|---|---|
+| Answerable | 43/45 (3 runs, restarts included) | **38/45** (4 independent runs, one after a full model reload from the UI, all identical) |
+| Refusals / ACL leakage | 12/12 / 0 | 12/12 / 0 |
+| Median top-1 similarity (answerable) | 0.703 | 0.703 |
+| Expected documents all in Top-5 | 45/45 | 45/45 |
+| Failing cases | CORP2-001, CORP2-045 (+ flips) | CORP2-001, 003, 009, 016, 022, 035, 045 |
+
+Retrieval was reproduced exactly; the five extra failures are all in generation. Nothing that was checked
+differs between the days: the LM Studio application (0.4.26, 2026-10-08), the MLX runtime for the chat
+model (1.13.1, 2026-10-08), the llama.cpp runtime for the embedding model (2.56.0, 2026-10-13), and the
+model files (August). The cause was **not isolated**.
+
+Two observations that should travel with the numbers:
+
+- With Thinking accidentally left on, the same run scored 42/45. That run is not a valid gate result, but
+  it shows how much the outcome depends on model-server state that this repository cannot pin.
+- Both days' results are deterministic within their own environment, so a repeat inside one session does
+  not detect this kind of shift. A claim about answer quality should name the day and the server state it
+  was measured in, and be re-measured after any model-server change.
+
+The 43/45 above is therefore a measurement of 2026-10-13, not a number a reader can expect to reproduce.

@@ -123,6 +123,8 @@ ask_as_employee    # 撤权后：再次拒答
 
 更完整的演示（反馈、只读 Tool/MCP、失败恢复、Flutter 客户端）见 [docs/DEMO.md](docs/DEMO.md)。
 
+演示视频**尚未录制**。Python 智能体一侧已备好分镜和两个逐幕驱动脚本（用户视角 7 幕，管理员上传与授权/撤权一段，以及约 5 分钟的剪辑方案），见 [rag-agent-python/docs/DEMO_VIDEO.md](https://github.com/mikehot/rag-agent-python/blob/main/docs/DEMO_VIDEO.md)；Flutter 客户端和真机抽测不在其中，见 `docs/DEMO.md`。
+
 ## Technology Positioning
 
 - Java / Spring Boot 负责企业业务、权限、API、审计与部署。

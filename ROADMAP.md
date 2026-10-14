@@ -2,7 +2,7 @@
 
 > Version: v3.0
 >
-> Last updated: 2026-10-13
+> Last updated: 2026-10-14
 > Previous version (with per-milestone experiment logs): [docs/ROADMAP_V2_ARCHIVE.md](docs/ROADMAP_V2_ARCHIVE.md)
 > Verified status lives in [PROGRESS.md](PROGRESS.md); requirements in [REQUIREMENTS.md](REQUIREMENTS.md).
 
@@ -26,7 +26,7 @@ An administrator uploads documents; the system parses, chunks, embeds, and index
 ## 3. Technical Direction
 
 - Java / Spring Boot backend; PostgreSQL + pgvector for metadata, audit, and vectors; Flutter client.
-- Python only for evaluation and data tooling; no service rewrite.
+- Python for evaluation and data tooling, and as a thin orchestration layer in a separate repository (`mikehot/rag-agent-python`) that calls this service through `/mcp` with the caller's JWT. No backend rewrite, and no retrieval, chunking or embedding in Python.
 - OpenAI-compatible provider interface for chat and embedding, so local (LM Studio) and cloud providers are configuration, not code.
 - JDK: local and CI run JDK 25 (`.java-version`); `pom.xml` targets Java 17 bytecode.
 - No Spring Boot 4 / Spring AI 2 migration during V0.1–V0.2.
@@ -49,7 +49,7 @@ An administrator uploads documents; the system parses, chunks, embeds, and index
 | M3 Structured answers, audit, observability, feedback | `verified` | Structured-output contract, fail-closed handling, requestId/timings, audit, metrics, feedback; 182 backend tests (2026-10-13) |
 | M4 Evaluation baseline | `verified` for the recommended configuration | golden-v1 (20), answer-quality-v1 (12), stress (8), corpus-v1 (57); frozen gate in `evaluation/README.md`. The gate **passes** for bge-m3 + `AI_TEMPERATURE=0` (8 consecutive captures at 11/12, 2026-10-13) and **fails** for the shipped default (nomic, 8–10/12) |
 | M5 Evaluation-driven retrieval | `in-progress` (Phase B) | Resumed 2026-10-13 on a 28-document / 57-question corpus. Baseline 24–25/45; no existing mode beats the default; the bottleneck is chunk-level retrieval (evidence in Top-5 → 86% correct, otherwise 0/17). Multilingual embedding tested 2026-10-13: bge-m3 lifts corpus-v1 to 44/45 at +8% tokens (not yet default: needs a 1024-d migration, re-embedding, and an embedding-model column). Reranker is no longer the priority |
-| M6 Read-only Agent tools / MCP | `in-progress` (bounded) | Three read-only tools and a stateless MCP adapter; local smoke 16/16. Real-client demo is optional Phase C |
+| M6 Read-only Agent tools / MCP | `in-progress` (bounded) | Three read-only tools and a stateless MCP adapter; local smoke 16/16. A Python client, bounded agent loop and tool-call evaluation live in `rag-agent-python` (12 live contract tests; safety rows pass on three question sets, answer rows depend on `RAG_AGENT_SNIPPET_CHARS`). A third-party client (Claude Desktop / MCP Inspector) has not been tried |
 | M7 Delivery package | `in-progress` | Architecture, discovery brief, demo script, runbook, zh/en case study, backup/restore rehearsal. Clean-clone rehearsal done (2026-09-24; README/DEMO gaps fixed; found and fixed a reindex availability defect). Portfolio, README, and case studies refreshed again 2026-10-13 to match the evidence. Open: video and public demo |
 
 ## 6. Plan
@@ -81,7 +81,7 @@ Goal: evaluation numbers that mean something, plus a cloud-cost story for client
 
 ### Phase C — Optional Differentiation
 
-- C1: Connect a real MCP client (e.g. Claude Desktop or MCP Inspector) to `/mcp` with JWT and demo ACL-scoped `search_knowledge`.
+- C1: Connect a real MCP client to `/mcp` with JWT and demo ACL-scoped `search_knowledge`. Partly done: a Python client exists (`rag-agent-python`); a third-party client such as Claude Desktop or MCP Inspector has not been tried.
 - C2: English technical write-up of the design decisions and the evaluation lessons.
 
 ## 7. Not Doing
@@ -95,7 +95,7 @@ Deferred until a measured need exists:
 
 - fine-tuning; GraphRAG / Neo4j; complex multi-agent graphs;
 - Kubernetes and multi-region; local GPU procurement; voice/WebRTC agents;
-- a Python rewrite; Agent write operations without human approval.
+- a Python rewrite of this backend; Agent write operations without human approval.
 
 ## 8. Progress Rules
 

@@ -1,6 +1,6 @@
 # PROGRESS
 
-> Last evidence review: 2026-10-13
+> Last evidence review: 2026-10-14
 > Source of truth for implemented and verified status. Planned capabilities live in `REQUIREMENTS.md` and `ROADMAP.md`.
 > 2026-09-24 之前的逐条证据、命令和日期记录已原样迁至 [`docs/PROGRESS_HISTORY.md`](docs/PROGRESS_HISTORY.md)；详细数据以 `evaluation/reports/` 为准。本文件只保留当前状态、缺口和下一步。
 
@@ -20,7 +20,7 @@
 | 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 138 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；本地模型未过质量门，DeepSeek flash 通过 | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
 | 5. 检索优化决策 | 阶段 B 进行中（2026-10-13 已在 28 文档/57 题真实语料上重建基线与对照，见 `evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md`）。下表为此前合成夹具上的结论 | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
-| 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；完整 transport/auth、第三方互操作、Agent loop 延后到 V0.1 门槛之后 |
+| 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；独立仓库 [rag-agent-python](https://github.com/mikehot/rag-agent-python) 提供 Python MCP 客户端、受限 Agent 循环和工具调用评测（12 个真实后端契约测试；安全类在三套题上通过，答案类取决于 `RAG_AGENT_SNIPPET_CHARS`）。完整 transport/auth 与第三方客户端互操作仍未做 |
 | 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练、脱敏录屏 |
 
 ## 评分口径（必须随分数一起报告）
@@ -136,7 +136,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 **阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块表面多答 3–4 题、token +30–44%，但**在同配置重启的波动（最多 3 题）之内，未成立**（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
 
-**阶段 C（可选）**：真实 MCP 客户端演示；英文技术文章。
+**阶段 C（可选）**：真实 MCP 客户端演示（Python 客户端已有，第三方客户端未试）；英文技术文章。
 
 已完成的检索实验（质量门冻结、chunking A/B、按标题切块离线否决）见 `evaluation/reports/`。在现有 7 份合成文档上的检索调优已停止：效果已饱和，而且低于噪声。
 

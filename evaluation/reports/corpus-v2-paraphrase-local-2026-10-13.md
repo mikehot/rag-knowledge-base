@@ -96,3 +96,45 @@ Two observations that should travel with the numbers:
   was measured in, and be re-measured after any model-server change.
 
 The 43/45 above is therefore a measurement of 2026-10-13, not a number a reader can expect to reproduce.
+
+## Addendum 2, 2026-10-14 afternoon: after a reboot and a model reload, 39/45
+
+The Mac was rebooted, the chat model was loaded again from the LM Studio UI with Thinking off, and the
+stack was rebuilt with `scripts/eval_stack.sh up` (same code at `f376f4a`, same configuration). corpus-v2
+was run three times.
+
+| Environment | Answerable | Failing cases |
+|---|---|---|
+| 2026-10-13 | 43/45 (3 runs) | CORP2-001, 045 (+ flips of 035, 044) |
+| 2026-10-14 morning, fresh stack | 38/45 (4 identical runs) | 001, 003, 009, 016, 022, 035, 045 |
+| 2026-10-14 afternoon, after reboot and reload | **39/45** (3 identical runs) | 001, 003, 009, 016, 022, 045 |
+
+Refusals 12/12 and ACL leakage 0 in every run; the three runs were identical case by case.
+
+### What it shows
+
+- Across a reboot and a model reload the result moved by **one** question (CORP2-035), not five. The
+  step is between 2026-10-13 and 2026-10-14, and it is stable inside 2026-10-14.
+- Four questions (003, 009, 016, 022) passed on 2026-10-13 and fail in both environments of
+  2026-10-14. Their answers, read against the literal rules (the rubric was not changed):
+
+| Case | What the answer says | Reading |
+|---|---|---|
+| CORP2-003 revisionHistoryLimit 0, can I still roll back | "不能……从而无法进行回滚" | Correct. The rule accepts the literal "无法回滚"; the model inserted "进行". A wording false negative |
+| CORP2-009 StatefulSet one by one or together | Sequential in order {0..N-1}, and `Parallel` | Describes the default but never names `OrderedReady`, which the rule requires. Partly a wording miss |
+| CORP2-016 how long can the restart interval grow | The 300 s (5 min) cap | Answers what was asked; the rule also wants the exponential-backoff-from-10-s point. The rule is stricter than the question |
+| CORP2-022 written contract deadline, and after a year | One month; double wages if over a month but under a year | **A real omission**: it does not state what happens at a year (deemed open-ended contract) |
+
+So three of the four are mostly literal-substring scoring meeting different wording, and one is a genuine
+incomplete answer. Retrieval was unchanged throughout (median top-1 similarity 0.703, all expected
+documents in the Top-5).
+
+### What it does not show
+
+- **The cause of the wording difference between the two days is still unknown.** Nothing that was checked
+  differs between them (application, runtimes, model files, code, configuration).
+- This reading was done after the numbers were known, by the author of the rules. It is an explanation of
+  the failures, not a re-scoring: the published numbers above are the rubric's.
+- One machine, one model, one author; the 43/45 is still a measurement of one day. What is supported is the
+  narrower statement that this configuration scores between 38 and 39 on 2026-10-14 under three
+  different server states, and that most of the 5-question step is how the model words answers.

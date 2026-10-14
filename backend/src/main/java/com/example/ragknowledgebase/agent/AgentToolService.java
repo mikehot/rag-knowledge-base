@@ -283,8 +283,9 @@ public class AgentToolService {
     }
 
     private String snippet(String content) {
+        int limit = Math.max(1, properties.rag().agentSnippetChars());
         String compact = content.replaceAll("\\s+", " ").trim();
-        return compact.length() <= 360 ? compact : compact.substring(0, 360) + "...";
+        return compact.length() <= limit ? compact : compact.substring(0, limit) + "...";
     }
 
     private static final class ToolInputException extends RuntimeException {

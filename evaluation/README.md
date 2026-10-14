@@ -248,6 +248,26 @@ python3 evaluation/run_retrieval_eval.py \
 
 The scorer is deterministic and only treats the protected diagnostic response as retrieval evidence. It does not infer relevance from the answer text or citation presence. The PostgreSQL/HTTP path is now verified locally; a new aggregate retrieval report is still withheld until the Docker-backed Java integration gate is executable in CI.
 
+## Start a disposable evaluation stack with one command
+
+`scripts/eval_stack.sh` replaces the manual sequence of starting a disposable pgvector database, the
+backend, generating credentials, and loading the realistic-corpus fixture:
+
+```bash
+scripts/eval_stack.sh up      # preflight, database, backend, 28-document corpus fixture
+scripts/eval_stack.sh status
+scripts/eval_stack.sh down    # stops the backend and database, deletes the state directory
+```
+
+`up` refuses to start unless the chat and embedding models are loaded, a plain request produces no
+`reasoning_content` (Thinking must be off; a structured-output probe alone can pass with Thinking on), and
+the structured-output probe returns valid JSON. Credentials are generated per `up` into a `0700` directory
+outside the repository. The defaults are the evaluated configuration (`text-embedding-bge-m3`,
+`AI_TEMPERATURE=0`); override them with `AI_EMBEDDING_MODEL_ID` and `AI_TEMPERATURE`.
+
+Reloading the chat model with `lms load` resets Enable Thinking to on; turn it off in the LM Studio UI and
+reload from the UI, then let `up` verify it.
+
 ## Run the offline keyword candidate benchmark
 
 `datasets/keyword_candidates_v1.jsonl` is a retrieval-only projection of the stress fixture. It intentionally contains no `expected_answer_points` or `refusal_match_terms`; the runner rejects those fields and derives keyword candidates only from the question and the sanitized fixture corpus. ACL visibility is applied before scoring.

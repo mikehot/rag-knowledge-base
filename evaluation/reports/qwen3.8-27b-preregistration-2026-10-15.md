@@ -19,6 +19,12 @@ Embedding `text-embedding-bge-m3`, retrieval VECTOR Top-K=5, chunk 700/100, `AI_
 mode REPAIR, same fixture/corpus and same code as the 2026-10-13/14/15 reports. Only the chat model
 changes: `AI_MODEL_ID=qwen/qwen3.8-27b` (Java) and `RAG_AGENT_LLM_MODEL=qwen/qwen3.8-27b` (Python agent).
 
+**Quantization, checked against what is actually on disk (2026-10-15):** the local Gemma model is only
+present as `gemma-4-26B-A4B-it-QAT-MLX-4bit`. Qwen is present in two variants, `Qwen3.8-27B-MLX-4bit`
+(~15 GB) and `Qwen3.8-27B-MLX-6bit` (~21 GB). **Load the 4-bit MLX variant** so the comparison does not
+mix a quantization difference into a model difference; the 6-bit variant is not used in this
+pre-registration. Both run on the MLX engine, matching how Gemma was measured.
+
 ## Required pre-flight, before the battery below (stop and report if any of these fails — do not improvise a fix)
 
 1. Load `qwen/qwen3.8-27b` from the LM Studio UI with Thinking **off**, and confirm with one plain

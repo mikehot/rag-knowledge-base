@@ -9,7 +9,7 @@
 | 你想… | 去这里 |
 |---|---|
 | 5 分钟在本机跑起来 | [README Quick Start](README.md#quick-start)（已在全新 clone 上逐字验证） |
-| 看演示 | **尚无演示视频或公开 Demo**（ROADMAP A5、B4）；可执行讲稿见 [docs/DEMO.md](docs/DEMO.md) |
+| 看演示 | [3 分 47 秒无声终端演示视频](docs/demo/rag-agent-demo.mp4)（不含 App 画面）；**尚无公开 Demo**（ROADMAP B4）；可执行讲稿见 [docs/DEMO.md](docs/DEMO.md) |
 | 看架构和权限边界 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 看评测方法和结果 | 下文「评测结果与已知局限」、[evaluation/README.md](evaluation/README.md) |
 | 看项目复盘 | [中文 Case Study](docs/CASE_STUDY.md) / [English](docs/CASE_STUDY_EN.md) |

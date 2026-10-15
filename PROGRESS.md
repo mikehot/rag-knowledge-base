@@ -21,7 +21,7 @@
 | 4. 评测基线 | 工具 `verified`；本地模型未过质量门，DeepSeek flash 通过 | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
 | 5. 检索优化决策 | 阶段 B 进行中（2026-10-13 已在 28 文档/57 题真实语料上重建基线与对照，见 `evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md`）。下表为此前合成夹具上的结论 | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；独立仓库 [rag-agent-python](https://github.com/mikehot/rag-agent-python) 提供 Python MCP 客户端、受限 Agent 循环和工具调用评测（12 个真实后端契约测试；安全类在三套题上通过，答案类取决于 `RAG_AGENT_SNIPPET_CHARS`）。完整 transport/auth 与第三方客户端互操作仍未做 |
-| 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练、脱敏录屏 |
+| 7. 交付包 / FDE Case Study | `in-progress` | 架构、Discovery、Demo、Runbook、中英文 Case Study、备份恢复演练、连续 disposable 演示已完成。缺：质量门通过后的干净环境全流程演练；已有 3 分 47 秒无声终端演示视频（`docs/demo/`），不含 App 画面和真机抽测 |
 
 ## 评分口径（必须随分数一起报告）
 
@@ -118,7 +118,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - **引用支撑校验（2026-10-13 已实现）**：此前后端只校验引用编号在范围内，不校验被引用片段是否真的支撑答案（出现过“答案对、引用指向不含该内容的片段”：RAG-008、RAG-004、INJ-001、CORP-033）。现在 `CitationSupport` 用确定性的词面支撑度检查：引用不支撑而检索结果里有更支撑的分块时由后端改引（`REPAIR`，默认）；没有任何检索分块支撑时可转人工（`ENFORCE`，默认关闭，错误码 `UNSUPPORTED_ANSWER`）。已验证：521 条真实回答的回放中 3 条被修复、0 条变差、0 条不支撑；278 条正确回答离线标定下 ENFORCE 会误拒 0 条。缺口：只比词面，判断不了答案是否完整或为真（找到但漏要点的 31 条支撑度中位数 0.92）；ENFORCE 从未在真实运行中触发，其他语料上的误拒率未知；该失败模式在语料上只有 0.6%，主要价值是保护“每个回答都带出处”的承诺，而不是提分。
 - **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（Embedding 仍在本地）。增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持 `json_schema` 的服务。flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。尚未测试云端 Embedding。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
-- **交付**：无干净环境全流程演练记录、脱敏录屏、公开 Demo；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。
+- **交付**：无干净环境全流程演练记录、公开 Demo；脱敏演示视频仅有终端版（`docs/demo/`，无声，不含 App 画面和真机抽测）；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。
 - **CI**：最近几次提交的 GitHub Actions 已通过；长期运行基线仍需积累。
 
 ## 下一步
@@ -127,12 +127,12 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 **阶段 A：V0.1 可展示（约 1 周）**
 
-1. A1 部门 ACL 授权/撤权，以及撤权后员工问答/引用的完整路径：自动化测试已完成（2026-09-24，124 tests 通过）；剩一次真机抽测，可并入 A5 录屏时一起完成。
+1. A1 部门 ACL 授权/撤权，以及撤权后员工问答/引用的完整路径：自动化测试已完成（2026-09-24，124 tests 通过）；剩一次真机抽测；A5 的终端版视频已录制，**不包含**这次真机抽测，它仍然开放。
 2. A2 全新 clone 演练（已完成 2026-09-24）：README/DEMO 共 8 处缺口已修复，README 命令已在第二个全新 clone 中逐字执行通过；机器已有缓存时，从 clone 到首个带引用回答不到 1 分钟。见 `evaluation/reports/clean-clone-rehearsal-local-2026-09-24.md`。
    - 演练发现的缺陷已修复：reindex/replace 进行中或失败时，文档继续用上一版已提交的 Chunk 回答（检索不再按文档状态过滤）；有集成测试和实机复测，后端全量 125 tests 通过。
 3. A3 V0.1 质量声明（已完成 2026-09-24）：唯一口径在 `PORTFOLIO.md`「评测结果与已知局限」。
 4. A4 作品集刷新（已完成 2026-09-24）：重写 `PORTFOLIO.md`、README 开头、中英文 Case Study；`CODEX_PROMPT.md` 归档至 `docs/archive/`。
-5. A5 3–5 分钟脱敏演示视频和截图：**尚未录制**。分镜与两个逐幕驱动脚本已在 [rag-agent-python/docs/DEMO_VIDEO.md](https://github.com/mikehot/rag-agent-python/blob/main/docs/DEMO_VIDEO.md) 备好并于 2026-10-14 完整干跑通过：A 部分 7 幕（约 15 秒算力：各用户可见文档、带出处回答、无权限检索 0 片段、越权主题拒答、跨文档对比、身份冒充提示词、证据与局限）；B 部分（约 7 秒）覆盖上传合成文档、授权前提问、授予 READ、带引用回答、撤权、再次拒答；分镜另给出一份约 5 分钟的剪辑方案。**仍未覆盖**：Flutter 客户端和 A1 真机抽测（需要物理设备，见 `docs/DEMO.md` §8）；以及“会话记忆中途撤权”（未强制、未测试）。
+5. A5 3–5 分钟脱敏演示视频和截图：**终端版已录制**（2026-10-15，3 分 47 秒，无声，屏幕上的中英文说明即讲解，[docs/demo/rag-agent-demo.mp4](docs/demo/rag-agent-demo.mp4)，说明见 [docs/demo/README.md](docs/demo/README.md)）。覆盖：上传、带引用回答、拒答、权限拒绝、管理员授权/撤权，抽帧检查（每 8–10 秒一帧，非逐帧）未发现 token、密码、用户名、凭证路径。**不覆盖**：Flutter App 画面和 A1 真机抽测（仍开放）、会话记忆中途撤权（未强制、未测试）、讲解语音。驱动脚本和分镜在 [rag-agent-python](https://github.com/mikehot/rag-agent-python)。
 
 **阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块表面多答 3–4 题、token +30–44%，但**在同配置重启的波动（最多 3 题）之内，未成立**（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
 

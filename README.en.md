@@ -97,7 +97,7 @@ Grants can also target a `DEPARTMENT` or `ROLE`. The filter runs in SQL at retri
 
 For the full demo (feedback, read-only tools/MCP, failure recovery, Flutter client), see [docs/DEMO.md](docs/DEMO.md).
 
-The demo video has **not been recorded yet**. A storyboard and two scene-by-scene drivers are ready on the Python agent side (users' view in 7 scenes, an administrator part covering upload and grant/revoke, and a cut that fits 5 minutes): [rag-agent-python/docs/DEMO_VIDEO.md](https://github.com/mikehot/rag-agent-python/blob/main/docs/DEMO_VIDEO.md). The Flutter client and the device spot check are not part of it; see `docs/DEMO.md`.
+**Demo video:** [docs/demo/rag-agent-demo.mp4](docs/demo/rag-agent-demo.mp4) (3 min 47 s, silent, terminal only; the on-screen captions are the narration; what it shows and does not show is in [docs/demo/README.md](docs/demo/README.md)). It does **not** include the Flutter app or a device spot check.
 
 ## Documentation
 

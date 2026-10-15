@@ -58,14 +58,14 @@
 
 ## 6. 局限
 
-- 没有生产部署、公开 Demo、演示视频或真实用户数据；数字来自本地的合成与公开文档数据。
+- 没有生产部署、公开 Demo 或真实用户数据（有一段无声终端演示视频，不含 App 画面，见 `docs/demo/`）；数字来自本地的合成与公开文档数据。
 - 质量门只对「bge-m3 + `temperature=0`」配置通过，默认配置不通过；评测题由单人基于文档编写、用子串规则评分；跨文档题仍然失败。
 - ACL 只支持 allow 规则；更换 Embedding 模型需要全量重建，重建完成前未重建的文档不可检索（转人工）。
 - MCP 是最小的只读适配，没有第三方 SDK 互操作验证，也没有 Agent 循环或写操作。
 
 ## 7. 下一步
 
-见 [ROADMAP.md](../ROADMAP.md)：演示视频与公开 Demo；真实 MCP 客户端与 Python Agent 循环；跨文档检索覆盖；是否把 bge-m3 设为默认（涉及 Quick Start 和 635 MB 的模型下载）。
+见 [ROADMAP.md](../ROADMAP.md)：Flutter 真机抽测与公开 Demo；真实 MCP 客户端与 Python Agent 循环；跨文档检索覆盖；是否把 bge-m3 设为默认（涉及 Quick Start 和 635 MB 的模型下载）。
 
 ## 业务价值（待真实数据验证）
 

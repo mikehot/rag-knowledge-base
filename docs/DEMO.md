@@ -151,7 +151,7 @@ flutter run -d <device-id> \
 
 此前问答引用、耗时/Token、`HELPFUL` 反馈、资料外拒答、文档菜单和退出登录截图记录仍是本地临时证据，路径分别为 `/private/tmp/rag-ask-full-query-result.png`、`/private/tmp/rag-ask-outscope-result.png`、`/private/tmp/rag-sample-menu.png`、`/private/tmp/rag-logged-out.png`；不应直接当作公开 Demo 资产，也不替代本轮单独核实的上传证据。
 
-截图或录屏不得包含 JWT、密码输入内容、LM Studio Developer Logs、真实客户文档正文或设备序列号；录屏和公开部署仍是独立门槛。
+截图或录屏不得包含 JWT、密码输入内容、LM Studio Developer Logs、真实客户文档正文或设备序列号；终端演示录屏已完成（见 [docs/demo/](demo/README.md)）；App 真机录屏和公开部署仍是独立门槛。
 
 ## Demo 结论
 

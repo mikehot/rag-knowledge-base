@@ -48,14 +48,14 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 
 ## Limitations
 
-- No production deployment, public demo, demo video, or real users; every number comes from local synthetic and public-document data.
+- No production deployment, public demo, or real users (there is a silent terminal-only demo video without the app, in `docs/demo/`); every number comes from local synthetic and public-document data.
 - The quality gate passes only for bge-m3 with `AI_TEMPERATURE=0`, not for the shipped default; the questions were written by one author and scored by substring rules; cross-document questions still fail.
 - The ACL model is allow-only. Switching the embedding model requires a full rebuild: documents not yet rebuilt are not searchable meanwhile (questions hand off instead of using stale vectors), and there is no shadow rebuild or dual write.
 - MCP is a minimal read-only adapter, with no third-party SDK conformance testing, agent loop, or write operations.
 
 ## Next
 
-See [ROADMAP.md](../ROADMAP.md): a demo video and public demo; a real MCP client with a bounded agent loop in Python; cross-document retrieval coverage; and the decision whether bge-m3 becomes the default (it changes the Quick Start and adds a 635 MB model download).
+See [ROADMAP.md](../ROADMAP.md): the Flutter device spot check and a public demo; a real MCP client with a bounded agent loop in Python; cross-document retrieval coverage; and the decision whether bge-m3 becomes the default (it changes the Quick Start and adds a 635 MB model download).
 
 ## Five-minute talk track
 

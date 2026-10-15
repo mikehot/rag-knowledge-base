@@ -17,7 +17,7 @@ A silent, terminal-only screen recording (3 min 47 s). The on-screen captions ar
 
 - **没有 Flutter App 画面**，也不是真机；A1 的真机抽测仍然开放（见 [PROGRESS.md](../../PROGRESS.md)）。
 - **没有讲解语音**。
-- **不展示会话记忆中途撤权**：管理员那一段是不带会话提问的；记忆会话里撤权是否生效没有强制、没有测试。
+- **不展示会话记忆中途撤权**：管理员那一段是不带会话提问的。记忆会话里撤权后的行为在视频之外测过：agent 现在每个记忆轮次都强制重新检索，3 个有效用例中关闭强制时 3/3 逐字复述已撤权文档、开启后 0/3（两轮一致，[报告](https://github.com/mikehot/rag-agent-python/blob/main/evaluation/reports/enforce-retrieval-local-2026-10-15.md)）。样本很小，只测了一条撤权路径，强制失败后的固定拒答路径没有在真实模型上触发过。
 - 画面里的数字是 **2026-10-14/15 在一台机器、一个本地模型、一人编写的评测集上的测量**，不是产品指标，也没有任何
   生产部署或真实用户数据。
 

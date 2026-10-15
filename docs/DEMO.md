@@ -133,7 +133,7 @@ flutter run -d <device-id> \
 ### 管理运营 UI（2026-09-24 Android 真机最小验收通过）
 
 1. 在 Android 16/API 36 真机的隔离 `.verify` App 中，用 disposable 管理员打开文档菜单 →「管理文档权限」，选择员工并授予 `READ`。
-2. 以员工身份做只读文档列表检查：目标合成文档出现，列表由 5 份变为 6 份。回到管理员 UI 撤权并确认后，再查列表为 5 份且目标文档不出现。本轮设备 acceptance 验证了列表边界；员工检索/引用撤权另见 2026-09-23 API 报告，未在同一设备会话重新做问答。
+2. 以员工身份做只读文档列表检查：目标合成文档出现，列表由 5 份变为 6 份。回到管理员 UI 撤权并确认后，再查列表为 5 份且目标文档不出现。本轮设备 acceptance 验证了列表边界；员工检索/引用撤权另见 2026-09-23 API 报告，该缺口已由 2026-10-15 的真机抽测补上（USER 授权，员工在手机上提问：授权后带引用回答，撤权后拒答且无引用，见[报告](../evaluation/reports/flutter-user-acl-revoke-ask-device-local-2026-10-15.md)；部门授权仍未在真机上测）。
 3. 从设备文档菜单重建一份合成文档，在 disposable backend 中制造 Embedding 失败。任务面板应展示失败原因、attempt、耗时和「安全重试」；恢复有效 LM Studio endpoint 后只点一次重试，UI/API 均确认任务成功且文档回到 `ready`。
 4. 后续隔离真机补测已通过：非系统 `EMPLOYEE` 文档管理员可在 Flutter 中加载同租户 USER、DEPARTMENT、ROLE 候选；对合成员工授予/撤销 USER READ，以及授予/撤销 Employee ROLE READ，员工文档列表可见性随之开关。部门候选已显示，但部门授权动作未测；无 `MANAGE` 员工访问主体目录仍返回 404。
 

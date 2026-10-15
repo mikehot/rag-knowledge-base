@@ -13,6 +13,7 @@
 | 看架构和权限边界 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 看评测方法和结果 | 下文「评测结果与已知局限」、[evaluation/README.md](evaluation/README.md) |
 | 看项目复盘 | [中文 Case Study](docs/CASE_STUDY.md) / [English](docs/CASE_STUDY_EN.md) |
+| 作为客户：一页说明、验收手册、数据处理 | [docs/delivery/](docs/delivery/ONE_PAGER_ZH.md)（[English](docs/delivery/ONE_PAGER_EN.md)） |
 
 ## 解决的问题
 

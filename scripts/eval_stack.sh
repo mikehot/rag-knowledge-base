@@ -16,6 +16,8 @@
 #   EVAL_STACK_DIR        state directory                          (default ${TMPDIR:-/tmp}/rag-kb-eval-stack)
 #   EVAL_DB_PORT          host port for the database               (default 55432)
 #   EVAL_BACKEND_PORT     backend port                             (default 8080)
+#   EVAL_FIXTURE          corpus (28 documents, corp.* actors) or synthetic (sample_faq + policy/stress
+#                         documents, demo.* actors: golden, answer-quality, stress)  (default corpus)
 #   EVAL_SKIP_PROBE=1     skip the structured-output probe (not recommended: a chat model with
 #                         thinking enabled silently truncates every answer)
 #
@@ -34,7 +36,12 @@ AI_BASE_URL="${AI_BASE_URL:-http://localhost:1234/v1}"
 AI_MODEL_ID="${AI_MODEL_ID:-google/gemma-4-26b-a4b-qat}"
 AI_EMBEDDING_MODEL_ID="${AI_EMBEDDING_MODEL_ID:-text-embedding-bge-m3}"
 AI_TEMPERATURE="${AI_TEMPERATURE:-0}"
-ACTORS=(corp.sre corp.hr corp.legal corp.manager corp.outsider)
+FIXTURE="${EVAL_FIXTURE:-corpus}"
+case "$FIXTURE" in
+  corpus) ACTORS=(corp.sre corp.hr corp.legal corp.manager corp.outsider) ;;
+  synthetic) ACTORS=(demo.employee demo.admin demo.outsider demo.auditor) ;;
+  *) printf '[eval-stack] ERROR: EVAL_FIXTURE must be corpus or synthetic\n' >&2; exit 1 ;;
+esac
 
 say() { printf '[eval-stack] %s\n' "$*"; }
 die() { printf '[eval-stack] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -152,12 +159,21 @@ cmd_up() {
   )
   wait_for "the backend (see $STATE_DIR/backend.log)" 90 curl -fsS "http://localhost:$BACKEND_PORT/readyz"
 
-  say "loading the corpus fixture (28 documents)"
-  python3 "$ROOT/evaluation/prepare_corpus_fixture.py" \
-    --base-url "http://localhost:$BACKEND_PORT" \
-    --admin-credentials "$STATE_DIR/admin.json" \
-    --credentials "$STATE_DIR/credentials.json" \
-    --manifest "$STATE_DIR/manifest.json"
+  if [[ "$FIXTURE" == synthetic ]]; then
+    say "loading the synthetic fixture (sample_faq + policy/stress documents)"
+    python3 "$ROOT/evaluation/prepare_api_fixture.py" \
+      --base-url "http://localhost:$BACKEND_PORT" \
+      --admin-credentials "$STATE_DIR/admin.json" \
+      --credentials "$STATE_DIR/credentials.json" \
+      --manifest "$STATE_DIR/manifest.json"
+  else
+    say "loading the corpus fixture (28 documents)"
+    python3 "$ROOT/evaluation/prepare_corpus_fixture.py" \
+      --base-url "http://localhost:$BACKEND_PORT" \
+      --admin-credentials "$STATE_DIR/admin.json" \
+      --credentials "$STATE_DIR/credentials.json" \
+      --manifest "$STATE_DIR/manifest.json"
+  fi
 
   cat <<EOF
 

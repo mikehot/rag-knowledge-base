@@ -154,6 +154,9 @@ class PostgresEnterpriseIntegrationTests {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        // These tests build 768-dimension fixtures; pin the fixture model so they do not follow the shipped default.
+        registry.add("app.embedding.model-id", () -> "text-embedding-nomic-embed-text-v1.5");
+        registry.add("spring.flyway.placeholders.embedding_model", () -> "text-embedding-nomic-embed-text-v1.5");
         registry.add("app.indexing.enabled", () -> "false");
         registry.add("app.auth.jwt-secret", () -> "integration-only-jwt-secret-with-at-least-32-bytes");
         registry.add("app.auth.default-password", () -> "integration-password-123");

@@ -21,6 +21,8 @@ spring:
     placeholders:
       # V1 creates the column with this width; V15 removes the fixed dimension, so the value is inert.
       embedding_dim: 768
+      # V15 attributes pre-existing chunks to this model. Pre-V15 databases were built with nomic, so the
+      # fallback stays nomic even though the runtime default below is bge-m3.
       embedding_model: ${AI_EMBEDDING_MODEL_ID:text-embedding-nomic-embed-text-v1.5}
   servlet:
     multipart:
@@ -124,14 +126,15 @@ app:
     daily-limit: ${AI_DAILY_LIMIT:50}
     # json_schema (strict, default) or json_object for providers without json_schema support, e.g. DeepSeek.
     response-format: ${AI_RESPONSE_FORMAT:json_schema}
-    # Sampling temperature sent with every chat request. Empty keeps the provider's own default, which for
-    # local models is usually above 0 and makes answers vary between identical runs; 0 makes them repeatable.
-    temperature: ${AI_TEMPERATURE:}
+    # Sampling temperature sent with every chat request. The default 0 makes identical runs repeatable (the
+    # evaluated configuration). Set AI_TEMPERATURE to an empty string to leave the provider's own default,
+    # which for local models is usually above 0.
+    temperature: ${AI_TEMPERATURE:0}
   embedding:
     provider: ${AI_EMBEDDING_PROVIDER:openai-compatible}
     base-url: ${AI_EMBEDDING_BASE_URL:${AI_BASE_URL:http://localhost:1234/v1}}
     api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:}}
-    model-id: ${AI_EMBEDDING_MODEL_ID:text-embedding-nomic-embed-text-v1.5}
+    model-id: ${AI_EMBEDDING_MODEL_ID:text-embedding-bge-m3}
     batch-size: ${AI_EMBEDDING_BATCH_SIZE:16}
     timeout-seconds: ${AI_EMBEDDING_TIMEOUT_SECONDS:120}
     max-retries: ${AI_EMBEDDING_MAX_RETRIES:2}

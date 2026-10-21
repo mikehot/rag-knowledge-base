@@ -22,7 +22,7 @@ are:
 | Document ingestion (PDF/Word/Markdown), versioned, rebuildable index | Local model deployment (data never leaves your network) | 100% accuracy — the system is designed to refuse and hand off to a human when the documents don't have an answer |
 | Access control by department/role/document, with an audit trail on every permission change | Cloud model (verified against DeepSeek: higher quality, lower latency) | A fixed accuracy number not verified against your own documents |
 | Citation-backed answers — citations are validated server-side, not just stated by the model | A standalone Python agent layer (multi-step tool calls, conversation memory, MCP integration) | Production SLA — this is a reproducible local/demo deployment today, not a live production system |
-| Admin console (upload, permissions, index status), deployment and data-handling docs | | |
+| Admin console (upload, permissions, index status), deployment and data-handling docs | | OCR for scanned files and text inside Word tables (not processed today; see the format limits in the [acceptance handbook](ACCEPTANCE_HANDBOOK.md#文档格式边界已用测试固定documentparsertests)) |
 
 ## How to accept delivery
 

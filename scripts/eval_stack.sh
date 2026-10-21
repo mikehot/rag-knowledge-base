@@ -19,8 +19,8 @@
 #   EVAL_SKIP_PROBE=1     skip the structured-output probe (not recommended: a chat model with
 #                         thinking enabled silently truncates every answer)
 #
-# Note: these defaults describe the evaluated configuration (bge-m3, temperature 0), which is
-# intentionally different from the shipped application defaults until that decision is made.
+# Note: these defaults describe the evaluated configuration (bge-m3, temperature 0), which has also
+# been the shipped application default since 2026-10-21.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

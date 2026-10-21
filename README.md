@@ -10,7 +10,7 @@
 
 - **作品集说明（先看这个）**：[PORTFOLIO.md](PORTFOLIO.md)，包含设计决策、评测结果与已知局限，以及可交付范围。
 - **5 分钟跑起来**：下方 [Quick Start](#quick-start)。
-- **当前状态**：V0.2（评测与检索质量阶段）。核心链路已实现并验证：权限过滤检索、带引用回答（后端检查引用是否真的支撑答案）、拒答、提示注入防护、持久化索引与故障恢复、审计与指标、只读 Tool/MCP、可切换且可重建的 Embedding 模型。质量门对「bge-m3 + `AI_TEMPERATURE=0`」配置通过，对默认配置（nomic）**不通过**；尚无演示视频和公开 Demo。验证证据见 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports](evaluation/reports/README.md)。
+- **当前状态**：V0.2（评测与检索质量阶段）。核心链路已实现并验证：权限过滤检索、带引用回答（后端检查引用是否真的支撑答案）、拒答、提示注入防护、持久化索引与故障恢复、审计与指标、只读 Tool/MCP、可切换且可重建的 Embedding 模型。质量门对「bge-m3 + `AI_TEMPERATURE=0`」配置通过，对旧默认配置（nomic）**不通过**（2026-10-21 起默认已改为 bge-m3 + `AI_TEMPERATURE=0`，质量门尚未在这一版上重跑）；尚无演示视频和公开 Demo。验证证据见 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports](evaluation/reports/README.md)。
 
 ## 评测一览（本地、合成与公开数据）
 
@@ -57,7 +57,7 @@
 - Docker（daemon 已启动）、JDK 25（`.java-version`；源码以 Java 17 字节码编译）、`curl`、`jq`。
 - 一个 OpenAI-compatible 模型服务，默认是本机 LM Studio `http://localhost:1234/v1`，需要：
   - Chat：`google/gemma-4-26b-a4b-qat`（通过 `AI_MODEL_ID` 可替换）。Gemma 需在 LM Studio 中关闭 **Enable Thinking**，否则可能耗尽输出预算，导致结构化回答失败，见 [Runbook](docs/DEPLOYMENT_RUNBOOK.md)。
-  - Embedding：`text-embedding-nomic-embed-text-v1.5`，768 维。
+  - Embedding：`text-embedding-bge-m3`，1024 维（2026-10-21 起为默认）。用 `text-embedding-nomic-embed-text-v1.5`（768 维）建过库的旧部署，要么把 `AI_EMBEDDING_MODEL_ID` 固定回 nomic，要么按 [backend/README.md](backend/README.md#embedding-model-and-dimension) 重建索引。
   - 两个 ID 必须与 `curl -s http://localhost:1234/v1/models` 的返回完全一致。
 - LM Studio 只处理合成或公开样例数据，不要用它处理真实客户资料。
 - 也可以改用云端聊天模型。已验证的配置是 DeepSeek `deepseek-flash` 聊天加本地 Embedding，需要设置 `AI_RESPONSE_FORMAT=json_object`，见 [backend/README.md](backend/README.md#cloud-provider-examples)。

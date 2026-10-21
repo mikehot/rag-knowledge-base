@@ -96,7 +96,7 @@ A candidate replaces the default only if it passes this gate, is not worse than 
 ### Recorded gate result (2026-10-13)
 
 The gate passes for `bge-m3` + `AI_TEMPERATURE=0` (8 consecutive captures at 11/12, ACL leakage 0, schema
-failures 0, golden 19/20, stress 8/8, tokens +12.7%) and does **not** pass for the shipped default (nomic).
+failures 0, golden 19/20, stress 8/8, tokens +12.7%) and did **not** pass for the previous default (nomic). The shipped default became bge-m3 + `AI_TEMPERATURE=0` on 2026-10-21; the gate has not been re-run on that exact build.
 The configuration record and the limits are in
 [reports/quality-006-and-gate-local-2026-10-13.md](reports/quality-006-and-gate-local-2026-10-13.md).
 

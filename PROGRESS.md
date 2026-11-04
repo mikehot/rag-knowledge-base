@@ -1,6 +1,6 @@
 # PROGRESS
 
-> Last evidence review: 2026-10-14
+> Last evidence review: 2026-10-27（状态数字对照代码与 CI 刷新；评测结论以各自报告日期为准）
 > Source of truth for implemented and verified status. Planned capabilities live in `REQUIREMENTS.md` and `ROADMAP.md`.
 > 2026-09-24 之前的逐条证据、命令和日期记录已原样迁至 [`docs/PROGRESS_HISTORY.md`](docs/PROGRESS_HISTORY.md)；详细数据以 `evaluation/reports/` 为准。本文件只保留当前状态、缺口和下一步。
 
@@ -16,8 +16,8 @@
 | 里程碑 | 状态 | 当前结论 |
 |---|---|---|
 | 1. 可复现 RAG 基线 | `verified` | JDK 25（字节码目标 17）、PostgreSQL 16 + pgvector、LM Studio 上传/命中/拒答/删除闭环通过 |
-| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V13、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。2026-09-24 新增 PostgreSQL 集成测试覆盖文档级 DEPARTMENT 授权→列表/详情/向量检索可见、问答带引用→撤权→三处不可见、问答拒答无引用且模型未被调用；非管理者撤权 404 并记审计。2026-10-15 另有 USER 授权→员工问答带引用→撤权→拒答的真机抽测（[报告](evaluation/reports/flutter-user-acl-revoke-ask-device-local-2026-10-15.md)）。缺：部门授权的一次真机抽测 |
-| 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 138 tests 通过。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
+| 2. 身份、ACL、文档生命周期 | `in-progress` | Flyway V1–V15、SQL 阶段 ACL 过滤、生命周期/任务治理已落地；管理员与非系统文档管理员的 USER/ROLE 授权/撤权有 Android 真机证据。2026-09-24 新增 PostgreSQL 集成测试覆盖文档级 DEPARTMENT 授权→列表/详情/向量检索可见、问答带引用→撤权→三处不可见、问答拒答无引用且模型未被调用；非管理者撤权 404 并记审计。2026-10-15 另有 USER 授权→员工问答带引用→撤权→拒答的真机抽测（[报告](evaluation/reports/flutter-user-acl-revoke-ask-device-local-2026-10-15.md)）。缺：部门授权的一次真机抽测 |
+| 3. 结构化回答、审计、观测、反馈 | `verified` | 结构化输出合同、fail-closed、requestId/分段耗时、审计、指标、反馈已落地；后端 Docker-backed 全量 186 tests 通过（PR #14 分支 CI，2026-10-21）。一次性 `STRUCTURED_OUTPUT_INVALID` 三次复测未复现，根因未知 |
 | 4. 评测基线 | 工具 `verified`；本地模型未过质量门，DeepSeek flash 通过 | Golden 16/20（Top-K=5/2400）、stress 7/8（Thinking-off）、answer-quality rubric-v2 最近 10/12；Q002/Q006 持续失败。口径见下文 |
 | 5. 检索优化决策 | 阶段 B 进行中（2026-10-13 已在 28 文档/57 题真实语料上重建基线与对照，见 `evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md`）。下表为此前合成夹具上的结论 | Keyword-RRF、diversity、adjacent 均未胜出，默认保持 VECTOR/Top-K=5。2026-09-24 chunking A/B（700/400/300/200）：300/60 首次通过 answer-quality 门槛（10/11/11），但 Golden 14/20、Stress 7/8 低于对照，按预设规则不采用，默认仍为 700/100。按 Markdown 标题切块已离线复放否决（全证据 14–17/30 vs 默认 24/30），未改代码；chunking 在此 fixture 上已饱和，下一候选为多语言 Embedding |
 | 6. Agent Tool / MCP | `in-progress`（按计划暂停扩展） | 三个只读 Tool + 最小无状态 MCP adapter，本地 smoke 16/16；独立仓库 [rag-agent-python](https://github.com/mikehot/rag-agent-python) 提供 Python MCP 客户端、受限 Agent 循环和工具调用评测（12 个真实后端契约测试；安全类在三套题上通过，答案类取决于 `RAG_AGENT_SNIPPET_CHARS`）。完整 transport/auth 与第三方客户端互操作仍未做 |
@@ -55,7 +55,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - `PUT /api/ask/{requestId}/feedback` 支持 `HELPFUL` / `NOT_HELPFUL` 和可选原因；只允许原提问用户在同一 tenant 内创建或修改，单答案保持一条反馈，原因限制 500 字并清理控制字符。
 - `/actuator/health`、`/livez`、`/readyz` 提供不含组件详情的公开状态探针；`/actuator/metrics` 和 `/actuator/prometheus` 需要认证且仅允许 `SYSTEM_ADMIN` / `AUDITOR`。
 - Micrometer 记录问答结果/失败分类、总/分段耗时、Token、按配置单价估算的成本、反馈提交、持久化 ACL 拒绝及索引任务结果/耗时；标签只使用固定的 result/failure/stage/rating/action/resource，不包含 tenant、用户、问题、正文、Prompt 或原始异常。
-- Flyway V1-V12 管理 RAG、企业身份/ACL、幂等约束、审计、持久化索引任务、问答观测、用户反馈、检索诊断和检索模式 schema；V9 修复旧库 `app_user.created_at` 默认值兼容性，V10 保存不含问题正文的 Top-K 检索快照，V11 保存 VECTOR/KEYWORD_RRF 模式，V12 扩展 `ask_log` 约束以接受 gated VECTOR_DIVERSITY；Hibernate 只做 schema validate。
+- Flyway V1-V15 管理 RAG、企业身份/ACL、幂等约束、审计、持久化索引任务、问答观测、用户反馈、检索诊断和检索模式 schema；V9 修复旧库 `app_user.created_at` 默认值兼容性，V10 保存不含问题正文的 Top-K 检索快照，V11 保存 VECTOR/KEYWORD_RRF 模式，V12 扩展 `ask_log` 约束以接受 gated VECTOR_DIVERSITY，V13 允许 adjacent 实验模式，V14 `ask_daily_usage` 原子日限额计数，V15 embedding 模型隔离（见「已知缺口」Embedding 迁移）；Hibernate 只做 schema validate。
 - V2 已包含 tenant、department、role、user-role、knowledge base、membership 和 document ACL。
 - 文档列表/详情和 Chunk 向量查询在 SQL 阶段执行 tenant + user/department/role + knowledge-base/document ACL 过滤。
 - `/api/ask` 已执行 Structured Output Contract：模型只返回 `answer`、`found`、`grounded`、`sourceIndexes`；OpenAI-compatible Provider 同时发送 `response_format=json_schema`；后端继续校验结构和引用编号，再生成 `sources`、`requestId`、`failureReason`、`timings`。
@@ -97,13 +97,13 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 
 - **答案质量**：默认 700/100 下 FAQ 的 chunk#1 混合规格/安装/保修/退换货四节，导致 Q002/Q006 召回失败（2026-09-24 对照组 6 轮全部失败）。300/60 修复了这两题的召回，但切碎了其他答案和引用（Golden RAG-005/012/013/014、STRESS-003、Q004 引用），净效果持平。按固定大小打包无法同时兼顾；详见 `evaluation/reports/chunking-ab-local-2026-09-24.md`。
 - **评测波动（2026-10-13）**：单次运行不足以支撑对照结论。15 轮实验显示，未改动的配置可答题在 41–44/45 之间波动，固定顺序下总数相同但哪几题失败也会不同；`AI_TEMPERATURE=0` 缩小但未证明消除波动。已提供 `evaluation/run_repeated_eval.py`（重复运行、报告范围、`compare` 只在范围不重叠且每侧至少 3 轮时才给出“可区分”）。此前依据单次运行的 Top-K=8、1000/150 分块“收益”不成立。
-- **质量门（2026-10-13）**：对 `bge-m3` + `AI_TEMPERATURE=0` + Thinking 关闭的配置**通过**：answer-quality 连续 8 轮每轮 11/12（含 3 轮每次重启后端），ACL 泄漏 0、schema 失败 0，golden 19/20、stress 8/8，token +12.7%；对**默认配置（nomic）仍不通过**。Q006 的根因：nomic 下是召回不到，bge-m3 下是“边缘样例的答案不完整”；每次请求的随机边界标记会在 `temperature=0` 下翻转它（基线完整率约 54%）。已改为由服务端密钥对（问题+检索分块）做 HMAC 的确定性边界，并在提示词里加入“同一规则按不同情形给出不同结果时必须全部写出”的规则（边缘样例 24/24，held-out 语料无变差）。缺口：QUALITY-001、RAG-013 每轮失败，原因是子串评分对措辞敏感（答案含事实，评分规则未改以保持 rubric-v2）；此前同模型同配置曾在另一个会话失败（9/10/10），各项修改的单独贡献未隔离；单机、单模型。
+- **质量门（2026-10-13）**：对 `bge-m3` + `AI_TEMPERATURE=0` + Thinking 关闭的配置**通过**：answer-quality 连续 8 轮每轮 11/12（含 3 轮每次重启后端），ACL 泄漏 0、schema 失败 0，golden 19/20、stress 8/8，token +12.7%；对**当时的默认配置（nomic）仍不通过**；2026-10-21 起 bge-m3 + `AI_TEMPERATURE=0` 成为发布默认，并在新默认上重跑了门槛（answer-quality 11/12 × 8、golden 19/20、stress 8/8，单进程）。Q006 的根因：nomic 下是召回不到，bge-m3 下是“边缘样例的答案不完整”；每次请求的随机边界标记会在 `temperature=0` 下翻转它（基线完整率约 54%）。已改为由服务端密钥对（问题+检索分块）做 HMAC 的确定性边界，并在提示词里加入“同一规则按不同情形给出不同结果时必须全部写出”的规则（边缘样例 24/24，held-out 语料无变差）。缺口：QUALITY-001、RAG-013 每轮失败，原因是子串评分对措辞敏感（答案含事实，评分规则未改以保持 rubric-v2）；此前同模型同配置曾在另一个会话失败（9/10/10），各项修改的单独贡献未隔离；单机、单模型。
 - **改写题集 corpus-v2（2026-10-13）**：同样 57 题改成日常说法（colloquial 36、scenario 14、keyword 4、abbreviation 3；与原题字符二元组 Jaccard 均值 0.25），答案要点与来源不变。可答题单进程 43/43/43、跨重启 43/43/43（v1 为 44/44/44 与 44/45/43），`compare --across-datasets` 为 WITHIN VARIATION；检索证据 45/45 不变；拒答 12/12、ACL 泄漏 0。失败：CORP2-001（“留几份”被读成副本数）、CORP2-045（只覆盖一篇法律，漏“向主管部门报告”）；v1 的 CORP-023 是两部法律说法不同造成的数据集歧义（未改，以免产生新数据集版本）。同一进程内结果现在完全可重复，跨重启仍有最多 2 题的差异，原因未隔离（怀疑模型服务的批处理或缓存状态）。缺口：改写由同一作者完成，无错别字，关键词式只有 4 条。
 - **评测可复现性**：质量门已冻结于 `evaluation/README.md`（rubric-v2，连续 3 轮 ≥ 10/12）；每组前用探针确认 Thinking-off，但开关本身仍需在 LM Studio UI 手动设置。同配置两次会话间 Golden 波动 17→15，单轮 Golden/Stress 证据偏弱。
 - **权限变更审计**：2026-09-26 起，文档 ACL、知识库成员、用户角色的授予与撤销（以及带角色创建用户）都写入 `ALLOW` 审计，内容为主体与权限，并与变更同事务提交；重复授权等失败操作不留记录，没有实际变化的角色分配也不记录。由集成测试 `permissionChangesWriteAllowAuditEventsInTheSameTransaction` 覆盖。
 - **ACL**：部门授权/撤权与撤权后问答已由集成测试 `departmentDocumentAclGrantAndRevokeGateRetrievalAndCitedAnswers` 覆盖（模型被 mock，验证的是权限与检索链路，不是模型行为）；部门授权尚无真机抽测；只有 allow 型 ACL，无显式 deny、继承冲突和权限缓存失效策略；用户/部门停用、批量导入未做。
 - **观测**：告警阈值尚无真实 7 天基线；审计事件无保留/脱敏策略。
-- **Embedding 迁移（2026-10-13 已实现）**：V15 为 chunk 增加 `embedding_model` 与生成列 `embedding_dim`，向量列改为不限维度，768/1024 各一个部分 HNSW 索引；检索只比较配置模型的向量，状态与重建进度见 `GET /api/admin/embeddings`，启动时对「他模型向量」告警；嵌入提供方默认接受模型自身维度（`AI_EMBEDDING_DIM=0`）。已验证：V14→V15 带数据升级、跨维度共存、索引计划、本机在线切换演练（28 文档重建 12 秒，重建后评测 44/45，重建前提问转人工）。缺口：切换窗口内未重建文档不可检索（无双写/影子重建）；只有 768/1024 维有索引；升级时既有行按当时配置的模型归属，升级前未重建就改过模型的库会被错误标记；`bge-m3` 仍不是默认。
+- **Embedding 迁移（2026-10-13 已实现）**：V15 为 chunk 增加 `embedding_model` 与生成列 `embedding_dim`，向量列改为不限维度，768/1024 各一个部分 HNSW 索引；检索只比较配置模型的向量，状态与重建进度见 `GET /api/admin/embeddings`，启动时对「他模型向量」告警；嵌入提供方默认接受模型自身维度（`AI_EMBEDDING_DIM=0`）。已验证：V14→V15 带数据升级、跨维度共存、索引计划、本机在线切换演练（28 文档重建 12 秒，重建后评测 44/45，重建前提问转人工）。缺口：切换窗口内未重建文档不可检索（无双写/影子重建）；只有 768/1024 维有索引；升级时既有行按当时配置的模型归属，升级前未重建就改过模型的库会被错误标记；`bge-m3` 自 2026-10-21 起是发布默认（Flyway V15 的占位模型 ID 有意保持 nomic，用于升级前数据的回填）。
 - **检索**：无生产级全文检索或 Reranker；现有实验均默认关闭，且无成本结论。
 - **代码审查（2026-09-28）**：对后端做了聚焦安全、事务和并发的审查，10 项发现全部修复，后端全量 138 tests 通过。
   1. 索引改为在事务外计算 Embedding，提交时锁住文档行并重新检查；实体加 `@DynamicUpdate`；旧版本任务标记为“已被取代”。
@@ -134,7 +134,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 4. A4 作品集刷新（已完成 2026-09-24）：重写 `PORTFOLIO.md`、README 开头、中英文 Case Study；`CODEX_PROMPT.md` 归档至 `docs/archive/`。
 5. A5 3–5 分钟脱敏演示视频和截图：**终端版已录制**（2026-10-15，3 分 47 秒，无声，屏幕上的中英文说明即讲解，[docs/demo/rag-agent-demo.mp4](docs/demo/rag-agent-demo.mp4)，说明见 [docs/demo/README.md](docs/demo/README.md)）。覆盖：上传、带引用回答、拒答、权限拒绝、管理员授权/撤权，抽帧检查（每 8–10 秒一帧，非逐帧）未发现 token、密码、用户名、凭证路径。**不覆盖**：Flutter App 画面（A1 的 USER 授权真机抽测已另有报告，无录屏；部门授权真机抽测仍开放）、会话记忆中途撤权（agent 层已改为每个记忆轮次强制重新检索，[3 个有效用例的实测](https://github.com/mikehot/rag-agent-python/blob/main/evaluation/reports/enforce-retrieval-local-2026-10-15.md)，视频中未展示，只测了一条撤权路径）、讲解语音。驱动脚本和分镜在 [rag-agent-python](https://github.com/mikehot/rag-agent-python)。
 
-**阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块表面多答 3–4 题、token +30–44%，但**在同配置重启的波动（最多 3 题）之内，未成立**（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；**默认仍是 nomic**，bge-m3 作为文档化的中文推荐配置）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
+**阶段 B：V0.2 有意义的评测**：~~真实规模公开语料和约 50 题数据集~~（已完成 2026-10-13：28 份文档、57 题）→ ~~重新建立基线~~（已完成：可答题 24–25/45，拒答 12/12，ACL 泄漏 0）→ 检索优化：现有 Keyword-RRF / 多样性 / 相邻块均不优于默认，Top-K=8 或 1000/150 分块表面多答 3–4 题、token +30–44%，但**在同配置重启的波动（最多 3 题）之内，未成立**（均未采用），~~多语言 Embedding~~（已完成 2026-10-13：bge-m3 在 corpus-v1 上可答题 25/45 → 44/45，token +8%，合成夹具 golden 15 → 19/20，answer-quality 仍 9/10/10 未通过质量门；见 `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`；迁移、重建流程与模型记录已实现（见「已知缺口」Embedding 迁移）；当时**默认仍是 nomic**；2026-10-21 起 bge-m3 + `AI_TEMPERATURE=0` 为发布默认）→ 云端模型质量/延迟/成本对照 → 公开 Demo 决策。
 
 **阶段 C（可选）**：真实 MCP 客户端演示（Python 客户端已有，第三方客户端未试）；英文技术文章。
 

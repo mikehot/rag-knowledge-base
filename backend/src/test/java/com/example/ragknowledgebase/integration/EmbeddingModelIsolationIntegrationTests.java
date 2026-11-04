@@ -38,7 +38,7 @@ class EmbeddingModelIsolationIntegrationTests {
     private static final UUID PLAIN_USER_ID = UUID.fromString("10000000-0000-0000-0000-0000000000e3");
     private static final UUID DOC_CURRENT = UUID.fromString("20000000-0000-0000-0000-0000000000e1");
     private static final UUID DOC_OTHER_MODEL = UUID.fromString("20000000-0000-0000-0000-0000000000e2");
-    private static final String OTHER_MODEL = "text-embedding-bge-m3";
+    private static final String OTHER_MODEL = "text-embedding-bge-m3";  // differs from the pinned fixture model
 
     @Container
     @SuppressWarnings("resource")
@@ -69,6 +69,9 @@ class EmbeddingModelIsolationIntegrationTests {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        // These tests build 768-dimension fixtures; pin the fixture model so they do not follow the shipped default.
+        registry.add("app.embedding.model-id", () -> "text-embedding-nomic-embed-text-v1.5");
+        registry.add("spring.flyway.placeholders.embedding_model", () -> "text-embedding-nomic-embed-text-v1.5");
         registry.add("app.indexing.enabled", () -> "false");
         registry.add("app.auth.jwt-secret", () -> "integration-only-jwt-secret-with-at-least-32-bytes");
         registry.add("app.auth.default-password", () -> "integration-password-123");

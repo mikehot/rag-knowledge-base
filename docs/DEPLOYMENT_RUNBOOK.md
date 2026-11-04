@@ -132,7 +132,7 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 | Docker 无法连接 | `docker version`、Docker Desktop 状态 | 启动 Docker，再检查 `docker compose ps` |
 | LM Studio GUI 能打开但请求失败 | `curl http://127.0.0.1:1234/v1/models` | 确认 Developer → Local Server 显示 Running；若从隔离执行环境检查，需允许访问本机回环网络；再核对 Chat/Embedding ID |
 | Gemma Structured Output 反复截断/生成无效 JSON | Developer → 模型 → Inference → Custom Fields → Enable Thinking；再运行 `evaluation/probe_structured_output.py` | 对本地 RAG Chat 模型关闭 thinking 并重复探针；不要放宽 JSON 校验或将 `reasoning_content` 当作答案 |
-| 全部上传在 Embedding 失败 | 模型 ID、维度、Provider 日志 | 确认 `text-embedding-nomic-embed-text-v1.5` 和 768 维；不要直接清库 |
+| 全部上传在 Embedding 失败 | 模型 ID、维度、Provider 日志 | 确认默认的 `text-embedding-bge-m3` 和 1024 维（旧库若用 nomic 建的，需固定 `AI_EMBEDDING_MODEL_ID` 或重建索引）；不要直接清库 |
 | `/readyz` 失败 | 容器日志、数据库连接、磁盘空间 | 先恢复依赖，再重新检查；不要重复上传 |
 | 文档一直 processing | index task 状态、attempt、失败原因 | 检查 Provider/解析器，修复原因后调用授权 retry |
 | 问答 401/403 | JWT、角色、知识库 membership、文档 ACL | 重新登录并核对服务端权限；不要在客户端绕过 |

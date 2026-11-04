@@ -1,0 +1,50 @@
+{
+  "dataset": "corpus_v2.jsonl",
+  "questionsInRotation": 45,
+  "requestsPerLevel": 12,
+  "note": "local, Gemma 4 26B QAT (Thinking off) + bge-m3, LM Studio parallel=4, AI_TEMPERATURE=0, corpus-v2 answerable questions",
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 12,
+      "wallSeconds": 39.32,
+      "throughputPerMinute": 18.31,
+      "latencyMsP50": 3549.17,
+      "latencyMsP95": 4899.03,
+      "latencyMsMax": 4899.03,
+      "httpStatusCounts": {
+        "200": 12
+      },
+      "foundRate": 1.0,
+      "failureReasons": {}
+    },
+    {
+      "concurrency": 2,
+      "requests": 12,
+      "wallSeconds": 28.64,
+      "throughputPerMinute": 25.14,
+      "latencyMsP50": 4314.75,
+      "latencyMsP95": 7485.5,
+      "latencyMsMax": 7485.5,
+      "httpStatusCounts": {
+        "200": 12
+      },
+      "foundRate": 1.0,
+      "failureReasons": {}
+    },
+    {
+      "concurrency": 4,
+      "requests": 12,
+      "wallSeconds": 24.54,
+      "throughputPerMinute": 29.34,
+      "latencyMsP50": 7032.91,
+      "latencyMsP95": 14039.53,
+      "latencyMsMax": 14039.53,
+      "httpStatusCounts": {
+        "200": 12
+      },
+      "foundRate": 1.0,
+      "failureReasons": {}
+    }
+  ]
+}

@@ -68,7 +68,7 @@ All secrets and runtime choices are environment variables.
 | `RAG_HYBRID_KEYWORD_WEIGHT` | `2.0` | Keyword weight in the gated RRF comparison |
 | `RAG_HYBRID_RRF_K` | `60` | RRF smoothing constant for the gated comparison |
 | `RAG_CONTEXT_SELECTION_EXPERIMENT_ENABLED` | `false` | Dedicated gate for `vector-adjacent`; retrieves only Top-K+2 ACL-visible vector candidates and keeps the selected context at Top-K |
-| `AI_TEMPERATURE` | empty | Sampling temperature sent with every chat request. Empty keeps the provider's default; `0` makes runs closer to repeatable and is recommended for evaluation (see `evaluation/reports/run-to-run-variation-local-2026-10-13.md`). It narrowed but did not eliminate variation |
+| `AI_TEMPERATURE` | `0` | Sampling temperature sent with every chat request. Empty keeps the provider's default; `0` makes runs closer to repeatable and is recommended for evaluation (see `evaluation/reports/run-to-run-variation-local-2026-10-13.md`). It narrowed but did not eliminate variation |
 | `RAG_CITATION_SUPPORT_MODE` | `REPAIR` | `OFF`, `REPAIR`, or `ENFORCE`. After an answer is validated, the backend checks that the cited chunks contain what it says: `REPAIR` cites the retrieved chunks that do, `ENFORCE` also hands off when none does (`UNSUPPORTED_ANSWER`). See `evaluation/reports/citation-support-local-2026-10-13.md` |
 | `AI_EMBEDDING_DIM` | `0` | `0` accepts the embedding model's own dimension; a positive value pins and enforces one. The dimension is stored with every chunk |
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |
@@ -83,7 +83,7 @@ All secrets and runtime choices are environment variables.
 | `AI_RESPONSE_FORMAT` | `json_schema` | `json_schema` (strict, provider-enforced) or `json_object` for providers that reject `json_schema`, such as DeepSeek. The backend validates the full answer contract in both modes |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
-| `AI_EMBEDDING_MODEL_ID` | `text-embedding-nomic-embed-text-v1.5` | Embedding model; also recorded per chunk. `text-embedding-bge-m3` (1024 d) is recommended for Chinese documents, see below. Must not contain a single quote |
+| `AI_EMBEDDING_MODEL_ID` | `text-embedding-bge-m3` | Embedding model (1024 d); also recorded per chunk. Existing databases built with `text-embedding-nomic-embed-text-v1.5` (768 d) must pin it or be rebuilt, see below. Must not contain a single quote |
 | `INDEX_TASKS_ENABLED` | `true` | Enable after-commit dispatch and persistent queue polling |
 | `INDEX_TASK_POLL_DELAY_MS` | `15000` | Delay between recovery/queue polls |
 
@@ -101,7 +101,7 @@ lms server start --port 1234
 curl -s http://localhost:1234/v1/models
 ```
 
-The configured model IDs must match the returned `id` values exactly. For the current local fixture they are `google/gemma-4-26b-a4b-qat` and `text-embedding-nomic-embed-text-v1.5`; the latter must return 768 dimensions. If the GUI reports an unexpected exit but the CLI server starts and `/v1/models` responds, the desktop UI process and the local API service are separate failure surfaces.
+The configured model IDs must match the returned `id` values exactly. For the current local fixture they are `google/gemma-4-26b-a4b-qat` and `text-embedding-bge-m3`; the latter must return 1024 dimensions. If the GUI reports an unexpected exit but the CLI server starts and `/v1/models` responds, the desktop UI process and the local API service are separate failure surfaces.
 
 ## Embedding Model and Dimension
 
@@ -109,7 +109,7 @@ Every chunk records the embedding model that produced its vector and the vector'
 
 Switching the model is an operational procedure, not a code change: configure the new model, restart, then rebuild with `POST /api/admin/knowledge-bases/{id}/index-tasks/batch-reindex` and follow `GET /api/admin/embeddings` until `rebuildComplete` is true. Documents not yet rebuilt are not searchable meanwhile (questions about them hand off instead of answering from stale vectors). See the runbook for the steps and rollback.
 
-For Chinese documents `text-embedding-bge-m3` (MIT, 1024 dimensions, about 635 MB at Q8_0) answered 44/45 of the corpus-v1 questions against 25/45 for `text-embedding-nomic-embed-text-v1.5` at +8% tokens; see `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`. The nomic model remains the default so existing deployments and the Quick Start do not change.
+For Chinese documents `text-embedding-bge-m3` (MIT, 1024 dimensions, about 635 MB at Q8_0) answered 44/45 of the corpus-v1 questions against 25/45 for `text-embedding-nomic-embed-text-v1.5` at +8% tokens; see `evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md`. `text-embedding-bge-m3` has been the default since 2026-10-21. **Upgrading an existing deployment:** a database whose chunks were built with `text-embedding-nomic-embed-text-v1.5` is not searchable under the new default until it is rebuilt (the startup log warns about the foreign chunks and questions hand off with `RETRIEVAL_MISS`; nothing is answered from old vectors). Either set `AI_EMBEDDING_MODEL_ID=text-embedding-nomic-embed-text-v1.5` to keep the old behaviour, or load bge-m3 and run `batch-reindex` (28 documents took about 12 s in the rehearsal; the full upgrade path is recorded in `evaluation/reports/nomic-to-bge-m3-upgrade-rehearsal-local-2026-10-21.md`). The default for `AI_TEMPERATURE` also changed from empty to `0`; set it to an empty string to restore the provider default.
 
 ## Database Migrations and ACL
 

@@ -42,4 +42,5 @@ Java 17 / Spring Boot + PostgreSQL（pgvector）+ Flutter 客户端；权限在 
 
 ## 联系方式
 
-<!-- TODO: 填写联系方式 -->
+- 邮箱：mikehot668@gmail.com
+- GitHub：[github.com/mikehot](https://github.com/mikehot)

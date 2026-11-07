@@ -47,4 +47,5 @@ architecture, evaluation design, code review, and acceptance decisions were mine
 
 ## Contact
 
-<!-- TODO: add contact details -->
+- Email: mikehot668@gmail.com
+- GitHub: [github.com/mikehot](https://github.com/mikehot)

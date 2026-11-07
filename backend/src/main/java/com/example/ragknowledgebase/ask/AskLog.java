@@ -159,7 +159,13 @@ public class AskLog {
 
     @PrePersist
     void prePersist() {
-        createdAt = OffsetDateTime.now();
+        if (createdAt == null) {
+            createdAt = OffsetDateTime.now();
+        }
+    }
+
+    void setCreatedAtForTesting(OffsetDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 
     public UUID getRequestId() {

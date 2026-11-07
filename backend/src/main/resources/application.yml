@@ -111,6 +111,11 @@ app:
   indexing:
     enabled: ${INDEX_TASKS_ENABLED:true}
     poll-delay-ms: ${INDEX_TASK_POLL_DELAY_MS:15000}
+  ask-retention:
+    # 0 = keep ask_log indefinitely (default). Set to a positive number of days (e.g. 30 or 90) to purge
+    # expired ask_log rows (and their cascaded ask_feedback / ask_retrieval_hit rows) on a schedule.
+    retention-days: ${ASK_LOG_RETENTION_DAYS:0}
+    poll-delay-ms: ${ASK_LOG_RETENTION_POLL_DELAY_MS:3600000}
   ai:
     provider: ${AI_PROVIDER:openai-compatible}
     base-url: ${AI_BASE_URL:http://localhost:1234/v1}

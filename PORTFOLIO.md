@@ -2,7 +2,7 @@
 
 > **English summary.** An enterprise knowledge-base Q&A system (Spring Boot, PostgreSQL + pgvector, Flutter). Employees retrieve only documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented. The project includes evaluation, audit, and deployment runbooks. It was built with AI coding agents (Codex, Claude Code), with scope, architecture, evaluation, review, and acceptance owned by me. Full write-up: [docs/CASE_STUDY_EN.md](docs/CASE_STUDY_EN.md).
 >
-> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/README.md) 为准。最后更新：2026-10-13。
+> 本文件只写有证据的内容，证据以 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports/](evaluation/reports/README.md) 为准。最后更新：2026-11-07。
 
 ## 快速入口
 
@@ -86,7 +86,7 @@ flowchart LR
 
 **质量门（2026-10-13）**：对 bge-m3 + `temperature=0` 的配置通过（answer-quality 连续 8 轮每轮 11/12，ACL 泄漏 0，golden 19/20，stress 8/8，token +12.7%），旧默认配置（nomic）不通过；2026-10-21 起默认已改为 bge-m3 + `temperature=0`（门槛已在这一版上重跑且通过：11/12 共 8 轮，golden 19/20，stress 8/8，见 [质量门复测报告](evaluation/reports/quality-gate-shipped-defaults-local-2026-10-21.md)，同一进程内的重复，未含重启波动）。过程中发现每次请求的随机边界标记会在 `temperature=0` 下翻转边缘样例的答案，已改为确定性的 HMAC 边界。详见 [质量门与 Q006 报告](evaluation/reports/quality-006-and-gate-local-2026-10-13.md)。
 
-**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45（nomic；相同配置在不同后端重启间曾相差最多 3 题），资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Hybrid Search（Keyword-RRF）在这份语料上更差（18/45），Reranking（候选多样性重排）同样更差（23/45）；两者都没打赢默认 Vector 检索的 25/45。Top-K=8 或 1000/150 分块表面多答 3–4 题、token 增加 30–44%，但落在同配置重启的波动（最多 3 题）内，结论不成立，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。换成多语言 Embedding（bge-m3，MIT，约 635 MB）后可答题从 25/45 升到 44/45，token 仅增加 8%，拒答和 ACL 泄漏指标不变；在原合成夹具上 golden 从 15 升到 19/20。切换所需的迁移、重建流程和进度端点已实现并在本机演练过（28 份文档重建约 12 秒）；默认仍是 nomic，bge-m3 是文档化的中文推荐配置。详见 [Embedding 对照报告](evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。把同样 57 题改成日常说法（corpus-v2）后，可答题 43/45，落在跨重启波动（43–45）之内，检索证据仍然 45/45 完整；剩下的失败是问法歧义（“留几份”被读成副本数）和跨文档答案只覆盖一篇，见 [改写题集报告](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md)。
+**真实规模语料 corpus-v1（2026-10-13）**：28 份中文文档（24 份 Kubernetes 中文文档 + 4 部法律，约 24.5 万字符）、57 题、3 个权限组。同一配置可答题 24–25/45（nomic；相同配置在不同后端重启间曾相差最多 3 题），资料外与越权拒答 12/12，ACL 泄漏 0。把失败拆开看：答案所在分块进入 Top-5 时 86% 答对（24/28），没进入时 0/17，所以瓶颈是分块级检索，不是生成。现有的 Hybrid Search（Keyword-RRF）在这份语料上更差（18/45），Reranking（候选多样性重排）同样更差（23/45）；两者都没打赢默认 Vector 检索的 25/45。Top-K=8 或 1000/150 分块表面多答 3–4 题、token 增加 30–44%，但落在同配置重启的波动（最多 3 题）内，结论不成立，均未采用。详见 [基线与检索对照报告](evaluation/reports/corpus-v1-baseline-and-retrieval-ab-local-2026-10-13.md)。换成多语言 Embedding（bge-m3，MIT，约 635 MB）后可答题从 25/45 升到 44/45，token 仅增加 8%，拒答和 ACL 泄漏指标不变；在原合成夹具上 golden 从 15 升到 19/20。切换所需的迁移、重建流程和进度端点已实现并在本机演练过（28 份文档重建约 12 秒）；当时默认仍是 nomic，2026-10-21 起 `bge-m3` + `AI_TEMPERATURE=0` 已成为发布默认。详见 [Embedding 对照报告](evaluation/reports/embedding-bge-m3-vs-nomic-local-2026-10-13.md)。题目由我基于文档编写、用规则判分，不是真实用户流量，也不是 LLM 评审。把同样 57 题改成日常说法（corpus-v2）后，可答题 43/45，落在跨重启波动（43–45）之内，检索证据仍然 45/45 完整；剩下的失败是问法歧义（“留几份”被读成副本数）和跨文档答案只覆盖一篇，见 [改写题集报告](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md)。
 
 **复现差距（2026-10-14）**：上面 2026-10-13 的数字在第二天的全新环境里没有复现。同一份代码（`f376f4a`）、同一组模型和 `AI_TEMPERATURE=0`、Thinking 关闭，corpus-v2 可答题 38/45（4 次独立运行完全一致，其中一次在界面完整重载模型之后），前一天是 43/45。检索指标完全相同（top-1 相似度中位数 0.703，期望文档 45/45 在 Top-5 内），所以差异在生成侧；LM Studio 应用、运行时和模型文件均未变化。当天下午 Mac 重启并从界面重新加载模型后再测是 39/45（3 次一致）：稳定落差的 4 题（003、009、016、022）逐题读答案，3 题主要是回答措辞撞上字面子串评分，1 题（022）是真实遗漏。**两天之间措辞变化的原因没有隔离出来**。因此本文件中的 Gemma 分数应读作「2026-10-13 的测量」，不是可复现的承诺。详见 [补记](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md)。
 
@@ -101,7 +101,7 @@ flowchart LR
 - “兼容 OpenAI 接口”并不代表结构化输出也兼容：DeepSeek 不支持 `json_schema`，已增加 `AI_RESPONSE_FORMAT=json_object` 选项，后端校验不变。
 - 本地 LM Studio 会把部分模型输入输出写入本机日志，只能用于合成或公开数据。真实数据必须换用通过 [Provider 验收清单](docs/DEPLOYMENT_RUNBOOK.md) 的服务。
 - ACL 只支持 allow 规则，没有显式 deny 和权限缓存失效策略。切换 Embedding 模型需要一次全量重建：重建完成前未重建的文档不可检索（会转人工，不会用旧向量作答），没有影子重建或双写。
-- MCP 只做了只读的最小适配，没有完整的 SDK 互操作验证、模型驱动的 Agent 循环或写操作。
+- 本仓库内置的 `POST /mcp` 只做无状态只读最小适配，不含写操作；完整的标准 MCP Server（官方 Python SDK v2、stdio/streamable-HTTP、per-caller 身份透传）与受限 Agent 循环（工具调用评测、跨文档拆解、对话记忆强制重检）已分别拆分为独立仓库 [rag-mcp-server](https://github.com/mikehot/rag-mcp-server) 与 [rag-agent-python](https://github.com/mikehot/rag-agent-python)。
 
 ## 工程证据
 

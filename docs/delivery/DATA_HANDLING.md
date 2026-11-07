@@ -2,10 +2,11 @@
 
 > **English summary.** What this app sends to the model provider, what it logs, what it persists in
 > Postgres, and what it writes to disk — each claim below is marked either "verified against the code on
-> 2026-10-15" (with a file:line citation) or "not verifiable from this codebase" (third-party process or
-> business process, out of scope for a code review). The one finding worth reading even if you skip the
-> rest: **the raw question text is stored in Postgres indefinitely, with no purge job** (§3). Full detail
-> is in Chinese below; ask if you need an English translation of a specific section.
+> 2026-10-15 / 2026-11-07" (with a file:line citation) or "not verifiable from this codebase" (third-party
+> process or business process, out of scope for a code review). The one finding worth reading even if you
+> skip the rest: **by default (`ASK_LOG_RETENTION_DAYS=0`), the raw question text is stored in Postgres
+> indefinitely; set `ASK_LOG_RETENTION_DAYS` (e.g., `30` or `90`) to enable scheduled purging** (§3). Full
+> detail is in Chinese below; ask if you need an English translation of a specific section.
 >
 > 本文件只写在 2026-10-15 对照代码核实过的内容，不是转述旧文档的说法。证据以 PORTFOLIO.md 和本文件标注的
 > file:line 为准。
@@ -68,11 +69,9 @@ Embedding 请求（`OpenAiCompatibleEmbeddingProvider.java:62-65`）只发问题
 - **回答原文不存**——整个 `AskLog` 实体里没有 answer/response 字段，只有 `found`、`tokenUsage`、
   `resultStatus`、延迟分解、模型/Provider 配置这些结果和元数据。
 - 关联表 `ask_retrieval_hit` 只存引用元数据（排名、chunk id、文件名、定位、相似度），**不存片段原文**。
-- **没有清理或过期任务**：在整个后端代码里搜索定时任务，只有索引队列的轮询器，没有任何任务会删除或归档
-  `ask_log`/`ask_retrieval_hit` 的旧记录。问题原文会一直留在数据库里，除非运维手动删除。
+- **可配置的定期清理任务（默认关闭）**：`AskLogRetentionService.java` 提供按天数的定时清理（配置项 `ASK_LOG_RETENTION_DAYS`，默认 `0` 表示不自动删除以保持与历史评测行为一致；`ASK_LOG_RETENTION_POLL_DELAY_MS` 默认每小时检查一次）。当 `ASK_LOG_RETENTION_DAYS` 设为正整数（如 `30` 或 `90`）时，超过保留天数的 `ask_log` 记录及其关联的 `ask_feedback`、`ask_retrieval_hit`（外键 `ON DELETE CASCADE`）会被自动清理，日志只记录清理条数与截止时间，不记录问题文本。
 
-如果客户要求"问题不长期保留"，这是当前默认行为**做不到**的地方，需要额外加一个保留期限/清理任务——这不
-在本次交付范围内，是一个待实现项，不是已经做了只是没写文档。
+如果客户要求"问题不长期保留"，部署时将环境变量 `ASK_LOG_RETENTION_DAYS` 设为约定天数（如 `30`）即可生效。
 
 ### 用户反馈表（`ask_feedback`）✅ —— 评分是枚举，但附带原因是自由文本
 

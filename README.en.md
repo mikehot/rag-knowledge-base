@@ -6,9 +6,12 @@
 
 An enterprise knowledge-base Q&A system where employees only retrieve documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented. It is built with Spring Boot, PostgreSQL + pgvector, and Flutter, and ships with evaluation, audit, and deployment runbooks.
 
+![RAG Knowledge Base terminal overview](docs/demo/rag-demo-preview.svg)
+
 - **Start here:** [PORTFOLIO.md](PORTFOLIO.md) (design decisions, evaluation results, and known limitations) and the [English case study](docs/CASE_STUDY_EN.md).
 - **Run it in five minutes:** [Quick Start](#quick-start) below. It was verified verbatim on a fresh clone.
-- **Status:** V0.2 (evaluation and retrieval quality); see [ROADMAP.md](ROADMAP.md). Verified evidence is in [PROGRESS.md](PROGRESS.md) and [evaluation/reports](evaluation/reports/README.md). There is no demo video or public demo yet.
+- **Terminal demo video:** [docs/demo/rag-agent-demo.mp4](docs/demo/rag-agent-demo.mp4) (3 min 47 s with bilingual on-screen captions; details and scope in [docs/demo/README.md](docs/demo/README.md)).
+- **Status:** V0.2 (evaluation and retrieval quality); see [ROADMAP.md](ROADMAP.md). Verified evidence is in [PROGRESS.md](PROGRESS.md) and [evaluation/reports](evaluation/reports/README.md).
 
 ## Highlights
 

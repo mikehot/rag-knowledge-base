@@ -8,9 +8,12 @@
 
 *An enterprise knowledge-base Q&A system where employees only retrieve documents they are allowed to see, every answer cites its sources, and uncovered questions are handed off instead of invented.*
 
+![RAG Knowledge Base terminal overview](docs/demo/rag-demo-preview.svg)
+
 - **作品集说明（先看这个）**：[PORTFOLIO.md](PORTFOLIO.md)，包含设计决策、评测结果与已知局限，以及可交付范围。
 - **5 分钟跑起来**：下方 [Quick Start](#quick-start)。
-- **当前状态**：V0.2（评测与检索质量阶段）。核心链路已实现并验证：权限过滤检索、带引用回答（后端检查引用是否真的支撑答案）、拒答、提示注入防护、持久化索引与故障恢复、审计与指标、只读 Tool/MCP、可切换且可重建的 Embedding 模型。质量门对「bge-m3 + `AI_TEMPERATURE=0`」配置通过，对旧默认配置（nomic）**不通过**（2026-10-21 起默认已改为 bge-m3 + `AI_TEMPERATURE=0`，已在这一版上重跑且通过：11/12 共 8 轮，golden 19/20，stress 8/8，见 [质量门复测报告](evaluation/reports/quality-gate-shipped-defaults-local-2026-10-21.md)）；尚无演示视频和公开 Demo。验证证据见 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports](evaluation/reports/README.md)。
+- **终端实录视频**：[docs/demo/rag-agent-demo.mp4](docs/demo/rag-agent-demo.mp4)（3 分 47 秒，中英文字幕说明，详见 [docs/demo/README.md](docs/demo/README.md)）。
+- **当前状态**：V0.2（评测与检索质量阶段）。核心链路已实现并验证：权限过滤检索、带引用回答（后端检查引用是否真的支撑答案）、拒答、提示注入防护、持久化索引与故障恢复、审计与指标、只读 Tool/MCP、可切换且可重建的 Embedding 模型。质量门对「bge-m3 + `AI_TEMPERATURE=0`」配置通过，对旧默认配置（nomic）**不通过**（2026-10-21 起默认已改为 bge-m3 + `AI_TEMPERATURE=0`，已在这一版上重跑且通过：11/12 共 8 轮，golden 19/20，stress 8/8，见 [质量门复测报告](evaluation/reports/quality-gate-shipped-defaults-local-2026-10-21.md)）。验证证据见 [PROGRESS.md](PROGRESS.md) 与 [evaluation/reports](evaluation/reports/README.md)。
 
 ## 评测一览（本地、合成与公开数据）
 

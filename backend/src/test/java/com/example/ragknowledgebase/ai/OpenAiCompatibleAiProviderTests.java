@@ -207,6 +207,28 @@ class OpenAiCompatibleAiProviderTests {
         JsonNode body = objectMapper.readTree(requestBody.get());
         assertThat(body.has("temperature")).isTrue();
         assertThat(body.path("temperature").asDouble()).isZero();
+        assertThat(body.has("reasoning_effort")).isFalse();
+    }
+
+    @Test
+    void sendsReasoningEffortWhenConfigured() throws Exception {
+        AppProperties base = properties("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        AppProperties.Ai ai = base.ai();
+        AppProperties withEffort = new AppProperties(
+            base.auth(), base.upload(), base.rag(), base.enterprise(),
+            new AppProperties.Ai(
+                ai.provider(), ai.baseUrl(), ai.apiKey(), ai.modelId(), ai.maxTokens(), ai.complexMaxTokens(),
+                ai.complexRoutingEnabled(), ai.timeoutSeconds(), ai.maxRetries(), ai.structuredOutputRetries(),
+                ai.dailyLimit(), ai.responseFormat(), 0.0, "none"
+            ),
+            base.embedding()
+        );
+        OpenAiCompatibleAiProvider provider = new OpenAiCompatibleAiProvider(withEffort, objectMapper);
+
+        provider.generate("回答问题");
+
+        JsonNode body = objectMapper.readTree(requestBody.get());
+        assertThat(body.path("reasoning_effort").asText()).isEqualTo("none");
     }
 
     private AppProperties properties(String baseUrl) {

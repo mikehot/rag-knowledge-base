@@ -135,6 +135,8 @@ app:
     # evaluated configuration). Set AI_TEMPERATURE to an empty string to leave the provider's own default,
     # which for local models is usually above 0.
     temperature: ${AI_TEMPERATURE:0}
+    # Optional OpenAI reasoning_effort (e.g. "none" to disable thinking on cloud hybrid-reasoning models).
+    reasoning-effort: ${AI_REASONING_EFFORT:}
   embedding:
     provider: ${AI_EMBEDDING_PROVIDER:openai-compatible}
     base-url: ${AI_EMBEDDING_BASE_URL:${AI_BASE_URL:http://localhost:1234/v1}}

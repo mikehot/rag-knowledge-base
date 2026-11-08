@@ -33,9 +33,15 @@ DB_PORT="${EVAL_DB_PORT:-55432}"
 BACKEND_PORT="${EVAL_BACKEND_PORT:-8080}"
 DB_NAME="rag-eval-stack-db"
 AI_BASE_URL="${AI_BASE_URL:-http://localhost:1234/v1}"
+AI_API_KEY="${AI_API_KEY:-}"
 AI_MODEL_ID="${AI_MODEL_ID:-google/gemma-4-26b-a4b-qat}"
+AI_EMBEDDING_BASE_URL="${AI_EMBEDDING_BASE_URL:-$AI_BASE_URL}"
+AI_EMBEDDING_API_KEY="${AI_EMBEDDING_API_KEY:-}"
 AI_EMBEDDING_MODEL_ID="${AI_EMBEDDING_MODEL_ID:-text-embedding-bge-m3}"
 AI_TEMPERATURE="${AI_TEMPERATURE:-0}"
+AI_RESPONSE_FORMAT="${AI_RESPONSE_FORMAT:-json_schema}"
+AI_REASONING_EFFORT="${AI_REASONING_EFFORT:-}"
+RAG_AGENT_SNIPPET_CHARS="${RAG_AGENT_SNIPPET_CHARS:-360}"
 FIXTURE="${EVAL_FIXTURE:-corpus}"
 case "$FIXTURE" in
   corpus) ACTORS=(corp.sre corp.hr corp.legal corp.manager corp.outsider) ;;
@@ -54,13 +60,19 @@ preflight() {
   command -v python3 >/dev/null || die "python3 is required"
   command -v curl >/dev/null || die "curl is required"
 
-  local models
-  models="$(curl -fsS --max-time 5 "${AI_BASE_URL%/}/models")" \
+  local models emb_models
+  local -a chat_auth=() emb_auth=()
+  [[ -n "$AI_API_KEY" ]] && chat_auth=(-H "Authorization: Bearer $AI_API_KEY")
+  [[ -n "$AI_EMBEDDING_API_KEY" ]] && emb_auth=(-H "Authorization: Bearer $AI_EMBEDDING_API_KEY")
+  models="$(curl -fsS --max-time 10 ${chat_auth[@]+"${chat_auth[@]}"} "${AI_BASE_URL%/}/models")" \
     || die "cannot reach ${AI_BASE_URL%/}/models (try: lms server start)"
-  for id in "$AI_MODEL_ID" "$AI_EMBEDDING_MODEL_ID"; do
-    python3 -c 'import json,sys; ids=[m["id"] for m in json.load(sys.stdin)["data"]]; sys.exit(0 if sys.argv[1] in ids else 1)' \
-      "$id" <<<"$models" || die "model '$id' is not loaded in the provider (try: lms load $id)"
-  done
+  python3 -c 'import json,sys; ids=[m["id"] for m in json.load(sys.stdin)["data"]]; sys.exit(0 if sys.argv[1] in ids else 1)' \
+    "$AI_MODEL_ID" <<<"$models" || die "model '$AI_MODEL_ID' is not loaded in the chat provider (try: lms load $AI_MODEL_ID)"
+
+  emb_models="$(curl -fsS --max-time 10 ${emb_auth[@]+"${emb_auth[@]}"} "${AI_EMBEDDING_BASE_URL%/}/models")" \
+    || die "cannot reach ${AI_EMBEDDING_BASE_URL%/}/models (try: lms server start)"
+  python3 -c 'import json,sys; ids=[m["id"] for m in json.load(sys.stdin)["data"]]; sys.exit(0 if sys.argv[1] in ids else 1)' \
+    "$AI_EMBEDDING_MODEL_ID" <<<"$emb_models" || die "model '$AI_EMBEDDING_MODEL_ID' is not loaded in the embedding provider (try: lms load $AI_EMBEDDING_MODEL_ID)"
 
   port_listening "$DB_PORT" && die "port $DB_PORT is already in use (another database? set EVAL_DB_PORT)"
   port_listening "$BACKEND_PORT" && die "port $BACKEND_PORT is already in use (set EVAL_BACKEND_PORT)"
@@ -72,11 +84,19 @@ preflight() {
 # tokens), so check the decisive signal directly: a trivial plain request must produce no reasoning.
 check_thinking_off() {
   python3 - "$AI_BASE_URL" "$AI_MODEL_ID" <<'PY' || die "thinking is enabled for $AI_MODEL_ID. Turn Enable Thinking OFF in LM Studio (reloading the model with 'lms load' resets it)"
-import json, sys, urllib.request
+import json, os, sys, urllib.request
 base, model = sys.argv[1].rstrip("/"), sys.argv[2]
-body = json.dumps({"model": model, "temperature": 0, "max_tokens": 400,
-                   "messages": [{"role": "user", "content": "用一句话说明什么是向量数据库。"}]}).encode()
-req = urllib.request.Request(base + "/chat/completions", body, {"Content-Type": "application/json"})
+payload = {"model": model, "temperature": 0, "max_tokens": 400,
+           "messages": [{"role": "user", "content": "用一句话说明什么是向量数据库。"}]}
+effort = os.environ.get("AI_REASONING_EFFORT", "").strip()
+if effort:
+    payload["reasoning_effort"] = effort
+body = json.dumps(payload).encode()
+headers = {"Content-Type": "application/json"}
+api_key = os.environ.get("AI_API_KEY", "").strip()
+if api_key:
+    headers["Authorization"] = f"Bearer {api_key}"
+req = urllib.request.Request(base + "/chat/completions", body, headers)
 with urllib.request.urlopen(req, timeout=120) as r:
     data = json.load(r)
 message = data["choices"][0]["message"]
@@ -151,8 +171,11 @@ cmd_up() {
     cd "$ROOT/backend"
     SERVER_PORT="$BACKEND_PORT" \
     DB_URL="jdbc:postgresql://localhost:$DB_PORT/rag_knowledge_base" \
-    AI_BASE_URL="$AI_BASE_URL" AI_MODEL_ID="$AI_MODEL_ID" \
+    AI_BASE_URL="$AI_BASE_URL" AI_API_KEY="$AI_API_KEY" AI_MODEL_ID="$AI_MODEL_ID" \
+    AI_EMBEDDING_BASE_URL="$AI_EMBEDDING_BASE_URL" AI_EMBEDDING_API_KEY="$AI_EMBEDDING_API_KEY" \
     AI_EMBEDDING_MODEL_ID="$AI_EMBEDDING_MODEL_ID" AI_TEMPERATURE="$AI_TEMPERATURE" \
+    AI_RESPONSE_FORMAT="$AI_RESPONSE_FORMAT" AI_REASONING_EFFORT="$AI_REASONING_EFFORT" \
+    RAG_AGENT_SNIPPET_CHARS="$RAG_AGENT_SNIPPET_CHARS" \
     AI_DAILY_LIMIT=5000 UPLOAD_STORAGE_DIR="$STATE_DIR/uploads" \
     nohup ./mvnw -q spring-boot:run >"$STATE_DIR/backend.log" 2>&1 &
     echo $! >"$STATE_DIR/backend.pid"

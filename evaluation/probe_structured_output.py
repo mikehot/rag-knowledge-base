@@ -33,6 +33,9 @@ PROBES = (
 
 
 def structured_schema() -> dict[str, Any]:
+    mode = os.environ.get("AI_RESPONSE_FORMAT", "json_schema").strip().lower()
+    if mode == "json_object":
+        return {"type": "json_object"}
     return {
         "type": "json_schema",
         "json_schema": {
@@ -146,16 +149,21 @@ def parse_response(raw: str, status: int) -> dict[str, Any]:
 
 
 def call_model(base_url: str, model: str, question: str, max_tokens: int, timeout: float) -> dict[str, Any]:
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [{"role": "user", "content": question}],
-            "response_format": structured_schema(),
-            "max_tokens": max_tokens,
-            "stream": False,
-        },
-        ensure_ascii=False,
-    ).encode("utf-8")
+    mode = os.environ.get("AI_RESPONSE_FORMAT", "json_schema").strip().lower()
+    prompt = question
+    if mode == "json_object":
+        prompt += ' 必须只输出合法 JSON 对象，且仅包含四个字段：{"answer": "...", "found": false, "grounded": false, "sourceIndexes": []}。'
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": structured_schema(),
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    effort = os.environ.get("AI_REASONING_EFFORT", "").strip()
+    if effort:
+        payload["reasoning_effort"] = effort
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     api_key = os.environ.get("AI_API_KEY", "").strip()
     if api_key:

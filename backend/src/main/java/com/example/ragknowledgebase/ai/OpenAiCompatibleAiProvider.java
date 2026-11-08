@@ -61,6 +61,10 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         if (temperature != null) {
             body.put("temperature", temperature);
         }
+        String reasoningEffort = properties.ai().reasoningEffort();
+        if (reasoningEffort != null && !reasoningEffort.isBlank()) {
+            body.put("reasoning_effort", reasoningEffort.trim());
+        }
         String requestBody = objectMapper.writeValueAsString(body);
         HttpRequest.Builder builder = HttpRequest.newBuilder(chatCompletionsUri())
             .timeout(Duration.ofSeconds(properties.ai().timeoutSeconds()))

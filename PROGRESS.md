@@ -1,6 +1,6 @@
 # PROGRESS
 
-> Last evidence review: 2026-10-27（状态数字对照代码与 CI 刷新；评测结论以各自报告日期为准）
+> Last evidence review: 2026-11-09（状态数字对照代码与 CI 刷新；评测结论以各自报告日期为准）
 > Source of truth for implemented and verified status. Planned capabilities live in `REQUIREMENTS.md` and `ROADMAP.md`.
 > 2026-09-24 之前的逐条证据、命令和日期记录已原样迁至 [`docs/PROGRESS_HISTORY.md`](docs/PROGRESS_HISTORY.md)；详细数据以 `evaluation/reports/` 为准。本文件只保留当前状态、缺口和下一步。
 
@@ -116,7 +116,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
   8. 不存在的地址返回 404 而不是 500。
 - **提示注入（2026-10-13）**：此前提示词没有把资料片段声明为不可信数据，也没有注入测试。现已增加：提示词中的安全规则和数据边界标记（`PromptGuard`；最初每次请求随机，2026-10-13 起改为由服务端密钥对问题与检索分块做 HMAC 得到的确定性边界，仍不可被文档作者预测）；输出侧检查，答案回显边界标记，或带有检索上下文中不存在的链接/Markdown 图片时转人工，失败原因为 `UNSAFE_OUTPUT`；新增测试 14 个（2026-10-13 在 Docker 下后端全量 152 tests 通过，0 跳过，含 PostgreSQL 集成测试）；评测集 `prompt_injection_v1`（7 题）和 `forbidden_answer_terms` 评分规则。2026-10-13 在 LM Studio（Gemma，Thinking 开启）上实测：修正三道测试设计问题后连续 3 轮 7/7，ACL 泄漏 0，见 `evaluation/reports/prompt-injection-v1-local-2026-10-13.md`。**缺**：该次 `UNSAFE_OUTPUT` 触发 0 次，输出检查没有被真实模型行为验证过；样本只有 7 题；answer-quality 质量门对新提示词的复测已在 Thinking 关闭（探针 4/4 通过）下做了同会话配对：改动前 9/10/10、新提示词 10/9/9，golden 16→15，stress 8→8，均在已记录的波动范围内，token +12.7%（上限 15%），见 `evaluation/reports/prompt-guard-ab-local-2026-10-13.md`；两者都**未通过**质量门（基线本身也不通过）；输出检查只覆盖链接/图片/边界回显，不判断措辞是否被诱导。
 - **引用支撑校验（2026-10-13 已实现）**：此前后端只校验引用编号在范围内，不校验被引用片段是否真的支撑答案（出现过“答案对、引用指向不含该内容的片段”：RAG-008、RAG-004、INJ-001、CORP-033）。现在 `CitationSupport` 用确定性的词面支撑度检查：引用不支撑而检索结果里有更支撑的分块时由后端改引（`REPAIR`，默认）；没有任何检索分块支撑时可转人工（`ENFORCE`，默认关闭，错误码 `UNSUPPORTED_ANSWER`）。已验证：521 条真实回答的回放中 3 条被修复、0 条变差、0 条不支撑；278 条正确回答离线标定下 ENFORCE 会误拒 0 条。缺口：只比词面，判断不了答案是否完整或为真（找到但漏要点的 31 条支撑度中位数 0.92）；ENFORCE 从未在真实运行中触发，其他语料上的误拒率未知；该失败模式在语料上只有 0.6%，主要价值是保护“每个回答都带出处”的承诺，而不是提分。
-- **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（Embedding 仍在本地）。增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持 `json_schema` 的服务。flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。尚未测试云端 Embedding。
+- **云端 Provider**：2026-09-26 实测 DeepSeek flash 和 v4-pro（7 份合成文档，Embedding 仍在本地），增加 `AI_RESPONSE_FORMAT`（`json_schema` 或 `json_object`）以兼容不支持严格 `json_schema` 的服务；flash 通过 answer-quality 质量门（10/10/10），golden 17/20，stress 8/8（见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`）。2026-11-07 增加 `AI_REASONING_EFFORT`（透传 `reasoning_effort`，如 `none` 关闭推理 token）并在 28 份企业语料 `corpus-v2`（本地 `bge-m3`）上实测 SCNet `GLM-5.3-Flash-Event`（3 轮：`45/45`、`44/45`、`45/45`，均值 `44.67/45`，拒答 `12/12`，ACL 泄漏 `0`，相对本地 Gemma 4 26B `41.33/45` 显著可区分；见 `evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md`）。尚未测试云端 Embedding。
 - **MCP / Agent**：无完整 transport/auth conformance、第三方客户端互操作、模型驱动 loop 或写工具（按计划延后）。
 - **交付**：干净环境演练只覆盖 Quick Start（2026-10-21 发布默认、缓存已热、单机单次），未覆盖冷缓存首次下载、`docs/DEMO.md` 全流程、MCP smoke、Flutter 客户端和 compose 后端容器；无公开 Demo；脱敏演示视频仅有终端版（`docs/demo/`，无声，不含 App 画面和真机抽测）；备份恢复仅为一次本地人工演练，不代表生产 PITR/DR。
 - **CI**：最近几次提交的 GitHub Actions 已通过；长期运行基线仍需积累。

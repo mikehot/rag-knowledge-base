@@ -9,7 +9,7 @@
 > quality and permission behavior.
 >
 > 本文件只写验收步骤和结论，具体数字一律链接到 [PORTFOLIO.md](../../PORTFOLIO.md)，不在这里重复一份——数字
-> 以 PORTFOLIO.md 为准，避免两处各改一半。最后更新：2026-10-15。
+> 以 PORTFOLIO.md 为准，避免两处各改一半。最后更新：2026-11-09。
 
 ## 1. 这份手册覆盖什么，不覆盖什么
 
@@ -137,11 +137,11 @@
 | 维度 | 证据 |
 |---|---|
 | 工具调用可靠性 | Python Agent 层通过 MCP 只读 Tool 接入知识库，复用同一套身份、ACL、调用预算和审计；参数校验失败、调用超时都有明确的失败分类，不会把失败当成功处理 |
-| 评测严谨性 | `run_repeated_eval.py` 要求同一配置至少跑 3 轮才允许下"可区分"的结论，范围不重叠才算数——不是跑一次就报数字；最近一次跨模型对比（Qwen vs Gemma）见 [qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15](../../evaluation/reports/qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15.md) |
+| 评测严谨性 | `run_repeated_eval.py` 要求同一配置至少跑 3 轮才允许下"可区分"的结论，范围不重叠才算数——不是跑一次就报数字；跨模型对比（本地 Qwen vs Gemma 与云端 `GLM-5.3-Flash-Event` vs 本地双模型）见 [qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15](../../evaluation/reports/qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15.md) 与 [glm-5.3-flash-corpus-v2-cloud-2026-11-07](../../evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md) |
 | 轨迹与可观测性 | 每次问答都有 `requestId`、分段耗时（embedding/retrieval/generation）、Token 用量、失败分类；Agent 调用记录每一步工具调用的结果（`outcome`） |
 | 人机协作（HITL） | 任何不合规的模型输出（非法 JSON、引用越界、截断）一律 fail-closed 转人工，不编造一个"看起来对"的答案 |
 | 权限与撤权的安全验证 | 授权→可答、撤权→拒答，Java 应用层有 PostgreSQL 集成测试，Python Agent 层有专门的撤权场景评测（3/3 泄漏在关闭强制检索时发生、0/3 在开启时发生），见 [enforce-retrieval 报告](../../evaluation/reports/enforce-retrieval-local-2026-10-15.md) |
-| 成本与延迟 | 本地模型与云端模型（DeepSeek）的质量、延迟、Token 成本都做过并排对比，见 [云端对照报告](../../evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md) |
+| 成本与延迟 | 本地模型与云端模型（DeepSeek、`GLM-5.3-Flash-Event`）的质量、延迟、Token 成本都做过并排对比，见 [DeepSeek 对照报告](../../evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md) 与 [GLM-5.3-Flash-Event 对照报告](../../evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md) |
 
 ## 6. 验收不通过时怎么办
 

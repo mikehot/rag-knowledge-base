@@ -1,6 +1,6 @@
 # Case Study：从 RAG Demo 到可治理、可度量的企业知识库
 
-> 使用合成样例和本地环境验证，不代表真实客户上线，也不构成准确率、SLA 或 ROI 承诺。最后更新：2026-10-13。
+> 使用合成样例和本地环境验证，不代表真实客户上线，也不构成准确率、SLA 或 ROI 承诺。最后更新：2026-11-09。
 
 ## 1. 问题
 
@@ -43,7 +43,7 @@
 | 可靠性 | 模型服务故障时返回稳定错误码；索引任务 3 次失败后可人工重试恢复；重建失败期间旧版本照常回答（有集成测试和实机复测） |
 | 工程质量 | 后端 182 个测试（含 Testcontainers 集成测试），评测 Python 测试 30 个，CI 通过；备份恢复演练通过；MCP 只读冒烟检查 16/16；Android 真机完成管理员 ACL 与索引任务验收 |
 | 可复现 | 全新 clone 按 README 逐字执行即可跑通，本机已有缓存时从 clone 到首个带引用回答不到 1 分钟 |
-| 质量 | 本地 Gemma + bge-m3 + `AI_TEMPERATURE=0`：answer-quality 连续 8 轮每轮 11/12，**通过**自定的质量门；golden 19/20；stress 8/8。**旧默认配置（nomic）不通过**（8–10/12；2026-10-21 起默认已改为 bge-m3 + `AI_TEMPERATURE=0`）。真实语料 corpus-v1（28 份文档、57 题）：可答题 44/45、拒答 12/12、ACL 泄漏 0；同配置在不同运行间波动 41–44/45。云端对照（DeepSeek flash，Embedding 仍在本地）：answer-quality 10/10/10，中位延迟约 1–1.6 秒，按官方价格估算每千次问答不到 $1。数字的口径和局限见 [PORTFOLIO.md](../PORTFOLIO.md) **注意**：这些是 2026-10-13 的测量；2026-10-14 在全新环境复测同配置的 corpus-v2 得到 38/45，重启并重载模型后 39/45（前一天 43/45，检索指标不变；落差主要是回答措辞撞上字面评分，措辞变化的原因未查明），质量门通过与否尚未在新环境重跑。 |
+| 质量 | 本地 Gemma + bge-m3 + `AI_TEMPERATURE=0`：answer-quality 连续 8 轮每轮 11/12，**通过**自定的质量门；golden 19/20；stress 8/8。**旧默认配置（nomic）不通过**（8–10/12；2026-10-21 起默认已改为 bge-m3 + `AI_TEMPERATURE=0`，并在新默认上复测通过）。真实语料 corpus-v1（28 份文档、57 题）：可答题 44/45、拒答 12/12、ACL 泄漏 0；同配置在不同运行间波动 41–44/45。跨模型三轮对照（corpus-v2）：本地 Gemma 均值 `41.33/45`、本地 Qwen 3.8 27B 均值 `42.67/45`（在波动范围内，慢 ~3 倍）、云端 `GLM-5.3-Flash-Event` 均值 **`44.67/45`（`45/45`、`44/45`、`45/45`，相对 Gemma 显著可区分）**。云端 DeepSeek flash（7 份合成文档）：answer-quality 10/10/10，中位延迟约 1–1.6 秒，按官方价格估算每千次问答不到 $1。数字的口径和局限见 [PORTFOLIO.md](../PORTFOLIO.md) **注意**：2026-10-14 在全新环境复测同配置的 corpus-v2 得到 38/45，重启并重载模型后 39/45（前一天 43/45，检索指标不变；落差主要是回答措辞撞上字面评分，措辞变化的原因未查明）。 |
 
 ## 5. 过程中的关键判断
 
@@ -59,13 +59,13 @@
 ## 6. 局限
 
 - 没有生产部署、公开 Demo 或真实用户数据（有一段无声终端演示视频，不含 App 画面，见 `docs/demo/`）；数字来自本地的合成与公开文档数据。
-- 质量门只对「bge-m3 + `temperature=0`」配置通过，默认配置不通过；评测题由单人基于文档编写、用子串规则评分；跨文档题仍然失败。
+- 质量门对「bge-m3 + `temperature=0`」配置通过（2026-10-21 起已设为出厂默认），旧默认配置（nomic）不通过；评测题由单人基于文档编写、用子串规则评分；单次检索对跨文档复合题召回不足（需配合独立仓库 [rag-agent-python](https://github.com/mikehot/rag-agent-python) 的多步拆解检索）。
 - ACL 只支持 allow 规则；更换 Embedding 模型需要全量重建，重建完成前未重建的文档不可检索（转人工）。
-- MCP 是最小的只读适配，没有第三方 SDK 互操作验证，也没有 Agent 循环或写操作。
+- 本仓库内置的 `POST /mcp` 是最小的只读无状态适配；完整的标准 MCP Server（官方 Python SDK v2、per-caller 身份透传）与受限 Agent 循环（工具调用评测、跨文档拆解、会话记忆强制重检）位于独立仓库 [rag-mcp-server](https://github.com/mikehot/rag-mcp-server) 与 [rag-agent-python](https://github.com/mikehot/rag-agent-python)。
 
 ## 7. 下一步
 
-见 [ROADMAP.md](../ROADMAP.md)：Flutter 真机抽测与公开 Demo；真实 MCP 客户端与 Python Agent 循环；跨文档检索覆盖；是否把 bge-m3 设为默认（涉及 Quick Start 和 635 MB 的模型下载）。
+见 [ROADMAP.md](../ROADMAP.md)：部门授权的 Flutter 真机抽测；带 App 画面与讲解的演示视频或公开只读 Demo；用客户真实文档跑验收评测（见 [docs/delivery/ACCEPTANCE_HANDBOOK.md](delivery/ACCEPTANCE_HANDBOOK.md)）。
 
 ## 业务价值（待真实数据验证）
 

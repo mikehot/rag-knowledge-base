@@ -1,6 +1,6 @@
 # Enterprise RAG Knowledge Base — Case Study
 
-> Verified on synthetic data in a local environment. This is not a customer deployment and makes no accuracy, SLA, or ROI claims. Last updated: 2026-10-13.
+> Verified on synthetic data in a local environment. This is not a customer deployment and makes no accuracy, SLA, or ROI claims. Last updated: 2026-11-09.
 
 ## One-line summary
 
@@ -33,7 +33,7 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 | Reliability | Provider outages return stable error codes; failed index tasks recover through admin retry; a failed reindex keeps serving the previous version (integration test plus live replay) |
 | Engineering | 182 backend tests including Testcontainers integration tests, 30 evaluation unit tests, CI green, MCP read-only smoke 16/16, Android device acceptance for admin ACL and index tasks |
 | Reproducibility | A fresh clone following the README verbatim reaches a cited answer in under a minute of machine time (warm caches) |
-| Quality | Local Gemma with bge-m3 embeddings and `AI_TEMPERATURE=0`: answer-quality 8 consecutive captures at 11/12, which **passes** my own gate; golden 19/20; stress 8/8. The **previous default (nomic) failed** it (8–10/12); since 2026-10-21 the default is bge-m3 with `AI_TEMPERATURE=0`. On a 28-document, 57-question Chinese corpus: 44/45 answerable, 12/12 refusals, zero ACL leakage; the same configuration varies between 41 and 44 across runs. Cloud DeepSeek flash with local embeddings: answer-quality 10/10/10, median latency about 1–1.6 s, an estimated under $1 per 1,000 questions at list price. Scope and limits: [PORTFOLIO.md](../PORTFOLIO.md). **Note:** these are measurements of 2026-10-13; a re-run of corpus-v2 on a fresh stack the next day scored 38/45 against 43/45 with identical retrieval, and 39/45 after a reboot and model reload (mostly different wording meeting literal scoring; why the wording changed was not isolated), and the quality gate has not been re-run there. |
+| Quality | Local Gemma with bge-m3 embeddings and `AI_TEMPERATURE=0`: answer-quality 8 consecutive captures at 11/12, which **passes** my own gate; golden 19/20; stress 8/8. The **previous default (nomic) failed** it (8–10/12); since 2026-10-21 the default is bge-m3 with `AI_TEMPERATURE=0` (gate re-run and passed). On a 28-document, 57-question Chinese corpus: 44/45 answerable, 12/12 refusals, zero ACL leakage; the same configuration varies between 41 and 44 across runs. Across three models on `corpus-v2` (3 restarted runs each): local Gemma mean `41.33/45`, local Qwen 3.8 27B mean `42.67/45` (within variation, ~3× slower), and cloud `GLM-5.3-Flash-Event` mean **`44.67/45` (`45/45`, `44/45`, `45/45`, distinguishable from Gemma at comparable latency)**. Cloud DeepSeek flash on the 7-doc fixture: answer-quality 10/10/10, median latency about 1–1.6 s, an estimated under $1 per 1,000 questions at list price. Scope and limits: [PORTFOLIO.md](../PORTFOLIO.md). **Note:** a re-run of corpus-v2 on a fresh stack on 2026-10-14 scored 38/45 against 43/45 with identical retrieval, and 39/45 after a reboot and model reload (mostly different wording meeting literal scoring; why the wording changed was not isolated). |
 
 ## Judgment calls
 
@@ -49,13 +49,13 @@ Most of the implementation code was written by AI coding agents (OpenAI Codex an
 ## Limitations
 
 - No production deployment, public demo, or real users (there is a silent terminal-only demo video without the app, in `docs/demo/`); every number comes from local synthetic and public-document data.
-- The quality gate passes only for bge-m3 with `AI_TEMPERATURE=0`, not for the previous nomic default (changed 2026-10-21); the questions were written by one author and scored by substring rules; cross-document questions still fail.
+- The quality gate passes for bge-m3 with `AI_TEMPERATURE=0` (the shipped default since 2026-10-21), not for the previous nomic default; the questions were written by one author and scored by substring rules; single-shot retrieval misses multi-document compound questions (addressed in the companion [rag-agent-python](https://github.com/mikehot/rag-agent-python) decomposition policy).
 - The ACL model is allow-only. Switching the embedding model requires a full rebuild: documents not yet rebuilt are not searchable meanwhile (questions hand off instead of using stale vectors), and there is no shadow rebuild or dual write.
-- MCP is a minimal read-only adapter, with no third-party SDK conformance testing, agent loop, or write operations.
+- The built-in `POST /mcp` is a minimal stateless read-only adapter; a full protocol-conformant MCP server (official Python SDK v2, per-caller token passthrough) and bounded agent loop live in the companion repositories [rag-mcp-server](https://github.com/mikehot/rag-mcp-server) and [rag-agent-python](https://github.com/mikehot/rag-agent-python).
 
 ## Next
 
-See [ROADMAP.md](../ROADMAP.md): the Flutter device spot check and a public demo; a real MCP client with a bounded agent loop in Python; cross-document retrieval coverage; and the decision whether bge-m3 becomes the default (it changes the Quick Start and adds a 635 MB model download).
+See [ROADMAP.md](../ROADMAP.md): the department-grant Flutter device spot check; a narrated demo with the Flutter app or a public read-only demo; and running the acceptance suite on a client's own corpus (see [docs/delivery/ACCEPTANCE_HANDBOOK.md](delivery/ACCEPTANCE_HANDBOOK.md)).
 
 ## Five-minute talk track
 

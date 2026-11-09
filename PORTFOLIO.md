@@ -90,6 +90,8 @@ flowchart LR
 
 **复现差距（2026-10-14）**：上面 2026-10-13 的数字在第二天的全新环境里没有复现。同一份代码（`f376f4a`）、同一组模型和 `AI_TEMPERATURE=0`、Thinking 关闭，corpus-v2 可答题 38/45（4 次独立运行完全一致，其中一次在界面完整重载模型之后），前一天是 43/45。检索指标完全相同（top-1 相似度中位数 0.703，期望文档 45/45 在 Top-5 内），所以差异在生成侧；LM Studio 应用、运行时和模型文件均未变化。当天下午 Mac 重启并从界面重新加载模型后再测是 39/45（3 次一致）：稳定落差的 4 题（003、009、016、022）逐题读答案，3 题主要是回答措辞撞上字面子串评分，1 题（022）是真实遗漏。**两天之间措辞变化的原因没有隔离出来**。因此本文件中的 Gemma 分数应读作「2026-10-13 的测量」，不是可复现的承诺。详见 [补记](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md)。
 
+**跨模型对照（本地 Qwen 3.8 27B 与云端 `GLM-5.3-Flash-Event`，2026-10-15 / 2026-11-07）**：在完全相同的 `bge-m3` 检索配置与 `corpus-v2`（57 题 × 3 轮重启运行）下，进一步对比了第二个本地 4-bit MLX 模型 `qwen/qwen3.8-27b`（可答题均值 `42.67/45`，范围 `42–44`，与同批 Gemma 的 `41.33/45` 落在 `WITHIN VARIATION`，但单轮耗时慢约 3 倍：`591.0s` vs `198.6s`，见 [Qwen vs Gemma 报告](evaluation/reports/qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15.md)）与第三个云端模型 `GLM-5.3-Flash-Event`（SCNet，`AI_REASONING_EFFORT=none`、`AI_RESPONSE_FORMAT=json_object`）。`GLM-5.3-Flash-Event` 三轮可答题为 **`45/45`、`44/45`、`45/45`（均值 `44.67/45`）**，拒答 `12/12`、ACL 泄漏 `0`、结构化输出失败 `0`，按非重叠区间规则相对 Gemma **显著可区分（DISTINGUISHABLE）**，且单轮耗时（`209.9s`）与本地 Gemma 相当、比 Qwen 快 2.8 倍。结合 PostgreSQL `ask_retrieval_hit` 向量排序与独立 LLM-as-Judge 语义审计证实：Top-5 内证据完整的 44 道可答题 `GLM-5.3-Flash-Event` 全部 `3/3` 通过；唯一未满分的 `CORP2-045` 是因为《数据安全法》第 29 条（向有关主管部门报告）所在分块排在第 11 名（`sim=0.6301`），属于**分块级检索边界（Chunk-Level Recall@5 缺失）**而非此前归因的生成遗漏。详见 [GLM-5.3-Flash-Event 对照与审计报告](evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md)。
+
 从评测里学到的：
 
 - 把切块改成 300/60 可以修好 Q002/Q006，并通过 answer-quality 门槛；但 golden 掉到 14/20、stress 掉到 7/8，综合持平，所以没有采用。按标题切块在离线复放阶段就被否决了。详见 [切块 A/B](evaluation/reports/chunking-ab-local-2026-09-24.md) 与 [离线复放](evaluation/reports/heading-chunking-offline-replay-local-2026-09-24.md)。
@@ -115,7 +117,7 @@ flowchart LR
 可交付的形态：**团队或企业内部知识库问答 MVP**。
 
 - **包含**：文档接入（PDF/Word/Markdown）；按部门或角色的查看权限；带出处的回答；资料外问题转人工；管理端（上传、权限、索引状态）；部署文档与交接。
-- **可选**：本地模型（数据不出内网），或云端模型。已实测 DeepSeek flash：在同一评测集上质量高于本地模型，中位延迟约 1–1.6 秒，按官方价格估算每千次问答不到 $1，Embedding 仍在本地。
+- **可选**：本地模型（数据不出内网），或云端模型。已实测 DeepSeek flash（7 份合成文档，中位延迟约 1–1.6 秒，按官方价格估算每千次问答不到 $1）与 SCNet `GLM-5.3-Flash-Event`（28 份真实规模语料 `corpus-v2` 三轮均值 `44.67/45`，显著优于本地模型），Embedding 仍在本地。
 - **不承诺**：AI 百分之百正确。系统设计为资料不足时拒答并转人工，准确率需要用客户自己的文档和问题来评测。
 
 ## 开发方式

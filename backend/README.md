@@ -74,13 +74,14 @@ All secrets and runtime choices are environment variables.
 | `AI_BASE_URL` | `http://localhost:1234/v1` | LM Studio/Ollama/OpenAI-compatible chat URL |
 | `AI_MODEL_ID` | `google/gemma-4-26b-a4b-qat` | Chat model; verify the identifier in `GET http://localhost:1234/v1/models` |
 | `AI_API_KEY` | empty | Optional for local providers |
+| `AI_REASONING_EFFORT` | empty | Optional `reasoning_effort` value sent with chat completions (for example `none` to disable thinking per request on LM Studio or `GLM-5.3-Flash-Event`; empty omits the field) |
 | `AI_MAX_TOKENS` | `2400` | Completion budget; reasoning models may consume part of it before returning answer content |
 | `AI_COMPLEX_MAX_TOKENS` | `3200` | Experimental budget for explicit multi-part questions |
 | `AI_COMPLEX_ROUTING_ENABLED` | `false` | Enable deterministic complex-question budget routing; keep off until a quality/latency gate passes |
 | `AI_TIMEOUT_SECONDS` | `120` | Local model can be slow |
 | `AI_MAX_RETRIES` | `2` | Provider/network retry count |
 | `AI_STRUCTURED_OUTPUT_RETRIES` | `1` | Bounded retry after invalid model JSON; still fails closed when exhausted |
-| `AI_RESPONSE_FORMAT` | `json_schema` | `json_schema` (strict, provider-enforced) or `json_object` for providers that reject `json_schema`, such as DeepSeek. The backend validates the full answer contract in both modes |
+| `AI_RESPONSE_FORMAT` | `json_schema` | `json_schema` (strict, provider-enforced) or `json_object` for providers that reject `json_schema` or wrap it in Markdown fences, such as DeepSeek and `GLM-5.3-Flash-Event`. The backend validates the full answer contract in both modes |
 | `AI_DAILY_LIMIT` | `50` | Per-user daily ask limit |
 | `AI_EMBEDDING_BASE_URL` | same as `AI_BASE_URL` | OpenAI-compatible embeddings |
 | `AI_EMBEDDING_MODEL_ID` | `text-embedding-bge-m3` | Embedding model (1024 d); also recorded per chunk. Existing databases built with `text-embedding-nomic-embed-text-v1.5` (768 d) must pin it or be rebuilt, see below. Must not contain a single quote |
@@ -133,15 +134,16 @@ The regular unit and Spring context tests run against H2. PostgreSQL-specific mi
 
 ## Cloud Provider Examples
 
-Verified on 2026-09-26: DeepSeek chat with the local LM Studio embedding model (768 dimensions, so the existing schema is reused). DeepSeek has no embeddings API and rejects `json_schema`, so `json_object` is required. See `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`.
+Verified on 2026-09-26 (DeepSeek `deepseek-flash` / `deepseek-v4-pro` on the 7-doc synthetic fixture, see `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`) and on 2026-11-07 (SCNet `GLM-5.3-Flash-Event` on the 28-doc enterprise `corpus-v2` fixture with local `text-embedding-bge-m3`, scoring `45/45`, `44/45`, `45/45`, see `evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md`). Both use the local LM Studio embedding server; DeepSeek rejects `json_schema` and `GLM-5.3-Flash-Event` wraps `json_schema` in Markdown code fences, so both require `AI_RESPONSE_FORMAT=json_object` (with `AI_REASONING_EFFORT=none` for reasoning-capable models).
 
 ```bash
-export AI_BASE_URL=https://api.deepseek.com
-export AI_API_KEY=...                      # load from a private file; never commit it
-export AI_MODEL_ID=deepseek-flash
+export AI_BASE_URL=https://api.deepseek.com   # or https://api.scnet.cn/api/llm/v1
+export AI_API_KEY=...                         # load from a private file; never commit it
+export AI_MODEL_ID=deepseek-flash             # or GLM-5.3-Flash-Event
 export AI_RESPONSE_FORMAT=json_object
+export AI_REASONING_EFFORT=none               # disables thinking tokens where supported
 export AI_EMBEDDING_BASE_URL=http://localhost:1234/v1
-export AI_EMBEDDING_API_KEY=               # keep empty so the cloud key is not sent to the local server
+export AI_EMBEDDING_API_KEY=                  # keep empty so the cloud key is not sent to the local server
 ```
 
 A cloud embedding model with another dimension (for example 1536) needs no schema change: set `AI_EMBEDDING_MODEL_ID`, rebuild, and, if you want retrieval to use an HNSW index, add a partial index of the same shape as `idx_chunk_embedding_1024` for that dimension (HNSW supports at most 2000).

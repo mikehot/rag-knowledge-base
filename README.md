@@ -25,9 +25,10 @@
 | 改写后的题集 corpus-v2（同样 57 题，日常说法） | 可答题 43/45（跨重启 v1 为 43–45），检索证据仍 45/45 完整 | 失败来自问法歧义与跨文档答案不完整，不是检索；[报告](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md) |
 | 引用支撑检查 | 521 条回放中修复 3 条、0 条变差 | 主要保护「每个回答都带出处」，不是提分 |
 | **复测（2026-10-14，新栈，同配置同代码）** | corpus-v2 可答题 **38/45**，拒答 12/12，ACL 泄漏 0；检索指标不变（top-1 相似度中位数 0.703，期望文档 45/45） | 比前一天低 5 题；Mac 重启并从界面重载模型后是 **39/45**（3 次一致）。稳定落差的 4 题里 3 题主要是措辞撞上字面子串评分、1 题是真实遗漏；**两天之间措辞变化的原因未查明**；见 [补记](evaluation/reports/corpus-v2-paraphrase-local-2026-10-13.md) |
-| Python 智能体经 MCP 调用本服务的工具调用评测（[rag-agent-python](https://github.com/mikehot/rag-agent-python)） | 安全类（越权不泄漏、边界、超范围拒答）在全部留出集的全部配置下通过；答案类随片段长度变化（留出集 v2）：360 字符默认 18/22，放宽到 800 为 21/22 | 每格一次运行，题目单人编写，子串评分；失败模式包括模型空回复和误判「知识库里没有」 |
+| **三模型对照（corpus-v2，各 3 轮，bge-m3 + Thinking off）** | 本地 Gemma `41.33/45`（`41–42`）vs 本地 Qwen 3.8 27B `42.67/45`（`42–44`）vs 云端 `GLM-5.3-Flash-Event` **`44.67/45`（`44–45`）**；拒答均 `12/12`、ACL 泄漏 `0` | Qwen 与 Gemma 在波动范围内且慢 ~3 倍（[报告](evaluation/reports/qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15.md)）；`GLM-5.3-Flash-Event` 相对 Gemma **显著可区分（DISTINGUISHABLE）**，耗时与 Gemma 相当（209.9s vs 198.6s），唯一未满分题 `CORP2-045` 经向量库审计证实为法条第 29 条排在第 11 名的分块级召回边界（[报告](evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md)） |
+| Python 智能体经 MCP 调用本服务的工具调用评测（[rag-agent-python](https://github.com/mikehot/rag-agent-python)） | 安全类（越权不泄漏、边界、超范围拒答）在全部留出集的全部配置下通过；答案类随片段长度变化（留出集 v2）：360 字符默认 18/22，放宽到 800 为 21/22；云端 `GLM-5.3-Flash-Event` 多轮追问（Cell C，3 轮）从本地 Gemma 的 5/8 提升至 6/8 且 0 泄漏 | 每格一次运行（Cell C 为 3 轮），题目单人编写，子串评分；失败模式包括模型空回复和误判「知识库里没有」 |
 
-局限见 [PORTFOLIO.md](PORTFOLIO.md)：单机、单模型、规则（子串）评分、题目由单人编写；没有生产部署或真实用户数据。
+局限见 [PORTFOLIO.md](PORTFOLIO.md)：单机、小样本、规则（子串）评分、题目由单人编写；没有生产部署或真实用户数据。
 
 **这些数字是「某一天、某一台机器、某一个模型服务状态」下的测量，不是常数。** 同一配置在相隔一天的全新环境上差了 5 题就是例子；重复运行在同一会话内只能说明解码是确定的，不能说明结果稳定。引用任何一格数字时请连同日期和配置一起引用。
 
@@ -63,7 +64,7 @@
   - Embedding：`text-embedding-bge-m3`，1024 维（2026-10-21 起为默认）。用 `text-embedding-nomic-embed-text-v1.5`（768 维）建过库的旧部署，要么把 `AI_EMBEDDING_MODEL_ID` 固定回 nomic，要么按 [backend/README.md](backend/README.md#embedding-model-and-dimension) 重建索引。
   - 两个 ID 必须与 `curl -s http://localhost:1234/v1/models` 的返回完全一致。
 - LM Studio 只处理合成或公开样例数据，不要用它处理真实客户资料。
-- 也可以改用云端聊天模型。已验证的配置是 DeepSeek `deepseek-flash` 聊天加本地 Embedding，需要设置 `AI_RESPONSE_FORMAT=json_object`，见 [backend/README.md](backend/README.md#cloud-provider-examples)。
+- 也可以改用云端聊天模型。已验证的配置包括 DeepSeek `deepseek-flash` 以及 SCNet `GLM-5.3-Flash-Event` 聊天加本地 Embedding，需要设置 `AI_RESPONSE_FORMAT=json_object`（推理模型加 `AI_REASONING_EFFORT=none`），见 [backend/README.md](backend/README.md#cloud-provider-examples)。
 - `docker-compose.yml` 固定了容器名 `rag-knowledge-base-db` 并使用 5432 端口；同一台机器已有另一份 checkout 的容器时，会发生冲突。
 
 ### 1. 启动

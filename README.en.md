@@ -34,7 +34,7 @@ Most of the implementation was written with AI coding agents (OpenAI Codex, Clau
   - Chat: `google/gemma-4-26b-a4b-qat` (override with `AI_MODEL_ID`). Turn **Enable Thinking** off for Gemma in LM Studio; see the [runbook](docs/DEPLOYMENT_RUNBOOK.md).
   - Embedding: `text-embedding-bge-m3` (1024 dimensions, the default since 2026-10-21). An existing database built with `text-embedding-nomic-embed-text-v1.5` (768) keeps working only if you pin `AI_EMBEDDING_MODEL_ID` to it; otherwise rebuild, see [backend/README.md](backend/README.md#embedding-model-and-dimension).
   - Both IDs must match `curl -s http://localhost:1234/v1/models`.
-- A cloud chat model works too. The verified setup is DeepSeek `deepseek-flash` with local embeddings and `AI_RESPONSE_FORMAT=json_object`; see [backend/README.md](backend/README.md#cloud-provider-examples).
+- A cloud chat model works too. Verified setups include DeepSeek `deepseek-flash` and SCNet `GLM-5.3-Flash-Event` (`44.67/45` mean across 3 runs on `corpus-v2`, see `evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md`) with local embeddings and `AI_RESPONSE_FORMAT=json_object` (plus `AI_REASONING_EFFORT=none` where supported); see [backend/README.md](backend/README.md#cloud-provider-examples).
 - Use LM Studio only with synthetic or public data.
 - `docker-compose.yml` fixes the container name `rag-knowledge-base-db` and port 5432; a second checkout on the same machine will conflict.
 

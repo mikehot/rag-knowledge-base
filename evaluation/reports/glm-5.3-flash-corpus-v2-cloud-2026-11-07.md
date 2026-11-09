@@ -3,7 +3,8 @@
 Pre-registered in [`glm-5.3-flash-preregistration-2026-11-07.md`](glm-5.3-flash-preregistration-2026-11-07.md) before any run.
 This report records **Cell A (`corpus_v2.jsonl`, 57 cases × 3 runs, Java `POST /api/ask`)** and the
 post-run **LLM-as-Judge semantic audit (`GLM-5.3-Flash-Event` with `reasoning_effort="high"`)**.
-Cells B, C, and D for the Python agent are recorded in `rag-agent-python/docs/glm-5.3-flash-eval-2026-11-07.md`.
+The Python agent pre-flight (`8/8`) and Cell C (`multi_turn_v2.jsonl`, 3 runs × 2 modes) are recorded in
+`rag-agent-python/evaluation/reports/glm-5.3-flash-eval-2026-11-07.md` (pre-registered Cells B and D were not run in this session).
 
 ## Pre-flight Verification
 

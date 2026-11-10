@@ -82,7 +82,7 @@
 - **预期**：撤权后的提问应该拒答（`found=false`），不会用旧答案或缓存结果。
 - **不通过说明**：权限变更没有实时生效，是需要立即修复的安全问题。
 - 这条验收方法和我们内部评测撤权场景的方法一致，见
-  [enforce-retrieval 报告](../../evaluation/reports/enforce-retrieval-local-2026-10-15.md)（注意：那份报
+  [enforce-retrieval 报告](https://github.com/mikehot/rag-agent-python/blob/main/evaluation/reports/enforce-retrieval-local-2026-10-15.md)（注意：那份报
   告测的是 Python Agent 层的撤权场景，不是本应用自身；本应用自身的撤权有独立的 PostgreSQL 集成测试和全新
   clone 上的 curl 实测，见 [PORTFOLIO.md 第一个关键设计决策](../../PORTFOLIO.md#三个关键设计决策)）。
 
@@ -140,7 +140,7 @@
 | 评测严谨性 | `run_repeated_eval.py` 要求同一配置至少跑 3 轮才允许下"可区分"的结论，范围不重叠才算数——不是跑一次就报数字；跨模型对比（本地 Qwen vs Gemma 与云端 `GLM-5.3-Flash-Event` vs 本地双模型）见 [qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15](../../evaluation/reports/qwen3.8-27b-vs-gemma-corpus-v2-local-2026-10-15.md) 与 [glm-5.3-flash-corpus-v2-cloud-2026-11-07](../../evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md) |
 | 轨迹与可观测性 | 每次问答都有 `requestId`、分段耗时（embedding/retrieval/generation）、Token 用量、失败分类；Agent 调用记录每一步工具调用的结果（`outcome`） |
 | 人机协作（HITL） | 任何不合规的模型输出（非法 JSON、引用越界、截断）一律 fail-closed 转人工，不编造一个"看起来对"的答案 |
-| 权限与撤权的安全验证 | 授权→可答、撤权→拒答，Java 应用层有 PostgreSQL 集成测试，Python Agent 层有专门的撤权场景评测（3/3 泄漏在关闭强制检索时发生、0/3 在开启时发生），见 [enforce-retrieval 报告](../../evaluation/reports/enforce-retrieval-local-2026-10-15.md) |
+| 权限与撤权的安全验证 | 授权→可答、撤权→拒答，Java 应用层有 PostgreSQL 集成测试，Python Agent 层有专门的撤权场景评测（3/3 泄漏在关闭强制检索时发生、0/3 在开启时发生），见 [enforce-retrieval 报告](https://github.com/mikehot/rag-agent-python/blob/main/evaluation/reports/enforce-retrieval-local-2026-10-15.md) |
 | 成本与延迟 | 本地模型与云端模型（DeepSeek、`GLM-5.3-Flash-Event`）的质量、延迟、Token 成本都做过并排对比，见 [DeepSeek 对照报告](../../evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md) 与 [GLM-5.3-Flash-Event 对照报告](../../evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md) |
 
 ## 6. 验收不通过时怎么办

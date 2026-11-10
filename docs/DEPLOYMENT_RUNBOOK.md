@@ -9,7 +9,7 @@
 - Chat/Embedding Provider 使用 LM Studio 或其他 OpenAI-compatible 服务。
 - 生产环境必须替换默认账号、JWT Secret、数据库密码、HTTP 明文和本地文件卷。
 
-使用 LM Studio Gemma 4 作为本地 Chat Provider 时，加载模型后在 **Developer → 模型 → Inference → Custom Fields → Enable Thinking** 关闭 thinking，再通过 Structured Output 探针验收。当前后端 OpenAI-compatible 请求不携带 Gemma 专属自定义字段，不能依赖请求体临时覆盖该开关；模型参数应作为 Provider 的本地运行配置管理。2026-09-23 的本地 6 次重复探针在 thinking 关闭时均通过 JSON 合同，开启时重复探针曾 6 次耗尽 token 并失败；这只是结构化输出能力证据，不代替答案质量、ACL 和延迟评测。
+使用 LM Studio Gemma 4 作为本地 Chat Provider 时，加载模型后在 **Developer → 模型 → Inference → Custom Fields → Enable Thinking** 关闭 thinking，或设置环境变量 `AI_REASONING_EFFORT=none`（随每次请求发送 `"reasoning_effort": "none"` 关闭单次推理），再通过 Structured Output 探针验收。2026-09-23 的本地 6 次重复探针在 thinking 关闭时均通过 JSON 合同，开启时重复探针曾 6 次耗尽 token 并失败；这只是结构化输出能力证据，不代替答案质量、ACL 和延迟评测。
 
 启动前检查：
 
@@ -55,7 +55,9 @@ curl -fsS http://localhost:8080/readyz
 | `AI_API_KEY` | 空 | 云 Provider 用 Secret；本地 Provider 也要限制网络 |
 | `UPLOAD_STORAGE_DIR` | `./uploads` | 使用持久化卷或对象存储，并限制访问 |
 | `AI_*_MODEL_ID` | 本地模型 ID | 以 Provider `/v1/models` 实际返回值为准 |
+| `AI_REASONING_EFFORT` | 空 | 可选，设为 `none` 时随每次聊天请求发送 `"reasoning_effort": "none"` 关闭推理 token（适用于 LM Studio Gemma 4 / Qwen 3.8 与 SCNet `GLM-5.3-Flash-Event`） |
 | `AI_EMBEDDING_DIM` | `0` | `0` 接受模型自身维度；设为正数则固定并校验。维度随每个 Chunk 记录，切换模型见 §5「切换 Embedding 模型」 |
+| `ASK_LOG_RETENTION_DAYS` | `0` | `ask_log` 问答记录（含原始问题文本）及关联 `ask_feedback` / `ask_retrieval_hit` 的保留天数；`0` 表示不自动清理，生产环境建议按合规期限设置正整数（如 `30` 或 `90`） |
 | `RAG_AGENT_SNIPPET_CHARS` | `360` | MCP/Agent 工具 `search_knowledge` 每个片段返回的字符数。默认值让工具输出保持很小；需要基于结果推理的客户端要拿到完整 Chunk（默认 `chunk-size` 为 700），否则片段后半部分的证据即使被检索到也看不见。调大会增加工具输出体积，属于产品决策 |
 
 不要提交真实 API Key、JWT、密码、客户资料、Prompt、模型原始响应或 Embedding dump。
@@ -156,7 +158,7 @@ Flyway 迁移是前向变更；不要在生产库执行 `flyway clean`，也不�
 - 排查服务启动/HTTP 状态时用 `lms log stream --source server`；不要分享 Developer Logs、model source 日志、终端记录或原始 Provider 响应，也不要把它们放进截图、录屏、工单或公开报告。
 - 应用自身不记录 Prompt、问题或文档正文；这只覆盖应用边界，不代表全链路无内容日志。
 
-**已验证的云端配置（2026-09-26）**：DeepSeek `deepseek-flash` 负责聊天，本地 nomic 负责 Embedding。DeepSeek 不支持 `json_schema`，需要设置 `AI_RESPONSE_FORMAT=json_object`；此时后端仍会完整校验回答合同。Embedding 的 Key 要显式设为空，避免把云端 Key 发给本地服务。本次只发送了合成数据，DeepSeek 自身的数据保留策略未做评估，接入真实数据前仍须通过下面的清单。见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`。
+**已验证的云端配置（2026-09-26 / 2026-11-07）**：已分别验证 DeepSeek `deepseek-flash`（7 份合成文档，本地 `nomic` Embedding，见 `evaluation/reports/cloud-provider-deepseek-local-2026-09-26.md`）与 SCNet `GLM-5.3-Flash-Event`（28 份真实规模企业语料 `corpus-v2`，本地默认 `text-embedding-bge-m3` Embedding，三轮可答题 `45/45`、`44/45`、`45/45`，见 `evaluation/reports/glm-5.3-flash-corpus-v2-cloud-2026-11-07.md`）。两者均需设置 `AI_RESPONSE_FORMAT=json_object`（推理模型加 `AI_REASONING_EFFORT=none`）；此时后端仍会完整校验回答合同并保持 fail-closed。`AI_EMBEDDING_API_KEY` 要显式设为空，避免把云端 Key 发给本地 Embedding 服务。评测只发送了合成与公开法规/技术文档数据，云端 Provider 自身的数据保留策略在接入真实客户数据前仍须通过下面的清单。
 
 **接入真实数据前的 Provider 验收清单**（任一项不满足即不得接入真实数据）：
 

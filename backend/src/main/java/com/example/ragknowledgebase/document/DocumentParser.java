@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class DocumentParser {
+    private static final int MIN_PDF_NON_WHITESPACE_CHARS = 20;
     public List<ParsedSection> parse(Path path, String fileType) {
         String normalized = fileType == null ? "" : fileType.toLowerCase(Locale.ROOT);
         try {
@@ -54,15 +55,33 @@ public class DocumentParser {
         try (PDDocument document = Loader.loadPDF(path.toFile())) {
             PDFTextStripper stripper = new PDFTextStripper();
             List<ParsedSection> sections = new ArrayList<>();
+            int nonWhitespaceChars = 0;
             for (int page = 1; page <= document.getNumberOfPages(); page++) {
                 stripper.setStartPage(page);
                 stripper.setEndPage(page);
                 String text = stripper.getText(document);
                 if (text != null && !text.isBlank()) {
                     sections.add(new ParsedSection("p" + page, text));
+                    nonWhitespaceChars += countNonWhitespace(text);
                 }
+            }
+            if (document.getNumberOfPages() > 0 && nonWhitespaceChars < MIN_PDF_NON_WHITESPACE_CHARS) {
+                throw new BusinessException(
+                    422,
+                    "PDF 未提取到有效文本（疑似纯扫描件），当前需先 OCR 转换后再上传"
+                );
             }
             return sections;
         }
+    }
+
+    private static int countNonWhitespace(String text) {
+        int count = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                count++;
+            }
+        }
+        return count;
     }
 }

@@ -3,19 +3,27 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../core/network/api_exception.dart';
+import '../api/agent_stream_client.dart';
 import '../api/knowledge_api_client.dart';
 import '../auth/session_store.dart';
+import '../models/agent_stream_models.dart';
 import '../models/api_envelope.dart';
 import '../models/ask_models.dart';
 import '../models/auth_models.dart';
 import '../models/document_models.dart';
 
 class KnowledgeRepository {
-  KnowledgeRepository(this._dio, this._api, this._sessionStore);
+  KnowledgeRepository(
+    this._dio,
+    this._api,
+    this._sessionStore, [
+    this._agentStreamClient,
+  ]);
 
   final Dio _dio;
   final KnowledgeApiClient _api;
   final SessionStore _sessionStore;
+  final AgentStreamClient? _agentStreamClient;
   String? _token;
   static const defaultKnowledgeBaseId = '00000000-0000-0000-0000-000000000101';
 
@@ -148,6 +156,41 @@ class KnowledgeRepository {
       await _ensureLogin();
       return _unwrap(await _api.ask(AskRequest(question: question)));
     });
+  }
+
+  Stream<AgentStreamEvent> askStream(
+    String question, {
+    String? sessionId,
+    bool remember = true,
+  }) async* {
+    final client = _agentStreamClient;
+    if (client == null) {
+      throw const ApiException('未配置 Agent 流式客户端');
+    }
+    await _ensureLogin();
+    final token = _token;
+    if (token == null || token.trim().isEmpty) {
+      throw const ApiException('请先登录');
+    }
+    yield* client.askStream(
+      question: question,
+      token: token,
+      sessionId: sessionId,
+      remember: remember,
+    );
+  }
+
+  Future<void> clearAgentSession(String sessionId) async {
+    final client = _agentStreamClient;
+    if (client == null) {
+      return;
+    }
+    await _ensureLogin();
+    final token = _token;
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
+    await client.deleteSession(sessionId: sessionId, token: token);
   }
 
   Future<AskFeedbackResponse> submitFeedback(

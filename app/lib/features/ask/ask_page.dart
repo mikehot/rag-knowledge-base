@@ -31,6 +31,31 @@ class _AskPageState extends ConsumerState<AskPage> {
       appBar: AppBar(
         title: const Text('智能问答'),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: ActionChip(
+              avatar: Icon(
+                state.useAgentStream ? Icons.bolt : Icons.sync_alt,
+                size: 16,
+              ),
+              label: Text(state.useAgentStream ? 'Agent 流式' : '直连模式'),
+              onPressed: state.sending
+                  ? null
+                  : () => ref
+                        .read(askViewModelProvider.notifier)
+                        .setUseAgentStream(!state.useAgentStream),
+            ),
+          ),
+          if (state.messages.isNotEmpty || state.agentSessionId != null)
+            IconButton(
+              onPressed: state.sending
+                  ? null
+                  : () => ref
+                        .read(askViewModelProvider.notifier)
+                        .clearConversation(),
+              icon: const Icon(Icons.add_comment_outlined),
+              tooltip: '新对话（清除记忆）',
+            ),
           IconButton(
             onPressed: () => ref.read(authViewModelProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
@@ -215,6 +240,33 @@ class _AnswerCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (message.toolCalls.isNotEmpty) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: message.toolCalls
+                    .map(
+                      (tool) => Chip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: Icon(
+                          tool.outcome == 'ok'
+                              ? Icons.check_circle_outline
+                              : Icons.error_outline,
+                          size: 14,
+                          color: tool.outcome == 'ok'
+                              ? const Color(0xff166534)
+                              : const Color(0xffb45309),
+                        ),
+                        label: Text(
+                          '${tool.name} · ${tool.outcome}',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (message.loading)
               const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -228,9 +280,18 @@ class _AnswerCard extends StatelessWidget {
                   Text('思考中...'),
                 ],
               )
-            else
+            else ...[
               Text(message.text),
-            if (!message.loading) ...[
+              if (message.streaming) ...[
+                const SizedBox(height: 8),
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+            if (!message.loading && !message.streaming) ...[
               const SizedBox(height: 10),
               _AnswerMeta(message: message),
               if (message.requestId != null) ...[
@@ -238,7 +299,9 @@ class _AnswerCard extends StatelessWidget {
                 _FeedbackBar(message: message, onRate: onRate),
               ],
             ],
-            if (!message.loading && message.sources.isNotEmpty) ...[
+            if (!message.loading &&
+                !message.streaming &&
+                message.sources.isNotEmpty) ...[
               const Divider(height: 22),
               Wrap(
                 spacing: 8,
@@ -247,11 +310,53 @@ class _AnswerCard extends StatelessWidget {
                     .map((source) => _SourceChip(source: source))
                     .toList(),
               ),
+            ] else if (!message.loading &&
+                !message.streaming &&
+                (message.citedDocuments.isNotEmpty ||
+                    message.retrievedRefs.isNotEmpty)) ...[
+              const Divider(height: 22),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _buildAgentRefChips(context, message),
+              ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildAgentRefChips(BuildContext context, ChatMessage message) {
+    if (message.retrievedRefs.isNotEmpty) {
+      final citedSet = message.citedDocuments.toSet();
+      final refs = citedSet.isNotEmpty
+          ? message.retrievedRefs
+                .where((r) => citedSet.contains(r.filename))
+                .toList()
+          : message.retrievedRefs;
+      final list = refs.isNotEmpty ? refs : message.retrievedRefs;
+      return list
+          .map(
+            (ref) => Chip(
+              avatar: const Icon(Icons.article_outlined, size: 16),
+              label: Text(
+                ref.locator.isEmpty
+                    ? ref.filename
+                    : '${ref.filename} · ${ref.locator}',
+              ),
+            ),
+          )
+          .toList();
+    }
+    return message.citedDocuments
+        .map(
+          (name) => Chip(
+            avatar: const Icon(Icons.article_outlined, size: 16),
+            label: Text(name),
+          ),
+        )
+        .toList();
   }
 }
 

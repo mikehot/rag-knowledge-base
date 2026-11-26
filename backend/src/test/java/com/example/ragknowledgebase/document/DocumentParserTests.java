@@ -55,7 +55,7 @@ class DocumentParserTests {
                 content.beginText();
                 content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
                 content.newLineAtOffset(72, 700);
-                content.showText("text layer page");
+                content.showText("text layer page with enough characters");
                 content.endText();
             }
             // A page with no text layer, like a scanned image page: nothing for the text stripper to read.
@@ -67,17 +67,7 @@ class DocumentParserTests {
 
         assertThat(sections).hasSize(1);
         assertThat(sections.get(0).locator()).isEqualTo("p1");
-        assertThat(sections.get(0).text()).contains("text layer page");
+        assertThat(sections.get(0).text()).contains("text layer page with enough");
     }
-
-    @Test
-    void pdfWithoutAnyTextLayerYieldsNoSections() throws IOException {
-        Path file = dir.resolve("scan.pdf");
-        try (PDDocument document = new PDDocument()) {
-            document.addPage(new PDPage());
-            document.save(file.toFile());
-        }
-
-        assertThat(parser.parse(file, "pdf")).isEmpty();
-    }
+    // A PDF with no text layer at all is rejected with a 422; covered by DocumentParserTest.
 }

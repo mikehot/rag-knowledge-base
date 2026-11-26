@@ -41,7 +41,7 @@ LM Studio 定位为本地开发/评测 Provider，只处理合成数据；已确
 - Spring Boot 3.5.7、Maven wrapper、Dockerfile；本地与 CI 运行 JDK 25（`.java-version`），`pom.xml` 字节码目标 Java 17。
 - `/api/auth/login`、文档上传/列表/详情/删除、`/api/ask`。
 - JWT 鉴权已携带 `userId + tenantId`；统一响应、全局中文错误、上传白名单和大小限制。
-- PDFBox / POI / TXT/Markdown 解析。
+- PDFBox / POI / TXT/Markdown 解析。纯扫描件 PDF（全文非空白字符 < 20）上传时返回 422 并提示先 OCR；混合文档中无文本层的页仍静默跳过（`DocumentParserTest` / `DocumentParserTests` 覆盖；2026-11-24 本机非 Docker 测试 192 项通过、33 项因无 Docker 跳过，该改动尚未提交，未经 CI 验证）。
 - PostgreSQL 持久化索引任务通过 `@TransactionalEventListener(AFTER_COMMIT)` 触发，并由定时轮询恢复未完成任务。
 - 配置化 Chunk、Embedding、Top-K 和相似度阈值。
 - PostgreSQL + pgvector Chunk 表、HNSW cosine 索引和向量查询。

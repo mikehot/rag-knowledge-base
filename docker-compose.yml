@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: rag
       POSTGRES_PASSWORD: rag
     ports:
-      - "5432:5432"
+      - "${RAG_BIND_HOST:-127.0.0.1}:5432:5432"
     volumes:
       - rag_pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -64,18 +64,25 @@ services:
       AI_EMBEDDING_TIMEOUT_SECONDS: 120
       AI_EMBEDDING_MAX_RETRIES: 2
     ports:
-      - "8080:8080"
+      - "${RAG_BIND_HOST:-127.0.0.1}:8080:8080"
     volumes:
       - rag_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 10
 
   admin-web:
     build:
       context: ./admin-web
     container_name: rag-knowledge-base-admin-web
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
-      - "5173:80"
+      - "${RAG_BIND_HOST:-127.0.0.1}:5173:8080"
 
 volumes:
   rag_pg_data:

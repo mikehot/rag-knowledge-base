@@ -55,6 +55,28 @@ jobs:
       - name: Validate Docker Compose
         run: docker compose config --quiet
 
+  admin-web-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build admin-web
+        run: npm run build
+
   flutter-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -81,7 +103,7 @@ jobs:
         run: git diff --exit-code -- lib/data/api/knowledge_api_client.g.dart lib/data/models/ask_models.g.dart lib/data/models/document_models.g.dart
 
       - name: Check Dart formatting
-        run: dart format --output=none --set-exit-if-changed lib test/ask_models_test.dart test/document_models_test.dart test/session_store_test.dart
+        run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Analyze Flutter app
         run: flutter analyze --no-pub

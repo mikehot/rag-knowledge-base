@@ -5,13 +5,12 @@ import 'package:rag_knowledge_base_app/core/theme/app_theme.dart';
 import 'package:rag_knowledge_base_app/features/ask/ask_page.dart';
 
 void main() {
-  testWidgets('ask page renders input and empty state', (WidgetTester tester) async {
+  testWidgets('ask page renders input and empty state', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
-          theme: AppTheme.light(),
-          home: const AskPage(),
-        ),
+        child: MaterialApp(theme: AppTheme.light(), home: const AskPage()),
       ),
     );
     await tester.pump();

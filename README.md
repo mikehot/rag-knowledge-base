@@ -39,6 +39,7 @@
 | [PORTFOLIO.md](PORTFOLIO.md) | 对外说明：问题、架构、设计决策、评测与局限 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统上下文、数据流、权限信任边界 |
 | [docs/DEMO.md](docs/DEMO.md) | 可执行的演示讲稿（反馈、MCP、失败恢复、Flutter） |
+| [docs/demo/TRIPLE_STACK_DEMO.md](docs/demo/TRIPLE_STACK_DEMO.md) | 三端联动 2 分钟演示剧本（Flutter 流式端 + Admin Web + MCP） |
 | [docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md) | 启动、迁移、备份恢复、故障排查、Provider 数据边界 |
 | [docs/CASE_STUDY.md](docs/CASE_STUDY.md) / [EN](docs/CASE_STUDY_EN.md) | 项目复盘 |
 | [evaluation/README.md](evaluation/README.md) | 评测数据集、质量门与评测工具 |
@@ -47,8 +48,9 @@
 
 ## Modules
 
-- `backend/`：Spring Boot 3.5，PostgreSQL + pgvector，负责文档处理、权限、RAG API、审计与指标。
-- `app/`：Flutter App（Riverpod MVVM + dio/retrofit），提供问答、知识库管理、ACL 管理和索引任务面板。
+- `backend/`：Spring Boot 3.5，PostgreSQL + pgvector，负责文档处理（含扫描件 PDF 空文本拦截）、权限、RAG API、问答复核日志（`GET /api/admin/ask-logs`）、审计与指标。
+- `admin-web/`：Vue 3 + TypeScript + Vite 运营与复核控制台（已纳入 `docker-compose.yml`，默认 `http://localhost:5173`），提供拒答/差评复核池（Human-in-the-Loop）与检索诊断、文档/索引任务、组织与审计日志视图。
+- `app/`：Flutter App（Riverpod MVVM + dio/retrofit），提供问答（支持直连 `/api/ask` 与对接 `rag-agent-python` 的 SSE 流式多轮模式）、知识库管理、ACL 管理和索引任务面板。
 - `evaluation/`：Python 评测工具与版本化数据集。
 - `sample_faq.md`：端到端演示用的合成样例知识。
 

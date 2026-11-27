@@ -60,7 +60,7 @@
 
 ### 前提
 
-- Docker（daemon 已启动）、JDK 25（`.java-version`；源码以 Java 17 字节码编译）、`curl`、`jq`。
+- Docker（daemon 已启动）、JDK 21（`.java-version`；源码以 Java 17 字节码编译）、`curl`、`jq`。
 - 一个 OpenAI-compatible 模型服务，默认是本机 LM Studio `http://localhost:1234/v1`，需要：
   - Chat：`google/gemma-4-26b-a4b-qat`（通过 `AI_MODEL_ID` 可替换）。Gemma 需在 LM Studio 中关闭 **Enable Thinking**，否则可能耗尽输出预算，导致结构化回答失败，见 [Runbook](docs/DEPLOYMENT_RUNBOOK.md)。
   - Embedding：`text-embedding-bge-m3`，1024 维（2026-10-21 起为默认）。用 `text-embedding-nomic-embed-text-v1.5`（768 维）建过库的旧部署，要么把 `AI_EMBEDDING_MODEL_ID` 固定回 nomic，要么按 [backend/README.md](backend/README.md#embedding-model-and-dimension) 重建索引。

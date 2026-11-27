@@ -30,7 +30,7 @@ Most of the implementation was written with AI coding agents (OpenAI Codex, Clau
 
 ### Prerequisites
 
-- Docker (daemon running), JDK 25 (`.java-version`; sources compile to Java 17 bytecode), `curl`, `jq`.
+- Docker (daemon running), JDK 21 (`.java-version`; sources compile to Java 17 bytecode), `curl`, `jq`.
 - An OpenAI-compatible model server. The default is local LM Studio at `http://localhost:1234/v1` with:
   - Chat: `google/gemma-4-26b-a4b-qat` (override with `AI_MODEL_ID`). Turn **Enable Thinking** off for Gemma in LM Studio; see the [runbook](docs/DEPLOYMENT_RUNBOOK.md).
   - Embedding: `text-embedding-bge-m3` (1024 dimensions, the default since 2026-10-21). An existing database built with `text-embedding-nomic-embed-text-v1.5` (768) keeps working only if you pin `AI_EMBEDDING_MODEL_ID` to it; otherwise rebuild, see [backend/README.md](backend/README.md#embedding-model-and-dimension).
